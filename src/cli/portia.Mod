@@ -43,6 +43,7 @@ IMPORT Kernel, Linux0, SYSTEM, F := Files, FATFiles, Root, Texts := texts, Obero
 CONST
   NameLen = 256;
   SYS = "SYSTEM";
+  EndMark = "portia: end of the tests";  (* the tests ran to their end *)
   PkgDir = "src/pkg/"; PkgDirLen = 8;  (* the sources of remote packages, src/pkg/<name>/ *)
   ATREMOVEDIR = 200H;
 
@@ -65,6 +66,7 @@ TYPE
     remote: Name;  (* the base of the links of a remote package, else "" *)
     sums: Item;  (* of a remote package: repository path, sum in r *)
     tcopy, tcmds, tok, tbad: Item;  (* [TESTS]: files to copy, commands, lines expected, texts refused *)
+    tdisplay: BOOLEAN;  (* the tests need the desktop (X11) *)
     next: Package
   END;
 
@@ -359,6 +361,7 @@ BEGIN
   Commands(doc, "TESTS", "cmds", p.tcmds);
   COPY("TESTS.", mod); Append(mod, arch); Commands(doc, mod, "cmds", p.tcmds);  (* [TESTS.x86] cmds after *)
   Commands(doc, "TESTS", "ok", p.tok); Commands(doc, "TESTS", "bad", p.tbad);
+  p.tdisplay := Field(doc, "TESTS", "display", v) & (v = "true");
   it := p.sources;
   WHILE it # NIL DO
     IF Header(it.s, mod) THEN Add(p.modules, mod)
@@ -892,12 +895,16 @@ BEGIN
   it := p.files; WHILE it # NIL DO COPY(dir, rel); Append(rel, it.r); DeleteFile(rel); it := it.next END
 END DeleteSources;
 
-(* delete the files of the remote package p copied out of src/pkg/<name>/ *)
-PROCEDURE DeleteData(p: Package);
+(* delete the files of the remote package p copied out of src/pkg/<name>/, but those that
+   the package keep (not NIL) installs too *)
+PROCEDURE DeleteData(p, keep: Package);
 VAR it: Item; dir: Name;
 BEGIN
   PackageDir(p, dir); it := p.files;
-  WHILE it # NIL DO IF ~Prefix(it.s, dir) THEN DeleteFile(it.s) END; it := it.next END
+  WHILE it # NIL DO
+    IF ~Prefix(it.s, dir) & ((keep = NIL) OR ~Has(keep.files, it.s)) THEN DeleteFile(it.s) END;
+    it := it.next
+  END
 END DeleteData;
 
 (* ----- tests ----- *)
@@ -947,7 +954,10 @@ BEGIN
   pid := Linux0.Fork0();
   IF pid < 0 THEN Pre; out.String("cannot fork"); out.Ln; RETURN FALSE END;
   IF pid = 0 THEN  (* the child: in dir, no input, the output to log *)
-    r := Linux0.ChDir0(SYSTEM.ADR(dir)); F.SetWRK(dir);  (* Files opens names relative to its own directory *)
+    (* the files of the parent go (the X11 display of a test needs a descriptor below 32), but
+       3, Kernel.Log, opened first by Kernel; Files opens names relative to its directory *)
+    r := 4; WHILE r < 1024 DO pid := Linux0.Close0(r); INC(r) END;
+    r := Linux0.ChDir0(SYSTEM.ADR(dir)); F.SetSYS(dir); F.SetWRK(dir);
     null := "/dev/null"; r := Linux0.Close0(0); r := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(null), Linux0.ORDonly, 0);
     r := Linux0.Close0(1);
     r := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(log), Linux0.OWRonly + Linux0.OCREAT + Linux0.OTRUNC + Linux0.OAPPEND, 1A4H);
@@ -958,7 +968,7 @@ BEGIN
       Expand(it.s, line); out.String("> "); out.String(line); out.Ln;
       ok := Run(line); it := it.next
     END;
-    IF ok THEN Linux0.Exit0(0) ELSE Linux0.Exit0(1) END
+    IF ok THEN out.String(EndMark); out.Ln; Linux0.Exit0(0) ELSE Linux0.Exit0(1) END
   END;
   st := 0; r := Linux0.Waitpid0(pid, SYSTEM.ADR(st), 0);
   RETURN (r = pid) & (st = 0)
@@ -997,6 +1007,10 @@ PROCEDURE TestPackage(p: Package): BOOLEAN;
 VAR dir, path, from, to, name, log: Name; it: Item; buf: Buf; i, k, r: LONGINT; ok: BOOLEAN;
 BEGIN
   IF p.tcmds = NIL THEN Pre; out.String(p.name); out.String(" has no tests"); out.Ln; RETURN TRUE END;
+  Kernel.GetConfig("DISPLAY", dir);
+  IF p.tdisplay & (dir = "") THEN
+    Pre; out.String(p.name); out.String(": tests skipped, they need the desktop (set DISPLAY)"); out.Ln; RETURN TRUE
+  END;
   Kernel.GetConfig("TMPDIR", dir); IF dir = "" THEN dir := "/tmp" END;
   Append(dir, "/portia-test-"); Append(dir, p.name); Append(dir, "-"); Append(dir, arch);
   DeleteTree(dir);
@@ -1023,6 +1037,8 @@ BEGIN
       out.String("  | "); WHILE (buf[i] # 0X) & (buf[i] # 0AX) DO out.Char(buf[i]); INC(i) END; out.Ln;
       IF buf[i] = 0AX THEN INC(i) END
     END;
+    COPY(EndMark, name);
+    IF ~Contains(buf^, name, TRUE) THEN Pre; out.String("the tests stopped before their end"); out.Ln; ok := FALSE END;
     it := p.tok;
     WHILE it # NIL DO
       IF ~Contains(buf^, it.s, TRUE) THEN Pre; out.String("expected "); out.String(it.s); out.Ln; ok := FALSE END;
@@ -1317,6 +1333,11 @@ BEGIN
   RETURN TRUE
 END AddNeeded;
 
+(* p and q cannot be installed together: one of them says so *)
+PROCEDURE Conflict(p, q: Package): BOOLEAN;
+BEGIN RETURN (p # q) & (Has(p.conflicts, q.name) OR Has(q.conflicts, p.name))
+END Conflict;
+
 (* build the packages of set in dependency order, link, record them; replace conflicts *)
 PROCEDURE Execute(set: Item; verb: ARRAY OF CHAR);
 VAR order, it, c, cf, d, im: Item; p, q: Package; ok, changed: BOOLEAN; line, mod: Name; n: LONGINT; v: ARRAY 32 OF CHAR;
@@ -1334,6 +1355,11 @@ BEGIN
       ELSIF InstVer(p, v) & (Versions.Compare(v, p.version) # 0) THEN out.String("upgrade from "); out.String(v)
       ELSE out.String("rebuilt")
       END;
+      q := packages;
+      WHILE q # NIL DO
+        IF Conflict(p, q) & IsInstalled(q) THEN out.String(", replaces "); out.String(q.name) END;
+        q := q.next
+      END;
       out.Ln; INC(n)
     END;
     it := it.next
@@ -1345,6 +1371,16 @@ BEGIN
   WHILE ok & (it # NIL) DO
     p := Find(it.s);
     IF Has(set, p.name) THEN
+      (* the installed packages p conflicts with go first: they may have modules of the same
+         names, and must not be recompiled as importers of the new interfaces *)
+      q := packages;
+      WHILE q # NIL DO
+        IF Conflict(p, q) & IsInstalled(q) THEN
+          Drop(installed, q.name); DeleteObjects(q); IF q.remote # "" THEN DeleteData(q, p) END;
+          Pre; out.String("replacing "); out.String(q.name); out.Ln; SaveDb
+        END;
+        q := q.next
+      END;
       IF p.remote # "" THEN ok := FetchPackage(p, TRUE) END;
       IF ok THEN ok := BuildPackage(p, changed) END; INC(n);
       IF ok & changed THEN  (* packages importing a changed module are recompiled when their turn comes *)
@@ -1369,16 +1405,7 @@ BEGIN
       END;
       c := p.build; WHILE ok & (c # NIL) DO COPY(c.s, line); ok := Run(line); c := c.next END;
       IF ok THEN
-        SetInstalled(p.name, p.version);  (* first: its objects are not deleted below *)
-        cf := p.conflicts;
-        WHILE cf # NIL DO
-          q := Find(cf.s);
-          IF (q # NIL) & IsInstalled(q) THEN
-            Drop(installed, q.name); DeleteObjects(q); Pre; out.String("replaced "); out.String(q.name); out.Ln
-          END;
-          cf := cf.next
-        END;
-        SaveDb;
+        SetInstalled(p.name, p.version); SaveDb;
         IF doTest & (arch = hostArch) THEN ok := TestPackage(p) END
       END
     END;
@@ -1558,7 +1585,7 @@ BEGIN
       WHILE it # NIL DO
         p := Find(it.s);
         IF delObj & IsInstalled(p) THEN
-          DeleteObjects(p); IF p.remote # "" THEN DeleteData(p) END; Drop(installed, p.name)
+          DeleteObjects(p); IF p.remote # "" THEN DeleteData(p, NIL) END; Drop(installed, p.name)
         END;
         IF delSrc & (p.remote # "") THEN DeleteSources(p) END;
         it := it.next
