@@ -50,6 +50,57 @@ Where objects are written and read:
   each time it loads a module. A project with its own `obj/<arch>/` uses its objects while you
   work in it.
 
+## Looking at module interfaces: browser
+
+To see what a module exports, without reading its source, ask the browser. It reads the
+interface from the module's symbol file:
+
+```
+$ bin/x86/loksh browser.ShowDef fs
+DEFINITION fs;
+
+	IMPORT
+		Linux0, Kernel, Files, Root, texts, objects, Objects0, Texts0, Reals, Oberon0, Modules, Modules0, out;
+
+	PROCEDURE Cd*;
+	PROCEDURE Cp*;
+	...
+END fs.
+```
+
+For a library you see its types, variables and procedures with their parameters:
+
+```
+$ bin/x86/loksh browser.ShowDef Oberon0
+DEFINITION Oberon0;
+	...
+	TYPE
+		Cleanup* = PROCEDURE;
+		ParList* = POINTER TO ParRec;
+		ParRec* = RECORD
+			text*: Texts0.Text;
+			pos*: LONGINT;
+		END;
+	...
+	PROCEDURE OnStop*(p: Cleanup);
+	PROCEDURE Stopped*;
+	...
+```
+
+- `browser.ShowDef module -e` writes out the fields a record inherits from its base types.
+  Without `-e`, an extension shows only as `RECORD (Base)`.
+- `browser.ShowDef module -d` adds record field offsets, the addresses of variables and the
+  offsets of parameters.
+- The module can be given as a path: `browser.ShowDef src/cli/net.Mod`.
+- The `IMPORT` list includes the modules imported indirectly, through other imports.
+- `browser.Help` lists the commands and options.
+- In the desktop, `XBrowser.ShowDef ^` shows the definition of the selected module name in a
+  viewer.
+
+The browser reads the x86 objects (`obj/x86/`, of the current directory or of the root). The
+interfaces are the same on all ports, except for the modules that differ between ports (such
+as Linux0 and Kernel).
+
 ## Arguments and output
 
 - `texts.OpenArgs(A)` and `texts.Arg(A, s)` give the arguments one by one. Blanks separate them,
