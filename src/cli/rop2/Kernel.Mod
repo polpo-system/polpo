@@ -569,10 +569,10 @@ BEGIN
 
   IF trap=MAX(INTEGER) THEN INC(SC.pc, 4);  (* ! *)
   ELSE
-    SC.regs[Linux0.SP*Linux0.RegDist]:= StackOrg;
+    SC.regs[Linux0.SP*Linux0.RegDist + Linux0.RegOff]:= StackOrg;  (* polpo: RegOff, RISC-V saves no x0 *)
 (*    SC.regs[Linux0.FP*Linux0.RegDist]:= StackOrg;*)
     SC.pc:=SYSTEM.VAL( LONGINT, loop);
-    IF loop=NIL THEN Terminate; Linux0.Exit0( 1) END;  (* polpo: the terminal restored, as on x86 and ARM *)
+    IF loop=NIL THEN Terminate; Linux0.Exit0( 2) END;  (* polpo: the terminal restored, as on x86 and ARM; exit status 2 after a trap *)
   END;
   DEC( siglevel);
 END SignalHandler;
@@ -1552,6 +1552,7 @@ BEGIN
   err:=Linux0.SetSignal(Linux0.SIGILL, SignalHandler);
   err:=Linux0.SetSignal(Linux0.SIGFPE, SignalHandler);
   err:=Linux0.SetSignal(Linux0.SIGSEGV, SignalHandler);
+  err:=Linux0.SetSignal(Linux0.SIGTRAP, SignalHandler);  (* polpo: HALT on MIPS (it ended loksh: uncaught) *)
 (*  err:=SetSignal(SIGPIPE, SignalHandler);*)
 
   err:= Linux0.SetSignal(Linux0.SIGCONT, SYSTEM.VAL( Linux0.Proc, 1));

@@ -113,6 +113,7 @@ CONST
   SIGXFSZ= 31;
 
   RegDist*=1;  (* SC.regs =32 bit *)
+  RegOff*=-1;  (* polpo: SC.regs[0] is x1 *)
 
 TYPE
   Proc*= PROCEDURE;
@@ -138,10 +139,12 @@ TYPE
   END;
 
 (* RISC-V *)
-  SigContext*= POINTER TO RECORD
-    dummy: ARRAY 8 OF LONGINT;
+  SigContext*= POINTER TO RECORD  (* polpo: the ucontext of Linux riscv32: uc_flags, uc_link, uc_stack,
+      uc_sigmask (8 bytes) and 120 unused bytes, then uc_mcontext aligned to 16 at byte 160: pc, x1..x31,
+      the float registers (it was taken at byte 32: a trap read garbage and could not go on) *)
+    dummy: ARRAY 40 OF LONGINT;
     pc*: LONGINT;
-    regs*: ARRAY 32 OF LONGINT;
+    regs*: ARRAY 31 OF LONGINT;  (* x1..x31: regs[i + RegOff] is register i *)
     fpregs*: ARRAY 64 OF LONGINT;
   END;
 
@@ -598,7 +601,7 @@ BEGIN
   i:=32;
   REPEAT
     DEC(i);
-    Regs[i]:=sc.regs[i];
+    IF i > 0 THEN Regs[i]:=sc.regs[i + RegOff] ELSE Regs[0]:=0 END;  (* polpo: x0 is not saved *)
     FRegs[i]:=sc.fpregs[i];
     FRegs[i+32]:=sc.fpregs[i+32];
   UNTIL i=0;

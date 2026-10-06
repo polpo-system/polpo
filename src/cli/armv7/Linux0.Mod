@@ -105,7 +105,7 @@ CONST
   SIGWINCH= 28;  (* window changed *)
 
   RegDist*=1;  (* SC.regs =32 bit *)
-
+  RegOff*=0;  (* polpo: SC.regs[i + RegOff] is register i (RISC-V: -1) *)
 
 TYPE
   Proc*= PROCEDURE;

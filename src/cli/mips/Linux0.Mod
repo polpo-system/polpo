@@ -118,6 +118,7 @@ CONST
   SIGVTALRM= 28;  (* window changed *)
 
   RegDist*=2; (* SigContext reg distance is 64 bit *)
+  RegOff*=0;  (* polpo: SC.regs[i + RegOff] is register i (RISC-V: -1) *)
 
 TYPE
   Proc*= PROCEDURE;

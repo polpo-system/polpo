@@ -488,7 +488,7 @@ WriteString(">>>>> i= "); WriteInt(i-4, 8); WriteLn;
   IF (handler= NIL) OR (showState IN traceheap)  THEN DefaultTrapHandler( trap, state.fp, state.pc, state^.faultAddr) END;
   IF (handler # NIL) THEN handler( trap, state.fp, state^.pc, state^.faultAddr ) END;  (* was: handler |trap 16: Disk full *)
   DEC( siglevel);
-  IF loop=NIL THEN Shutdown( 1) END;
+  IF loop=NIL THEN Shutdown( 2) END;  (* polpo: exit status 2 after a trap *)
   state.sp:= Linux0.StackOrg;
   state.fp:= Linux0.StackOrg;
   state.pc:= SYSTEM.VAL( LONGINT, loop);
