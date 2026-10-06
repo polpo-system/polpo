@@ -75,7 +75,6 @@ CONST
     (* registers *)
   RA=10; RB=11; PC = 15;
 
-  TimeAdjust=1;  (* adjust for local time *)
 
     (* heap/GC *)
   B = 32;  (* heap block size, must be a multiple of 32 *)
@@ -1312,46 +1311,33 @@ END FinalizeModule;
 
 (** -- Clock/Timer -- *)
 
+(* polpo: the clock and file times are UTC. Days to dates as in "chrono-Compatible Low-Level Date
+   Algorithms" (H. Hinnant): March-based years of 400-year eras. Oberon time: hour*4096 +
+   minute*64 + second; date: (year-1900)*512 + month*32 + day. Valid to 2038 (32 bit seconds). *)
 PROCEDURE U2OTime*( VAR clock, date, time: LONGINT);  (* convert Unix time to Oberon *)
-VAR d, s, h, y, mi, mo, dij: LONGINT;
+VAR days, secs, z, era, doe, yoe, y, doy, mp, d, m: LONGINT;
 BEGIN
-    s:= clock MOD 60; clock:= clock DIV 60;
-    mi:= clock MOD 60; clock:= clock DIV 60;
-    INC( clock, TimeAdjust);
-    h:= (clock) MOD 24; clock:= (clock) DIV 24;
-    time:=ASH( ASH(h,6)+mi,6)+s;
-    y:= 70; dij:= 365; (*INC( t);*)
-    REPEAT
-      INC( y); DEC( clock, dij);    (* is this ( v )right?? *)
-      IF ( y MOD 4 =0) & ( ( y MOD 100 # 0) OR ( y MOD 400=0) )THEN dij:= 366 ELSE dij:= 365 END;
-    UNTIL clock<=dij;
-    IF clock<= 59 THEN
-      IF clock<=31 THEN mo:=1; d:= clock;
-      ELSE mo:=2; d:=clock-31;
-      END;
-    ELSE
-      IF dij= 366 THEN mo:=2; d:= 29; DEC( clock) END;
-      IF clock>59 THEN
-        IF clock<= 90 THEN mo:=3; d:= clock-59;
-        ELSIF clock<= 120 THEN mo:=4; d:= clock-90;
-        ELSIF clock<= 151 THEN mo:=5; d:= clock-120;
-        ELSIF clock<= 181 THEN mo:=6; d:= clock-151;
-        ELSIF clock<= 212 THEN mo:=7; d:= clock-181;
-        ELSIF clock<= 243 THEN mo:=8; d:= clock-212;
-        ELSIF clock<= 273 THEN mo:=9; d:= clock-243;
-        ELSIF clock<= 304 THEN mo:=10; d:= clock-273;
-        ELSIF clock<= 334 THEN mo:=11; d:= clock-304;
-        ELSE mo:=12; d:=clock-334;
-        END;
-      END;
-    END;
-    date:=( y*16+mo)*32+d;
+  days := clock DIV 86400; secs := clock MOD 86400;
+  time := (secs DIV 3600) * 4096 + (secs DIV 60 MOD 60) * 64 + secs MOD 60;
+  z := days + 719468; era := z DIV 146097; doe := z - era * 146097;
+  yoe := (doe - doe DIV 1460 + doe DIV 36524 - doe DIV 146096) DIV 365;
+  y := yoe + era * 400; doy := doe - (365 * yoe + yoe DIV 4 - yoe DIV 100);
+  mp := (5 * doy + 2) DIV 153; d := doy - (153 * mp + 2) DIV 5 + 1;
+  IF mp < 10 THEN m := mp + 3 ELSE m := mp - 9 END;
+  IF m <= 2 THEN INC(y) END;
+  date := (y - 1900) * 512 + m * 32 + d
 END U2OTime;
 
 PROCEDURE O2UTime*( date, time: LONGINT): LONGINT;  (* convert Oberon time to Unix *)
+VAR y, m, d, era, yoe, mp, doy, doe: LONGINT;
 BEGIN
-  WriteString("Kernel.O2UTime not implemeted yet"); WriteLn;
-  RETURN 0;
+  y := date DIV 512 + 1900; m := date DIV 32 MOD 16; d := date MOD 32;
+  IF m <= 2 THEN DEC(y) END;
+  era := y DIV 400; yoe := y - era * 400;
+  IF m > 2 THEN mp := m - 3 ELSE mp := m + 9 END;
+  doy := (153 * mp + 2) DIV 5 + d - 1;
+  doe := yoe * 365 + yoe DIV 4 - yoe DIV 100 + doy;
+  RETURN (era * 146097 + doe - 719468) * 86400 + (time DIV 4096) * 3600 + (time DIV 64 MOD 64) * 60 + time MOD 64
 END O2UTime;
 
 (** GetClock - Return current time and date *)

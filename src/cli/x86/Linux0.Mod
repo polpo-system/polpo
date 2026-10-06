@@ -93,7 +93,6 @@ CONST
     QUITSigs*={ SIGPIPE, SIGHUP, SIGTSTP, SIGQUIT, SIGTERM};        (* Quit *)
     TRAPSigs*= -{} -IGNSigs-QUITSigs-{ SIGCHLD};  (* Trap *)
 
-    TimeAdjust=1;
 
     ATFDCWD*=-100;  (* use current directory *)
 
