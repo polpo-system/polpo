@@ -18,7 +18,7 @@ TYPE
   Name = ARRAY NameLen OF CHAR;
   Buf = POINTER TO ARRAY OF CHAR;
   Item = POINTER TO ItemDesc;
-  ItemDesc = RECORD s: Name; archs, xflag: SET; next: Item END;  (* a source: on which architectures, with /x *)
+  ItemDesc = RECORD s: Name; archs, xflag, oflag: SET; next: Item END;  (* a source: on which architectures, with /x, with /2 (Oberon-2, x86) *)
   Package = POINTER TO PackageDesc;
   PackageDesc = RECORD
     name: Name;
@@ -51,7 +51,7 @@ END Len;
 PROCEDURE Add(VAR list: Item; s: ARRAY OF CHAR): Item;  (* at the end *)
 VAR it, p: Item;
 BEGIN
-  NEW(it); COPY(s, it.s); it.archs := {}; it.xflag := {}; it.next := NIL;
+  NEW(it); COPY(s, it.s); it.archs := {}; it.xflag := {}; it.oflag := {}; it.next := NIL;
   IF list = NIL THEN list := it ELSE p := list; WHILE p.next # NIL DO p := p.next END; p.next := it END;
   RETURN it
 END Add;
@@ -215,11 +215,11 @@ BEGIN
   RETURN NIL
 END PackageOf;
 
-PROCEDURE AddSource(p: Package; VAR path: ARRAY OF CHAR; a: INTEGER; x: BOOLEAN);
+PROCEDURE AddSource(p: Package; VAR path: ARRAY OF CHAR; a: INTEGER; x, o: BOOLEAN);
 VAR it: Item;
 BEGIN
   it := Find(p.sources, path); IF it = NIL THEN it := Add(p.sources, path) END;
-  INCL(it.archs, a); IF x THEN INCL(it.xflag, a) END
+  INCL(it.archs, a); IF x THEN INCL(it.xflag, a) END; IF o THEN INCL(it.oflag, a) END
 END AddSource;
 
 (* the lines of the recipe tools/<name>.Tool for the architecture a *)
@@ -235,7 +235,7 @@ VAR path: Name; T: Texts.Text; R: Texts.Reader; ch: CHAR; line: ARRAY MaxLine OF
       IF (j > 4) & (src[j-4] = ".") & (src[j-3] = "M") THEN
         p := PackageOf(src);
         IF p = NIL THEN out.String("genarden: no package for "); out.String(src); out.Ln; INC(problems)
-        ELSE AddSource(p, src, a, Pos(line, " /x ") >= 0)
+        ELSE AddSource(p, src, a, Pos(line, " /x ") >= 0, Pos(line, " /2 ") >= 0)
         END
       END
     END;
@@ -313,9 +313,12 @@ END Claimed;
 
 (* ----- writing the recipes ----- *)
 
-PROCEDURE Tok(it: Item; on: SET; VAR s: ARRAY OF CHAR);  (* "/x path" when every one of on has /x *)
+PROCEDURE Tok(it: Item; on: SET; VAR s: ARRAY OF CHAR);  (* "/x /2 path" when every one of on has /x, /2 *)
 BEGIN
-  IF on * it.xflag = on THEN COPY("/x ", s); Append(s, it.s) ELSE COPY(it.s, s) END
+  s[0] := 0X;
+  IF on * it.xflag = on THEN Append(s, "/x ") END;
+  IF on * it.oflag = on THEN Append(s, "/2 ") END;
+  Append(s, it.s)
 END Tok;
 
 PROCEDURE Write(p: Package; VAR index: Item);
@@ -434,8 +437,8 @@ BEGIN
     WHILE it # NIL DO
       IF Prefix(it.s, "/x ") THEN
         i := 0; WHILE it.s[i+3] # 0X DO path[i] := it.s[i+3]; INC(i) END; path[i] := 0X;
-        i := 0; WHILE i < MaxArchs DO AddSource(p, path, SHORT(i), TRUE); INC(i) END
-      ELSE i := 0; WHILE i < MaxArchs DO AddSource(p, it.s, SHORT(i), FALSE); INC(i) END
+        i := 0; WHILE i < MaxArchs DO AddSource(p, path, SHORT(i), TRUE, FALSE); INC(i) END
+      ELSE i := 0; WHILE i < MaxArchs DO AddSource(p, it.s, SHORT(i), FALSE, FALSE); INC(i) END
       END;
       it := it.next
     END;
