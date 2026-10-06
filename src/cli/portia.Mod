@@ -1216,12 +1216,14 @@ END Unmark;
 (* ----- installing and removing ----- *)
 
 (* delete the objects of the modules of p that no other installed package has *)
-PROCEDURE DeleteObjects(p: Package);
+(* (keep, if not NIL: the package replacing p; the objects of its modules stay, so that its build
+   sees whether their interfaces change and recompiles the importers) *)
+PROCEDURE DeleteObjects(p, keep: Package);
 VAR it: Item; q: Package; shared: BOOLEAN; path, full: Name; res: INTEGER; i: INTEGER;
 BEGIN
   it := p.modules;
   WHILE it # NIL DO
-    shared := FALSE; q := packages;
+    shared := (keep # NIL) & Has(keep.modules, it.s); q := packages;
     WHILE q # NIL DO IF (q # p) & IsInstalled(q) & Has(q.modules, it.s) THEN shared := TRUE END; q := q.next END;
     IF ~shared THEN
       i := 0;
@@ -1390,7 +1392,7 @@ BEGIN
       q := packages;
       WHILE q # NIL DO
         IF Conflict(p, q) & IsInstalled(q) THEN
-          Drop(installed, q.name); DeleteObjects(q); IF q.remote # "" THEN DeleteData(q, p) END;
+          Drop(installed, q.name); DeleteObjects(q, p); IF q.remote # "" THEN DeleteData(q, p) END;
           Pre; out.String("replacing "); out.String(q.name); out.Ln; SaveDb
         END;
         q := q.next
@@ -1604,7 +1606,7 @@ BEGIN
       WHILE it # NIL DO
         p := Find(it.s);
         IF delObj & IsInstalled(p) THEN
-          DeleteObjects(p); IF p.remote # "" THEN DeleteData(p, NIL) END; Drop(installed, p.name)
+          DeleteObjects(p, NIL); IF p.remote # "" THEN DeleteData(p, NIL) END; Drop(installed, p.name)
         END;
         IF delSrc & (p.remote # "") THEN DeleteSources(p) END;
         it := it.next

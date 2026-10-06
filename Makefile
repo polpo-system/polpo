@@ -8,10 +8,12 @@ HOSTARCH := $(shell uname -m)
 ifneq ($(filter arm% aarch64,$(HOSTARCH)),)
 ARM = bin/arm/loksh
 ACOMPILE = $(ARM) compiler.Compile
+APORTIA = $(ARM) portia.Build
 ARMV7 = bin/armv7/loksh
 else
 ARM = qemu-arm bin/arm/loksh
 ACOMPILE = $(X86) acompiler.Compile
+APORTIA = $(X86) portia.Build /arm
 ARMV7 = qemu-arm bin/armv7/loksh
 endif
 
@@ -32,13 +34,21 @@ endif
 fast:
 		$(X86) < tools/build.Tool
 
+# the Display and Input of the desktop: xterm sixel or X11, the packages display-sixel and
+# display-x11; portia builds the one asked for, replaces the other and records it
+#sixel:
+#		$(X86) compiler.Compile /x src/desktop/POLPO.SXL.Display.Mod
+#		$(X86) compiler.Compile /s src/desktop/POLPO.SXL.Input.Mod
+#
+#x11:
+#		$(X86) compiler.Compile /x src/desktop/POLPO.Display.Mod
+#		$(X86) compiler.Compile /s src/desktop/POLPO.Input.Mod
+
 sixel:
-		$(X86) compiler.Compile /x src/desktop/POLPO.SXL.Display.Mod
-		$(X86) compiler.Compile /s src/desktop/POLPO.SXL.Input.Mod
+		$(X86) portia.Build /y display-sixel
 
 x11:
-		$(X86) compiler.Compile /x src/desktop/POLPO.Display.Mod
-		$(X86) compiler.Compile /s src/desktop/POLPO.Input.Mod
+		$(X86) portia.Build /y display-x11
 
 # ---- ARM ----
 
@@ -60,14 +70,20 @@ arm-run:
 arm-shell:
 		$(ARM)
 
-# select the ARM Display and Input: xterm sixel or X11
+# select the ARM Display and Input: xterm sixel or X11 (portia: natively on ARM, cross on x86)
+#arm-sixel:
+#		$(ACOMPILE) /x src/desktop/POLPO.SXL.Display.Mod
+#		$(ACOMPILE) /s src/desktop/POLPO.SXL.Input.Mod
+#
+#arm-x11:
+#		$(ACOMPILE) /x src/desktop/POLPO.Display.Mod
+#		$(ACOMPILE) /s src/desktop/POLPO.Input.Mod
+
 arm-sixel:
-		$(ACOMPILE) /x src/desktop/POLPO.SXL.Display.Mod
-		$(ACOMPILE) /s src/desktop/POLPO.SXL.Input.Mod
+		$(APORTIA) /y display-sixel
 
 arm-x11:
-		$(ACOMPILE) /x src/desktop/POLPO.Display.Mod
-		$(ACOMPILE) /s src/desktop/POLPO.Input.Mod
+		$(APORTIA) /y display-x11
 
 # ---- RISC-V (RV32) ----
 
@@ -89,6 +105,13 @@ riscv-run:
 riscv-shell:
 		$(RISCV)
 
+# select the Display and Input: xterm sixel or X11 (portia, cross on x86)
+riscv-sixel:
+		$(X86) portia.Build /riscv /y display-sixel
+
+riscv-x11:
+		$(X86) portia.Build /riscv /y display-x11
+
 # ---- MIPS (32-bit little-endian) ----
 
 # cross compile the MIPS system on x86
@@ -108,6 +131,13 @@ mips-run:
 
 mips-shell:
 		$(MIPS)
+
+# select the Display and Input: xterm sixel or X11 (portia, cross on x86)
+mips-sixel:
+		$(X86) portia.Build /mips /y display-sixel
+
+mips-x11:
+		$(X86) portia.Build /mips /y display-x11
 
 # ---- ARMv7 (OP2 compiler; make arm is for older ARM processors) ----
 
@@ -129,4 +159,11 @@ armv7-run:
 armv7-shell:
 		$(ARMV7)
 
-.PHONY: fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell mips mips-native mips-run mips-shell armv7 armv7-native armv7-run armv7-shell
+# select the Display and Input: xterm sixel or X11 (portia, cross on x86)
+armv7-sixel:
+		$(X86) portia.Build /armv7 /y display-sixel
+
+armv7-x11:
+		$(X86) portia.Build /armv7 /y display-x11
+
+.PHONY: fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
