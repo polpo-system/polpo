@@ -584,9 +584,9 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     VAR proc, proc1, par: OBT.Object;
       L1: INTEGER;
       mode: SHORTINT; body: BOOLEAN;
-      oldpsize, psize, dsize: LONGINT;
+      oldpsize, psize, dsize, fwdCalls, fwdAddrs: LONGINT;
   BEGIN 
-    dsize := 0; proc := NIL; body := TRUE;
+    dsize := 0; proc := NIL; body := TRUE; fwdCalls := 0; fwdAddrs := 0;
     IF (sym # OC.ident) & (OBC.level = 0) THEN
       mode:=OC.LProc;
       IF sym = OC.arrow THEN (*forward*) body := FALSE
@@ -603,13 +603,15 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         OBT.Remove(proc1); OBT.Insert(OBS.name, proc);
         CheckMark(proc.marked); 
         mode := OC.LProc; 
-        OBC.FixLink(proc1.a1); OBC.FixAddr(proc1.a2, OBC.pc*4);
+        (* polpo: the calls and addresses of the forward declaration are fixed at the entry
+           (Block): here, before nested procedures, they went to the first nested one *)
+        fwdCalls := proc1.a1; fwdAddrs := proc1.a2;
       ELSE
         IF proc1 # NIL THEN OBS.Mark(1); proc1 := NIL END ;
         OBT.Insert(OBS.name, proc); 
         CheckMark(proc.marked);
       END ;
-      proc.mode := mode; proc.typ := OBT.notyp; proc.a0 := -1; proc.a1 := 0; proc.dsc := NIL;
+      proc.mode := mode; proc.typ := OBT.notyp; proc.a0 := -1; proc.a1 := fwdCalls; proc.a2 := fwdAddrs; proc.dsc := NIL;
       INC(OBC.level); OBT.OpenScope(OBC.level);
       IF (mode = OC.LProc) & (OBC.level = 1) THEN psize := LParOrg ELSE psize := XParOrg END ;
       IF sym = OC.lparen THEN
@@ -625,7 +627,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         CheckSym(OC.semicolon); 
         IF sym=OC.code THEN
           (* Assembler Procedure *)
-          proc.a0 := OBC.pc; OBC.FixLink(proc.a1);
+          proc.a0 := OBC.pc; OBC.FixLink(proc.a1); OBC.FixAddr(proc.a2, OBC.pc*4); proc.a2 := 0;
           par := proc.dsc;
           LOOP
             IF par=NIL THEN EXIT END;
@@ -950,7 +952,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       OBS.Get(sym); ProcedureDeclaration; CheckSym(OC.semicolon)
     END ;
     IF proc#NIL THEN (* procedure *)
-      proc.a0 := OBC.pc; OBC.FixLink(proc.a1);  
+      proc.a0 := OBC.pc; OBC.FixLink(proc.a1); OBC.FixAddr(proc.a2, OBC.pc*4); proc.a2 := 0;
       OBH.Enter(proc.mode, dsize);
       par := proc.dsc;
       WHILE par # NIL DO

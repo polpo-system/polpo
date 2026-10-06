@@ -15,7 +15,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    RISC-V: b := x >= y (and unsigned, CHAR) was always TRUE: SLT, then XORI -1 instead of 1
    (2026-10-06, Coco/R of ETH found it);
    ARMv7: IN with a variable element and a shift by a variable count used R0 as scratch and
-   destroyed a function result in it: F(t) # (t IN s), ASH(F(5), n) (2026-10-06) *)
+   destroyed a function result in it: F(t) # (t IN s), ASH(F(5), n) (2026-10-06);
+   ARM: calls of a forward declared procedure with a nested procedure, made before its body,
+   went to the nested procedure (DelNode of the ETH Coco/R, 2026-10-06). *)
 
 IMPORT SYSTEM, out;
 
@@ -37,6 +39,21 @@ BEGIN
   INC(checks);
   IF ~ok THEN INC(fails); out.String("FAIL "); out.String(what); out.Ln END
 END Check;
+
+PROCEDURE ^Twice(x: LONGINT): LONGINT;
+
+PROCEDURE CallTwice(x: LONGINT): LONGINT;
+BEGIN RETURN Twice(x)
+END CallTwice;
+
+PROCEDURE Twice(x: LONGINT): LONGINT;
+  PROCEDURE Nested(y: LONGINT): LONGINT;
+  BEGIN RETURN y + 1000
+  END Nested;
+BEGIN
+  IF x < 0 THEN RETURN Nested(x) END;
+  RETURN 2 * x
+END Twice;
 
 PROCEDURE Id(x: LONGINT): LONGINT;
 BEGIN RETURN x
@@ -123,6 +140,7 @@ BEGIN
   Check("F(t) # (t IN s)", j = 0);
   x := 3; Check("ASH(F(5), n)", ASH(Id(5), x) = 40);
   x := -1; Check("ASH(F(8), -n)", ASH(Id(8), x) = 4);
+  Check("forward procedure with a nested one", CallTwice(21) = 42);
   mm.one.len := 7; r.len := 0; CopyOne(a, 0, 1, mm, r);
   Check("record copy from a VAR parameter at offset 2252", r.len = 7);
   Frame;
