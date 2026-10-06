@@ -92,14 +92,16 @@ DEFINITION Oberon0;
 - `browser.ShowDef module /d` adds record field offsets, the addresses of variables and the
   offsets of parameters.
 - The module can be given as a path: `browser.ShowDef src/cli/net.Mod`.
-- The `IMPORT` list includes the modules imported indirectly, through other imports.
 - `browser.Help` lists the commands and options.
 - In the desktop, `XBrowser.ShowDef ^` shows the definition of the selected module name in a
   viewer.
 
-The browser reads the x86 objects (`obj/x86/`, of the current directory or of the root). The
-interfaces are the same on all ports, except for the modules that differ between ports (such
-as Linux0 and Kernel).
+Every port has its own console browser, with the same commands and options. Each one reads the
+symbol files of its port, in `obj/<arch>/` of the current directory or of the root:
+`qemu-riscv32 bin/riscv/loksh browser.ShowDef fs` shows the RISC-V interface. The definitions
+are the same, except for the `IMPORT` line: on x86 it lists every module in the symbol file's
+module table, on ARM, ARMv7, RISC-V and MIPS only the modules the interface refers to. The
+modules that differ between ports (such as Linux0 and Kernel) have different interfaces.
 
 ## Arguments and output
 

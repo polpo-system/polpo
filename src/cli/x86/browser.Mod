@@ -319,7 +319,7 @@ MODULE browser;  (** portable, except where noted *)
         Texts.OpenReader(R, T, 0);
         WHILE ~R.eot DO
           Texts.Read(R, ch);
-           IF ch=0DX THEN out.Ln ELSE out.Char(ch) END
+           IF ch=0DX THEN out.Ln ELSIF ch # 0X THEN out.Char(ch) END  (* polpo: not the 0X at the end *)
         END;
         out.Ln
       ELSE  (* polpo: said only in Kernel.Log *)
