@@ -922,12 +922,13 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
       OPL.Move(xadr, x, OPL.LInt);
       OPL.Move(yadr, y, OPL.LInt);
       until := OPL.PutSPC(OPL.ADD, -1, xadr, z);
-      OPL.PutSB(OPL.BGEU, OPL.T1, until, 7);  (* was 6 end *)
-      OPL.PutI(OPL.LB, OPL.T0, OPL.T2, 0);
-      (* loop1: *) OPL.PutI(OPL.ADDI, OPL.T2, OPL.T2, 1);
+      (* polpo: the load at the top of the loop; loaded ahead, the last round read the byte after
+         the source, a fault at the end of a mapping (Files growing a mapped file) *)
+      OPL.PutSB(OPL.BGEU, OPL.T1, until, 6);  (* end *)
+      (* loop1: *) OPL.PutI(OPL.LB, OPL.T0, OPL.T2, 0);
+      OPL.PutI(OPL.ADDI, OPL.T2, OPL.T2, 1);
       OPL.PutS(OPL.SB,OPL.T0,  OPL.T1, 0);
       OPL.PutI(OPL.ADDI, OPL.T1, OPL.T1, 1);
-      OPL.PutI(OPL.LB, OPL.T0, OPL.T2, 0);
       OPL.PutSB(OPL.BNE, OPL.T1, until, -4);  (* loop1 *)
       (* end: *) OPL.ReleaseR(until) 
     END
@@ -944,11 +945,11 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
       OPL.Move(xadr, x, OPL.LInt);
       OPL.Move(yadr, y, OPL.LInt);
       until := OPL.PutSPC(OPL.ADD, -1, xadr, z); 
-      OPL.PutI(OPL.FLD, FT0, OPL.T2, 0 );
-      (* loop0: *) OPL.PutI(OPL.ADDI, OPL.T2, OPL.T2, 8);
+      (* polpo: the load at the top of the loop, not 8 bytes after the source in the last round *)
+      (* loop0: *) OPL.PutI(OPL.FLD, FT0, OPL.T2, 0 );
+      OPL.PutI(OPL.ADDI, OPL.T2, OPL.T2, 8);
       OPL.PutS(OPL.FSD, FT0, OPL.T1, 0);
       OPL.PutI(OPL.ADDI, OPL.T1, OPL.T1, 8);
-      OPL.PutI(OPL.FLD, FT0, OPL.T2, 0 );
       OPL.PutSB(OPL.BNE, OPL.T1, until, -4);  (* loop0 *)
       (* end: *) OPL.ReleaseR(until) 
     END

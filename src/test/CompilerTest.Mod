@@ -17,9 +17,12 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARMv7: IN with a variable element and a shift by a variable count used R0 as scratch and
    destroyed a function result in it: F(t) # (t IN s), ASH(F(5), n) (2026-10-06);
    ARM: calls of a forward declared procedure with a nested procedure, made before its body,
-   went to the nested procedure (DelNode of the ETH Coco/R, 2026-10-06). *)
+   went to the nested procedure (DelNode of the ETH Coco/R, 2026-10-06);
+   RISC-V: SYSTEM.MOVE loaded one byte ahead and read the byte after its source, a fault when the
+   source ends a mapping (Files growing a mapped file, 2026-10-06). A fault there ends the run
+   without the last line. *)
 
-IMPORT SYSTEM, out;
+IMPORT SYSTEM, Linux0, out;
 
 TYPE
   Small = RECORD a: LONGINT; pad: ARRAY 4 OF CHAR; b: LONGINT END;  (* 12 bytes *)
@@ -108,6 +111,19 @@ BEGIN
   RETURN n
 END Moved;
 
+(* bytes that end exactly at the end of a mapping, the page after it unmapped *)
+PROCEDURE EndOfMap(): BOOLEAN;
+VAR page, n, r: LONGINT; buf: ARRAY 64 OF CHAR;
+BEGIN
+  page := Linux0.Mmap20(0, 2 * Linux0.PageSize, 3, Linux0.MAPPRIVATE + Linux0.MAPANONYMOUS, -1, 0);
+  r := Linux0.Munmap0(page + Linux0.PageSize, Linux0.PageSize);
+  SYSTEM.PUT(page + Linux0.PageSize - 1, "z");
+  n := 1;
+  WHILE n <= 64 DO SYSTEM.MOVE(page + Linux0.PageSize - n, SYSTEM.ADR(buf[0]), n); INC(n) END;
+  r := Linux0.Munmap0(page, Linux0.PageSize);
+  RETURN buf[63] = "z"
+END EndOfMap;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -147,6 +163,7 @@ BEGIN
   BlockMove;
   Check("SYSTEM.MOVE keeps its length variable", Moved("OberonProperty", flag) = 14);
   Check("SYSTEM.MOVE of 0 bytes copies nothing", flag);
+  Check("SYSTEM.MOVE up to the end of a mapping", EndOfMap());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
