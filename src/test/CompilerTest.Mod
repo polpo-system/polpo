@@ -38,6 +38,14 @@ BEGIN
   IF ~ok THEN INC(fails); out.String("FAIL "); out.String(what); out.Ln END
 END Check;
 
+PROCEDURE Id(x: LONGINT): LONGINT;
+BEGIN RETURN x
+END Id;
+
+PROCEDURE InSet(t: INTEGER): BOOLEAN;
+BEGIN RETURN t IN {8, 9, 10, 12, 13}
+END InSet;
+
 PROCEDURE Div(x, y: LONGINT): LONGINT;
 BEGIN RETURN x DIV y
 END Div;
@@ -110,6 +118,11 @@ BEGIN
   Check("b := c >= 'a', c = 'A'", ~flag);
   flag := c >= "A";
   Check("b := c >= 'A', c = 'A'", flag);
+  j := 0; i := 0;
+  WHILE i < 16 DO IF InSet(SHORT(i)) # (SHORT(i) IN {8, 9, 10, 12, 13}) THEN INC(j) END; INC(i) END;
+  Check("F(t) # (t IN s)", j = 0);
+  x := 3; Check("ASH(F(5), n)", ASH(Id(5), x) = 40);
+  x := -1; Check("ASH(F(8), -n)", ASH(Id(8), x) = 4);
   mm.one.len := 7; r.len := 0; CopyOne(a, 0, 1, mm, r);
   Check("record copy from a VAR parameter at offset 2252", r.len = 7);
   Frame;

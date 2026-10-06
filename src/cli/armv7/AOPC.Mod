@@ -365,11 +365,14 @@ END PowerOf2;
   PROCEDURE In*(VAR x, y: OPL.Item);
     VAR r: LONGINT;
   BEGIN
+    (* polpo: the shifted set goes to a free register, only the flags are used; into T0 (R0) it
+       destroyed a function result in R0, F(t) # (t IN s) *)
     IF x.mode = OPT.Con THEN
-      r := OPL.PutIMMS(OPL.LSLI+OPL.SETFLAGS, OPL.T0, y, OPL.RegSize-1 - x.offset) (* don't use CMNI *)
+      r := OPL.PutIMMS(OPL.LSLI+OPL.SETFLAGS, -1, y, OPL.RegSize-1 - x.offset); OPL.ReleaseR(r) (* don't use CMNI *)
     ELSE OPL.Load(x, -1); CheckSetRange(x);
       x.reg := OPL.PutIMM(OPL.EORI, -1, x, OPL.RegSize-1);OPL.Load(y, -1);OPL.ReleaseR( x.reg); OPL.ReleaseR( y.reg);
-      OPL.PutR(OPL.LSL+OPL.SETFLAGS+x.reg*100H, OPL.T0, 0, y.reg);  (* don't use CMN *)
+      r := -1; OPL.GetR(OPL.TempReg, r); OPL.ReleaseR(r);
+      OPL.PutR(OPL.LSL+OPL.SETFLAGS+x.reg*100H, r, 0, y.reg);  (* don't use CMN *)
     END;
     x.mode := OPL.Cond; x.offset := OPL.MI; x.Tjmp := 0; x.Fjmp := 0;
   END In;
@@ -573,16 +576,18 @@ END PowerOf2;
   END CondOr;
   
   PROCEDURE Shift(VAR x, y: OPL.Item; rt, sri, srv: LONGINT);
-    VAR c: LONGINT;
+    VAR c, t: LONGINT;
   BEGIN
     IF y.mode = OPT.Con THEN c := y.offset;
       IF c > 0 THEN x.reg := OPL.PutIMMS(OPL.LSLI, rt, x, c);  
       ELSIF c < 0 THEN x.reg := OPL.PutIMMS( sri, rt, x, (-c) MOD 32);
       END
     ELSE OPL.Load(y, -1); OPL.Load(x, -1);
+      (* polpo: -y in a register other than x and y; in T0 (R0) it destroyed an x in R0, ASH(F(i), n) *)
+      t := -1; OPL.GetR(OPL.TempReg, t); OPL.ReleaseR(t);
       OPL.ReleaseR(y.reg); OPL.ReleaseR(x.reg); OPL.GetR(OPL.TempReg, rt);
-      OPL.PutI( OPL.RSBI+OPL.SETFLAGS, OPL.T0, y.reg, 0);
-      OPL.PutR( srv-OPL.AL+OPL.PL, rt, 0, OPL.T0*100H+ x.reg);
+      OPL.PutI( OPL.RSBI+OPL.SETFLAGS, t, y.reg, 0);
+      OPL.PutR( srv-OPL.AL+OPL.PL, rt, 0, t*100H+ x.reg);
       OPL.PutR( OPL.LSL-OPL.AL+OPL.MI, rt, 0, y.reg*100H+ x.reg);
       x.reg:=rt;
     END
