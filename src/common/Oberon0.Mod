@@ -2,7 +2,7 @@ MODULE Oberon0;
 
 IMPORT Kernel, Texts := Texts0, Modules, Files;  (* Texts0: texts imports Oberon0 *)
 
-CONST OberonText = "Oberon.Text";
+CONST OberonText = "Oberon.Text"; MaxStops = 16;
 
 TYPE
   ParList* = POINTER TO ParRec;
@@ -11,6 +11,7 @@ TYPE
     pos*: LONGINT
   END;
   ParHook* = PROCEDURE (par: ParList);
+  Cleanup* = PROCEDURE;  (** closes what a command left open when it was stopped *)
 
 VAR
   Log*: Texts.Text;
@@ -19,6 +20,7 @@ VAR
   parHook: ParHook;
   conftext: Texts.Text;
   conftime, confdate: LONGINT;
+  stops: ARRAY MaxStops OF Cleanup; nStops: INTEGER;  (* registered with OnStop *)
 
 PROCEDURE GetClock*(VAR t, d: LONGINT);
 BEGIN Kernel.GetClock(t, d) END GetClock;
@@ -123,6 +125,29 @@ BEGIN
   ELSE res := Modules.res
   END
 END Call;
+
+(** OnStop(p): p is called when a command is stopped (Ctrl+C or a trap in the interactive
+  shell), to close what it holds (sockets, files). Oberon has no unwinding: the stopped command
+  does not go on. p is registered once however often OnStop is called; it stays registered and
+  must do nothing when there is nothing to close. *)
+PROCEDURE OnStop*(p: Cleanup);
+VAR i: INTEGER;
+BEGIN
+  i := 0; WHILE (i < nStops) & (stops[i] # p) DO INC(i) END;
+  IF (i = nStops) & (nStops < MaxStops) THEN stops[nStops] := p; INC(nStops) END
+END OnStop;
+
+(** Stopped: calls the procedures registered with OnStop (the shell, after a command stopped).
+  The list is emptied while they run: if one traps, it is not called again (the others are
+  registered again when their commands run). *)
+PROCEDURE Stopped*;
+VAR p: Cleanup; i, n: INTEGER; run: ARRAY MaxStops OF Cleanup;
+BEGIN
+  n := nStops; i := 0; WHILE i < n DO run[i] := stops[i]; INC(i) END;
+  nStops := 0;
+  i := 0; WHILE i < n DO p := run[i]; p; INC(i) END;
+  i := 0; WHILE i < n DO OnStop(run[i]); INC(i) END  (* all ran: registered again *)
+END Stopped;
 
 PROCEDURE GetSelection*(VAR text: Texts.Text; VAR beg, end, time: LONGINT);
 BEGIN text := NIL; beg := 0; end := 0; time := -1 END GetSelection;

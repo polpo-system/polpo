@@ -656,7 +656,8 @@ PROCEDURE Interactive;
 VAR buf: ARRAY 256 OF CHAR; len: INTEGER; r: LONGINT; quit: BOOLEAN;
 BEGIN
   IF entered THEN
-    nOut.Ln; nOut.String("loksh: the command stopped (Ctrl+C, or a trap: Kernel.Log has the details)"); nOut.Ln
+    nOut.Ln; nOut.String("loksh: the command stopped (Ctrl+C, or a trap: Kernel.Log has the details)"); nOut.Ln;
+    Oberon0.Stopped  (* the cleanups of the commands (Oberon0.OnStop) *)
   END;
   entered := TRUE; quit := FALSE;
   WHILE ~quit DO

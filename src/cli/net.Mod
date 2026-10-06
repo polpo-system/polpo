@@ -11,11 +11,11 @@ MODULE net;  (** minimal network tools over Sockets and DNS *)
    net.Address text ...           IP addresses in normal form (no lookup)
    A host is a name or an IPv4 or IPv6 address; its addresses are tried in turn. *)
 
-IMPORT Texts := texts, Sockets, DNS, out;
+IMPORT Texts := texts, Sockets, DNS, Oberon := Oberon0, out;
 
 CONST MaxAddrs = 8;
 
-VAR listener, conn: Sockets.Socket;  (* of net.Echo: closed by the next Echo when Ctrl+C stopped one *)
+VAR listener, conn: Sockets.Socket;  (* of net.Echo, closed by CloseEcho when it is stopped *)
 
 PROCEDURE Number(VAR s: ARRAY OF CHAR; VAR n: LONGINT): BOOLEAN;
 VAR i: LONGINT;
@@ -133,12 +133,19 @@ BEGIN
 END Send;
 
 (** net.Echo port [count] -- echo count connections, then stop *)
+(* the sockets of a stopped net.Echo (Oberon0.OnStop) *)
+PROCEDURE CloseEcho;
+BEGIN
+  IF conn # NIL THEN Sockets.Close(conn); conn := NIL END;
+  IF listener # NIL THEN Sockets.Close(listener); listener := NIL END
+END CloseEcho;
+
 PROCEDURE Echo*;
 VAR A: Texts.Reader; arg, peer: ARRAY 256 OF CHAR; port, count, pport, n, r: LONGINT;
   l, c: Sockets.Socket; a: Sockets.Address; buf: ARRAY 4096 OF CHAR;
 BEGIN
-  IF conn # NIL THEN Sockets.Close(conn); conn := NIL END;  (* left by an Echo stopped with Ctrl+C *)
-  IF listener # NIL THEN Sockets.Close(listener); listener := NIL END;
+  CloseEcho;  (* left open if the shell did not call it *)
+  Oberon.OnStop(CloseEcho);
   Texts.OpenArgs(A);
   IF ~Texts.Arg(A, arg) OR ~Number(arg, port) THEN
     Ln("usage: net.Echo port [count]  (a server: waits for count connections on port, default 1,");

@@ -89,6 +89,7 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
       handle*: Handler  (** Task handler. *)
     END;
   VAR
+  looped: BOOLEAN;  (* polpo: Loop ran before: entered again after a trap, the stopped command's cleanups run (Oberon0.Stopped) *)
   Arrow*, Star*: Marker;  (** Normal Oberon arrow, and the star marker. *)
   Mouse*, Pointer*: Cursor;  (** Normal Oberon mouse, and the star pointer. *)
 
@@ -513,6 +514,8 @@ END MarkedText;
         X, Y: INTEGER; keys, shift, oldshift: SET; ch: CHAR; utf: BOOLEAN;
     BEGIN
       IF CurTask # NIL THEN HandleTaskTrap END;
+      IF looped THEN Oberon0.Stopped END;  (* polpo: the cleanups registered with Oberon0.OnStop *)
+      looped := TRUE;
       Input.Mouse(keys, X, Y); oldshift := {};
       LOOP
         IF Input.Available() > 0 THEN
