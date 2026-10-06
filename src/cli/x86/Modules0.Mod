@@ -741,7 +741,7 @@ BEGIN
     ObjName(objPath, name, fname); f := Files.Old(fname);
     IF (f = NIL) & (rootPath # objPath) THEN ObjName(rootPath, name, fname); f := Files.Old(fname) END;
     IF f = NIL THEN
-      COPY(fname, importing); res := fileNotFound; ErrMsg(res);
+      COPY(name, importing); res := fileNotFound; ErrMsg(res);  (* polpo: the module name; the path was cut at 32 characters *)
       RETURN
     END;
     Files.Set(R, f, 0); Files.Read(R, tag);
@@ -847,7 +847,7 @@ END InstallTermHandler;
 BEGIN
   trace := TRUE;
   Kernel.Static := FALSE;
-  Root.Obj("x86", objPath); Root.RootObj("x86", rootPath)
+  objPath := "obj/x86/"; Root.RootObj("x86", rootPath)  (* polpo: obj/x86/ of the current directory at each load (fs.Cd), then the root's *)
 END Modules0.
 
 (** Remarks:

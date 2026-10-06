@@ -555,7 +555,7 @@ END InstallTermHandler;
 BEGIN
   Kernel.Static:=FALSE;
   modLoadAddr:=Kernel.dynModBase;
-  Root.Obj("arm", objPath); Root.RootObj("arm", rootPath)
+  objPath := "obj/arm/"; Root.RootObj("arm", rootPath)  (* polpo: obj/arm/ of the current directory at each load (fs.Cd), then the root's *)
 END Modules0.
 
 (** Remarks:

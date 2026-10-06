@@ -620,7 +620,7 @@ END FindMod;
         f.fd:= Linux0.Openat0( Linux0.ATFDCWD, S.ADR(fname), 0, 0)
       END;
       IF f.fd<3 THEN
-        COPY(fname, importing);  res := fileNotFound; ErrMsg(res); 
+        COPY(name, importing);  res := fileNotFound; ErrMsg(res);  (* polpo: the module name; the path was cut at 32 characters *)
         RETURN;
       END;
       f.length:= FSize(f.fd);
@@ -723,8 +723,9 @@ BEGIN  (* entry of boot file, must not return *)
 *)
 (*  Test;*)
   Kernel.Static:=FALSE;
-  IF Linux0.ARCH = "MIPS" THEN Root.Obj("mips", objPath); Root.RootObj("mips", rootPath)
-  ELSIF Linux0.ARCH = "RISC-V" THEN Root.Obj("riscv", objPath); Root.RootObj("riscv", rootPath)
-  ELSE Root.Obj("armv7", objPath); Root.RootObj("armv7", rootPath)
+  (* polpo: obj/<arch>/ of the current directory at each load (fs.Cd), then the root's *)
+  IF Linux0.ARCH = "MIPS" THEN objPath := "obj/mips/"; Root.RootObj("mips", rootPath)
+  ELSIF Linux0.ARCH = "RISC-V" THEN objPath := "obj/riscv/"; Root.RootObj("riscv", rootPath)
+  ELSE objPath := "obj/armv7/"; Root.RootObj("armv7", rootPath)
   END
 END Modules0.
