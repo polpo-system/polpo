@@ -259,6 +259,17 @@ BEGIN
   RETURN TOML.GetField(s, key, val)
 END Field;
 
+(* the commands of a field: the elements of an array, or a text separated by ";" *)
+PROCEDURE Commands(doc: TOML.Doc; sec, key: ARRAY OF CHAR; VAR list: Item);
+VAR f: TOML.Field; it: TOML.Item;
+BEGIN
+  f := TOML.Find(TOML.GetSection(doc, sec), key);
+  IF f = NIL THEN
+  ELSIF f.kind = TOML.Array THEN it := f.items; WHILE it # NIL DO Add(list, it.value); it := it.next END
+  ELSE AddCommands(list, f.value)
+  END
+END Commands;
+
 (* the keys of section sec as a list (deps, provides, conflicts) *)
 PROCEDURE Keys(doc: TOML.Doc; sec: ARRAY OF CHAR; VAR list: Item);
 VAR s: TOML.Section; f: TOML.Field; it: Item;
@@ -326,6 +337,10 @@ BEGIN
   Append(path, version); Append(path, ".arden");
   IF ~ReadFile(path, buf) THEN Pre; out.String("cannot read "); out.String(path); out.Ln; RETURN NIL END;
   doc := TOML.Parse(buf^);
+  IF doc.errors > 0 THEN
+    Pre; out.String(path); out.Char(":"); out.Int(doc.errorLine, 0); out.String(": "); out.String(doc.error);
+    IF doc.errors > 1 THEN out.String(" (and "); out.Int(doc.errors - 1, 0); out.String(" more)") END; out.Ln
+  END;
   NEW(p); COPY(name, p.name); COPY(cat, p.category); COPY(version, p.version);
   IF ~Field(doc, "PACKAGE", "description", p.desc) THEN p.desc := "" END;
   p.remote := "";
@@ -336,15 +351,14 @@ BEGIN
   Keys(doc, "DEPS", p.deps); Keys(doc, "PROVIDES", p.provides); Keys(doc, "CONFLICTS", p.conflicts);
   IF Field(doc, "MODULES", "all", v) THEN AddSources(p.sources, v) END;
   IF Field(doc, "MODULES", arch, v) THEN AddSources(p.sources, v) END;
-  IF Field(doc, "BUILD", arch, v) THEN AddCommands(p.build, v) END;
+  Commands(doc, "BUILD", arch, p.build);
   IF Field(doc, "FILES", "all", v) THEN AddWords(p.files, v) END;
   IF Field(doc, "FILES", arch, v) THEN AddWords(p.files, v) END;
   IF p.remote # "" THEN Localize(p) END;
   IF Field(doc, "TESTS", "copy", v) THEN AddWords(p.tcopy, v) END;
-  IF Field(doc, "TESTS", "cmds", v) THEN AddCommands(p.tcmds, v) END;
-  COPY("cmds.", mod); Append(mod, arch); IF Field(doc, "TESTS", mod, v) THEN AddCommands(p.tcmds, v) END;
-  IF Field(doc, "TESTS", "ok", v) THEN AddCommands(p.tok, v) END;
-  IF Field(doc, "TESTS", "bad", v) THEN AddCommands(p.tbad, v) END;
+  Commands(doc, "TESTS", "cmds", p.tcmds);
+  COPY("TESTS.", mod); Append(mod, arch); Commands(doc, mod, "cmds", p.tcmds);  (* [TESTS.x86] cmds after *)
+  Commands(doc, "TESTS", "ok", p.tok); Commands(doc, "TESTS", "bad", p.tbad);
   it := p.sources;
   WHILE it # NIL DO
     IF Header(it.s, mod) THEN Add(p.modules, mod)
