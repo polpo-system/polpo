@@ -344,6 +344,9 @@ MODULE browser;  (** portable, except where noted *)
            IF ch=0DX THEN out.Ln ELSE out.Char(ch) END
         END;
         out.Ln
+      ELSE  (* polpo: said only in Kernel.Log *)
+        out.String("browser: no module "); out.String(name); out.String(" (no "); out.String(name);
+        out.String(".Obj in obj/x86/ of the current directory or of the root)"); out.Ln
       END;
       OPM.outputPath:=""
     ELSE
@@ -372,8 +375,14 @@ END ShowScope;
 
 PROCEDURE Help*;
 BEGIN
-  out.String("browser.ShowDef module"); out.Ln;
-  out.String("browser.ShowScope"); out.Ln
+  out.String("browser: the interface (definition) of a module, from its symbol file (x86 objects)"); out.Ln;
+  out.String("  browser.ShowDef module [-d] [-e]   what module exports: types, variables, procedures"); out.Ln;
+  out.String("     -d  with field offsets, addresses and parameter offsets"); out.Ln;
+  out.String("     -e  records with the fields of their base types written out"); out.Ln;
+  out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); out.Ln;
+  out.String("  browser.ShowScope   the scope of the compiler (while compiling)"); out.Ln;
+  out.String("  In the desktop: XBrowser.ShowDef ^ (the selected name) shows it in a viewer."); out.Ln;
+  out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 -e"); out.Ln
 END Help;
 
 BEGIN
