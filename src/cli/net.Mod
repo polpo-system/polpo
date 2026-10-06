@@ -1,13 +1,14 @@
 MODULE net;  (** minimal network tools over Sockets and DNS *)
 
-(* net.Get host port [path]       HTTP/1.0 GET, prints the answer
+(* net.Help                       what the commands do, with examples
+   net.Get host port [path]       HTTP/1.0 GET, prints the answer
    net.Send host port text        sends text, prints what comes back
-   net.Echo port [count]          echoes count connections (default 1), IPv6 and IPv4
+   net.Echo port [count]          a server: echoes count connections (default 1), IPv6 and IPv4
    net.UDP host port text         sends a datagram, prints the answer
    net.Lookup name ...            the addresses of the names, IPv6 and IPv4
    net.Resolve name ...           only the IPv4 addresses (A records)
    net.Resolve6 name ...          only the IPv6 addresses (AAAA records)
-   net.Address text ...           the addresses in normal form
+   net.Address text ...           IP addresses in normal form (no lookup)
    A host is a name or an IPv4 or IPv6 address; its addresses are tried in turn. *)
 
 IMPORT Texts := texts, Sockets, DNS, out;
@@ -22,6 +23,30 @@ BEGIN
   WHILE (s[i] >= "0") & (s[i] <= "9") DO n := n * 10 + ORD(s[i]) - ORD("0"); INC(i) END;
   RETURN s[i] = 0X
 END Number;
+
+PROCEDURE Ln(s: ARRAY OF CHAR);
+BEGIN out.String(s); out.Ln
+END Ln;
+
+(** net.Help -- what the commands do *)
+PROCEDURE Help*;
+BEGIN
+  Ln("net: small network tools (TCP, UDP, DNS), IPv6 and IPv4");
+  Ln("  net.Lookup name ...         the addresses of host names");
+  Ln("  net.Resolve name ...        only IPv4 (A);  net.Resolve6 name ...  only IPv6 (AAAA)");
+  Ln("  net.Address addr ...        an IPv4/IPv6 address in normal form (does not look up names)");
+  Ln("  net.Get host port [path]    an HTTP/1.0 GET; prints the whole answer");
+  Ln("  net.Send host port text     connects, sends text, prints what comes back");
+  Ln("  net.UDP host port text      sends one datagram, prints the answer and who sent it");
+  Ln("  net.Echo port [count]       a server: waits on port, sends back what each of count");
+  Ln("                              connections sends (default 1)");
+  Ln("  A host is a name or an address. Text with blanks goes in quotes.");
+  Ln("examples:");
+  Ln("  net.Lookup norayr.am");
+  Ln("  net.Get norayr.am 80 /");
+  Ln("  net.Echo 7007 2      (and in another loksh)  net.Send localhost 7007 hello");
+  Ln("  net.Address ::ffff:127.0.0.1  127.0.0.1")
+END Help;
 
 PROCEDURE Error(what: ARRAY OF CHAR; res: LONGINT);
 BEGIN out.String("net: "); out.String(what); out.String(" failed, error "); out.Int(-res, 0); out.Ln
@@ -50,11 +75,11 @@ BEGIN
 END LookupError;
 
 (* the host and port arguments: the host's addresses in a[0..n), the host in host *)
-PROCEDURE Target(VAR A: Texts.Reader; VAR host: ARRAY OF CHAR; VAR a: ARRAY OF Sockets.Address; VAR n, port: LONGINT): BOOLEAN;
+PROCEDURE Target(VAR A: Texts.Reader; usage: ARRAY OF CHAR; VAR host: ARRAY OF CHAR; VAR a: ARRAY OF Sockets.Address; VAR n, port: LONGINT): BOOLEAN;
 VAR s: ARRAY 256 OF CHAR;
 BEGIN
-  IF ~Texts.Arg(A, host) THEN out.String("net: a host expected"); out.Ln; RETURN FALSE END;
-  IF ~Texts.Arg(A, s) OR ~Number(s, port) THEN out.String("net: a port expected"); out.Ln; RETURN FALSE END;
+  IF ~Texts.Arg(A, host) OR ~Texts.Arg(A, s) THEN out.String("usage: "); Ln(usage); RETURN FALSE END;
+  IF ~Number(s, port) THEN out.String("net: "); out.String(s); Ln(" is not a port number"); RETURN FALSE END;
   DNS.Lookup(host, DNS.Any, a, n);
   IF n = 0 THEN LookupError(host); RETURN FALSE END;
   RETURN TRUE
@@ -75,7 +100,7 @@ PROCEDURE Get*;
 VAR A: Texts.Reader; a: ARRAY MaxAddrs OF Sockets.Address; n, port, r: LONGINT; path, host, req: ARRAY 512 OF CHAR; s: Sockets.Socket; i, j: LONGINT;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Target(A, host, a, n, port) THEN RETURN END;
+  IF ~Target(A, "net.Get host port [path]  (an HTTP/1.0 GET)", host, a, n, port) THEN RETURN END;
   IF ~Texts.Arg(A, path) THEN path := "/" END;
   s := Open(a, n, port);
   IF s = NIL THEN RETURN END;
@@ -96,7 +121,7 @@ PROCEDURE Send*;
 VAR A: Texts.Reader; a: ARRAY MaxAddrs OF Sockets.Address; n, port, r: LONGINT; host: ARRAY 256 OF CHAR; text: ARRAY 1024 OF CHAR; s: Sockets.Socket;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Target(A, host, a, n, port) THEN RETURN END;
+  IF ~Target(A, "net.Send host port text  (connects, sends text, prints the answer)", host, a, n, port) THEN RETURN END;
   IF ~Texts.Arg(A, text) THEN text := "" END;
   s := Open(a, n, port);
   IF s = NIL THEN RETURN END;
@@ -111,7 +136,10 @@ VAR A: Texts.Reader; arg, peer: ARRAY 256 OF CHAR; port, count, pport, n, r: LON
   l, c: Sockets.Socket; a: Sockets.Address; buf: ARRAY 4096 OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, arg) OR ~Number(arg, port) THEN out.String("usage: net.Echo port [count]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, arg) OR ~Number(arg, port) THEN
+    Ln("usage: net.Echo port [count]  (a server: waits for count connections on port, default 1,");
+    Ln("       and sends back what they send; try net.Send localhost port text from another loksh)"); RETURN
+  END;
   IF ~Texts.Arg(A, arg) OR ~Number(arg, count) THEN count := 1 END;
   l := Sockets.Listen(Sockets.Inet6, port, 8);
   IF l = NIL THEN Error("listen", Sockets.res); RETURN END;
@@ -136,7 +164,7 @@ VAR A: Texts.Reader; a: ARRAY MaxAddrs OF Sockets.Address; from: Sockets.Address
   host: ARRAY 256 OF CHAR; text, t: ARRAY 1024 OF CHAR; s: Sockets.Socket;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Target(A, host, a, n, port) THEN RETURN END;
+  IF ~Target(A, "net.UDP host port text  (one datagram, prints the answer)", host, a, n, port) THEN RETURN END;
   IF ~Texts.Arg(A, text) THEN text := "" END;
   s := Sockets.OpenUDP(a[0].family, 0);
   IF s = NIL THEN Error("socket", Sockets.res); RETURN END;
@@ -155,11 +183,12 @@ BEGIN
 END UDP;
 
 (* the addresses of family of each name argument *)
-PROCEDURE Names(family: INTEGER);
-VAR A: Texts.Reader; name, t: ARRAY 256 OF CHAR; a: ARRAY MaxAddrs OF Sockets.Address; n, i: LONGINT;
+PROCEDURE Names(family: INTEGER; usage: ARRAY OF CHAR);
+VAR A: Texts.Reader; name, t: ARRAY 256 OF CHAR; a: ARRAY MaxAddrs OF Sockets.Address; n, i, k: LONGINT;
 BEGIN
-  Texts.OpenArgs(A);
+  Texts.OpenArgs(A); k := 0;
   WHILE Texts.Arg(A, name) DO
+    INC(k);
     DNS.Lookup(name, family, a, n);
     IF n = 0 THEN LookupError(name)
     ELSE
@@ -167,34 +196,38 @@ BEGIN
       i := 0; WHILE i < n DO Sockets.AddressToString(a[i], t); out.Char(" "); out.String(t); INC(i) END;
       out.Ln
     END
-  END
+  END;
+  IF k = 0 THEN out.String("usage: "); Ln(usage) END
 END Names;
 
 (** net.Lookup name ... -- the IPv6 and IPv4 addresses of each name *)
 PROCEDURE Lookup*;
-BEGIN Names(DNS.Any)
+BEGIN Names(DNS.Any, "net.Lookup name ...  (the IPv6 and IPv4 addresses of host names)")
 END Lookup;
 
 (** net.Resolve name ... -- the IPv4 addresses of each name *)
 PROCEDURE Resolve*;
-BEGIN Names(Sockets.Inet4)
+BEGIN Names(Sockets.Inet4, "net.Resolve name ...  (the IPv4 addresses of host names)")
 END Resolve;
 
 (** net.Resolve6 name ... -- the IPv6 addresses of each name *)
 PROCEDURE Resolve6*;
-BEGIN Names(Sockets.Inet6)
+BEGIN Names(Sockets.Inet6, "net.Resolve6 name ...  (the IPv6 addresses of host names)")
 END Resolve6;
 
-(** net.Address text -- the address in normal form, or "invalid" *)
+(** net.Address text -- an IPv4 or IPv6 address in normal form (names are not looked up) *)
 PROCEDURE Address*;
-VAR A: Texts.Reader; arg, t: ARRAY 256 OF CHAR; a: Sockets.Address;
+VAR A: Texts.Reader; arg, t: ARRAY 256 OF CHAR; a: Sockets.Address; k: LONGINT;
 BEGIN
-  Texts.OpenArgs(A);
+  Texts.OpenArgs(A); k := 0;
   WHILE Texts.Arg(A, arg) DO
-    out.String(arg); out.String(" -> ");
-    IF Sockets.ParseAddress(arg, a) THEN Sockets.AddressToString(a, t); out.String(t) ELSE out.String("invalid") END;
+    INC(k); out.String(arg);
+    IF Sockets.ParseAddress(arg, a) THEN Sockets.AddressToString(a, t); out.String(" -> "); out.String(t)
+    ELSE out.String(": not an IP address (net.Lookup "); out.String(arg); out.String(" finds the addresses of a name)")
+    END;
     out.Ln
-  END
+  END;
+  IF k = 0 THEN Ln("usage: net.Address addr ...  (e.g. 2001:db8:0:0::1 -> 2001:db8::1; no name lookup)") END
 END Address;
 
 END net.

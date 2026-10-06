@@ -564,39 +564,28 @@ END ReadLine;
 PROCEDURE ShowModCmds(modname: ARRAY OF CHAR);
 VAR
   m: Kernel.Module;
-  f: Files.File;
-  R: Files.Rider;
-  fname, cname: ARRAY 64 OF CHAR;
-  nofCmds, i: INTEGER;
-  n: LONGINT;
+  mod: Modules.Module;
+  i: INTEGER;
+  help: BOOLEAN;  (* the module has a command Help *)
+
+  PROCEDURE Find;
+  BEGIN m := Kernel.modules; WHILE (m # NIL) & (m.name # modname) DO m := m.next END
+  END Find;
+
 BEGIN
-  m := Kernel.modules;
-  WHILE (m # NIL) & (m.name # modname) DO m := m.next END;
+  Find;
+  IF m = NIL THEN mod := Modules.ThisMod(modname); Find END;  (* polpo: loaded, as a command of it would be; the object file was looked for as x86/<name>.Obj in the root *)
   IF m # NIL THEN
     nOut.String(modname); nOut.String(": no procedure specified."); nOut.Ln;
-    i := 0;
+    i := 0; help := FALSE;
     WHILE i < LEN(m.cmds^) DO
       nOut.String("    "); nOut.String(modname); nOut.Char('.'); nOut.String(m.cmds[i].name); nOut.Ln;
+      IF m.cmds[i].name = "Help" THEN help := TRUE END;
       INC(i)
-    END
+    END;
+    IF help THEN nOut.String(modname); nOut.String(".Help explains them."); nOut.Ln END
   ELSE
-    fname[0]:='x'; fname[1]:='8'; fname[2]:='6'; fname[3]:='/';
-    i := 0; WHILE modname[i] # 0X DO fname[4+i] := modname[i]; INC(i) END;
-    fname[4+i]:='.'; fname[5+i]:='O'; fname[6+i]:='b'; fname[7+i]:='j'; fname[8+i]:=0X;
-    f := Files.Old(fname);
-    IF f # NIL THEN
-      nOut.String(modname); nOut.String(": no procedure specified."); nOut.Ln;
-      Files.Set(R, f, 0); nofCmds := ObjSeekCmds(R);
-      i := 0;
-      WHILE i < nofCmds DO
-        ObjReadStr(R, cname); ObjReadU16(R, n);
-        nOut.String("    "); nOut.String(modname); nOut.Char('.'); nOut.String(cname); nOut.Ln;
-        INC(i)
-      END;
-      Files.ReleaseRead(f)
-    ELSE
-      nOut.String(modname); nOut.String(": module not found"); nOut.Ln
-    END
+    nOut.String(modname); nOut.String(": module not found"); nOut.Ln
   END
 END ShowModCmds;
 
