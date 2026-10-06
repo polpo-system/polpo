@@ -163,30 +163,52 @@ BEGIN
   SYSTEM.CODE( ECALL);
 END Exit0;
   
-PROCEDURE Fork0*():LONGINT;
+PROCEDURE Clone0( flags, stack, ptid: LONGINT):LONGINT;
 BEGIN
-  SYSTEM.PUTREG( NRR, 57);        (* was 220 use clone syscall, ToDo: adopt arguments! *)
+  SYSTEM.PUTREG( NRR, 220);        (* clone; tls and ctid are not used without CLONE_SETTLS/CHILD_SETTID *)
   SYSTEM.CODE( ECALL);
   SYSTEM.CODE( JALR);
+END Clone0;
+
+PROCEDURE Fork0*():LONGINT;
+BEGIN
+  RETURN Clone0( 17, 0, 0)        (* SIGCHLD: fork on RISC-V, which has no fork syscall *)
 END Fork0;
 
 PROCEDURE Execve0*( filename, argv, envp: LONGINT):LONGINT;
 BEGIN
-  SYSTEM.PUTREG( NRR, 59);        (* was 221 Syscall nr to R2 EXECVE *)
+  SYSTEM.PUTREG( NRR, 221);        (* execve *)
   SYSTEM.CODE( ECALL);
   SYSTEM.CODE( JALR);
 END Execve0;
 
-PROCEDURE Waitid0( pid, status, options: LONGINT):LONGINT;
+PROCEDURE Waitid0( idtype, id, infop, options, rusage: LONGINT):LONGINT;
 BEGIN
-  SYSTEM.PUTREG( NRR, 247);        (* 95, WAITID Syscall nr to R2 WAITPID *)
+  SYSTEM.PUTREG( NRR, 95);        (* waitid; RV32 has no wait4 *)
+  SYSTEM.CODE( LWr14);            (* 5th parameter from sp+16 *)
   SYSTEM.CODE( ECALL);
   SYSTEM.CODE( JALR);
 END Waitid0;
 
 PROCEDURE Waitpid0*( pid, status, options: LONGINT):LONGINT;
+(* waitpid with waitid: the siginfo (code at 8, pid at 12, status at 20) gives the wait status *)
+VAR info: ARRAY 32 OF LONGINT; idtype, r, code, st: LONGINT;
 BEGIN
-  RETURN -1;  (* ToDo: adopt arguments to waitid *)
+  r := 0; WHILE r < 32 DO info[ r] := 0; INC( r) END;
+  IF pid = -1 THEN idtype := 0
+  ELSIF pid > 0 THEN idtype := 1
+  ELSE idtype := 2; pid := -pid
+  END;
+  r := Waitid0( idtype, pid, SYSTEM.ADR( info), options + 4, 0);  (* + WEXITED *)
+  IF r < 0 THEN RETURN r END;
+  code := info[ 2]; st := info[ 5];
+  IF code = 1 THEN st := st MOD 256 * 256      (* CLD_EXITED *)
+  ELSIF code = 2 THEN st := st MOD 128          (* CLD_KILLED *)
+  ELSIF code = 3 THEN st := st MOD 128 + 128    (* CLD_DUMPED *)
+  ELSE st := st MOD 256 * 256 + 7FH             (* CLD_STOPPED, CLD_TRAPPED *)
+  END;
+  IF (status # 0) & (info[ 3] # 0) THEN SYSTEM.PUT( status, st) END;
+  RETURN info[ 3]
 END Waitpid0;
 
 PROCEDURE Openat0*( dfd, name, flags, mode: LONGINT): LONGINT;
@@ -370,11 +392,17 @@ BEGIN
   SYSTEM.CODE( JALR);
 END FLock0;
 
-PROCEDURE Ftruncate0*( fd, len: LONGINT): LONGINT;
+PROCEDURE Ftruncate640*( fd, lenLo, lenHi: LONGINT): LONGINT;
 BEGIN
-  SYSTEM.PUTREG( NRR, 64);        (* Syscall nr to R2 *)
+  SYSTEM.PUTREG( NRR, 46);        (* ftruncate64 of RV32: the length in A1 (low), A2 (high) *)
   SYSTEM.CODE( ECALL);
   SYSTEM.CODE( JALR);
+END Ftruncate640;
+
+(* polpo: was system call 64, which is write on RISC-V *)
+PROCEDURE Ftruncate0*( fd, len: LONGINT): LONGINT;
+BEGIN
+  RETURN Ftruncate640( fd, len, 0)
 END Ftruncate0;
 
 PROCEDURE UTimensat0*( dirfd, name, utimebuf, flags: LONGINT):LONGINT;
@@ -406,6 +434,27 @@ BEGIN
   SYSTEM.CODE( ECALL);
   SYSTEM.CODE( JALR);
 END Renameat0;
+
+PROCEDURE Mkdirat0*( dfd, name, mode: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 34);        (* mkdirat: Syscall nr to A7 *)
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Mkdirat0;
+
+(* RISC-V has no mkdir: mkdirat in the current directory (polpo: the path and the mode move to
+   A1, A2, so not with registers here) *)
+PROCEDURE MkDir0*( name, mode: LONGINT): LONGINT;
+BEGIN
+  RETURN Mkdirat0( ATFDCWD, name, mode)
+END MkDir0;
+
+PROCEDURE ChDir0*( name: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 49);        (* chdir: Syscall nr to A7 *)
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END ChDir0;
 
 PROCEDURE UnLinkat0*( dfd, name, flags: LONGINT): LONGINT;
 BEGIN

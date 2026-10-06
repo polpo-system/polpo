@@ -89,9 +89,9 @@ CONST
     SIGPWR= 30;
     SIGUNUSED= 31;
 
-    IGNSigs*={ SIGWINCH, SIGSTOP, SIGCONT, SIGKILL, SIGCHLD};  (* Ignore *)
+    IGNSigs*={ SIGWINCH, SIGSTOP, SIGCONT, SIGKILL};  (* Ignore; polpo: SIGCHLD keeps SIG_DFL, ignoring it reaps children *)
     QUITSigs*={ SIGPIPE, SIGHUP, SIGTSTP, SIGQUIT, SIGTERM};        (* Quit *)
-    TRAPSigs*= -{} -IGNSigs-QUITSigs ;  (* Trap *)
+    TRAPSigs*= -{} -IGNSigs-QUITSigs-{ SIGCHLD};  (* Trap *)
 
     TimeAdjust=1;
 
@@ -515,6 +515,23 @@ CODE {SYSTEM.i386}
   MOV  EDI, flags[ EBP]
   INT 80H
 END Renameat0;
+
+PROCEDURE MkDir0*( name, mode: LONGINT): LONGINT;
+CONST MKDIR= 39;
+CODE {SYSTEM.i386}
+  MOV  EAX, MKDIR
+  MOV  EBX, name[ EBP]
+  MOV  ECX, mode[ EBP]
+  INT  80H
+END MkDir0;
+
+PROCEDURE ChDir0*( name: LONGINT): LONGINT;
+CONST CHDIR= 12;
+CODE {SYSTEM.i386}
+  MOV  EAX, CHDIR
+  MOV  EBX, name[ EBP]
+  INT  80H
+END ChDir0;
 
 PROCEDURE UnLinkat0*( dirfd, name, flags: LONGINT): LONGINT;
 CONST UNLINK= 10; UNLINKAT= 12DH;

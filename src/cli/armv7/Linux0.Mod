@@ -440,6 +440,34 @@ BEGIN
   SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
 END Exit0;
 
+PROCEDURE Fork0*():LONGINT;
+BEGIN
+  SYSTEM.PUTREG(7, 2);  (* fork *)
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Fork0;
+
+PROCEDURE Execve0*( filename, argv, envp: LONGINT):LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA3);  (*LDMIA   SP, {R0 R1 R2 } *)
+  SYSTEM.PUTREG(7, 11);  (* execve *)
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Execve0;
+
+PROCEDURE Wait40( pid, status, options, rusage: LONGINT):LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA4);  (*LDMIA   SP, {R0 R1 R2 R3 } *)
+  SYSTEM.PUTREG(7, 114);  (* wait4; EABI has no waitpid *)
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Wait40;
+
+PROCEDURE Waitpid0*( pid, status, options: LONGINT):LONGINT;
+BEGIN
+  RETURN Wait40( pid, status, options, 0)
+END Waitpid0;
+
 PROCEDURE Creat0*( name, mode: LONGINT): LONGINT;
 BEGIN
   SYSTEM.CODE(LDMIA2);  (*LDMIA   SP, {R0 R1 R2 } *)
@@ -550,6 +578,23 @@ BEGIN
   SYSTEM.CODE(SVC);  (* EF000000  SWI  0H *)
   SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
 END Renameat0;
+
+PROCEDURE MkDir0*( name, mode: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA2);  (*LDMIA   SP, {R0 R1 R2 } *)
+  SYSTEM.PUTREG(7, 39);        (* E3A07027  MOV   R7,39 *)
+  SYSTEM.CODE(SVC);  (* EF000000  SWI  0H *)
+  SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
+END MkDir0;
+
+PROCEDURE ChDir0*( name: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA1);  (*LDMIA   SP, {R0 } *)
+  SYSTEM.PUTREG(7, 12);        (* MOV   R7,12 *)
+  SYSTEM.CODE(SVC);  (* EF000000  SWI  0H *)
+  SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
+END ChDir0;
+
 
 PROCEDURE UnLinkat0*( dirfd, name, flags: LONGINT): LONGINT;
 BEGIN

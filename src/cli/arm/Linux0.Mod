@@ -95,9 +95,9 @@ CONST
   SIGWINCH= 28;  (* window changed *)
 
 
-  IGNSigs*={ SIGWINCH, SIGSTOP, SIGCONT, SIGKILL, SIGCHLD};  (* Ignore *)
+  IGNSigs*={ SIGWINCH, SIGSTOP, SIGCONT, SIGKILL};  (* Ignore; polpo: SIGCHLD keeps SIG_DFL, ignoring it reaps children *)
   QUITSigs*={ SIGHUP, SIGTSTP, SIGQUIT, SIGTERM};        (* Quit *)
-  TRAPSigs*= -{} -IGNSigs-QUITSigs ;  (* Trap *)
+  TRAPSigs*= -{} -IGNSigs-QUITSigs-{ SIGCHLD};  (* Trap *)
   
 
 TYPE
@@ -170,7 +170,8 @@ CODE
   LDR  R2, [SP],4
   LDR  R1, [SP],4
   LDR  R0, [SP],4
-  MOV  R7, 7  (* WAITPID= 7 *)
+  MOV  R3, 0  (* rusage *)
+  MOV  R7, 114  (* wait4; EABI has no waitpid (7) *)
   SWI  0
   MOV  PC, LR
 END Waitpid0;
@@ -432,6 +433,24 @@ CODE
   SWI  0
   MOV  PC, LR
 END Renameat0;
+
+PROCEDURE MkDir0*( name, mode: LONGINT): LONGINT;
+CODE
+  LDR  R1, [SP],4
+  LDR  R0, [SP],4
+  MOV  R7, 39    (* MKDIR=39 *)
+  SWI  0
+  MOV  PC, LR
+END MkDir0;
+
+PROCEDURE ChDir0*( name: LONGINT): LONGINT;
+CODE
+  LDR  R0, [SP],4
+  MOV  R7, 12    (* CHDIR=12 *)
+  SWI  0
+  MOV  PC, LR
+END ChDir0;
+
 
 PROCEDURE UnLinkat0*( dirfd, name, flags: LONGINT): LONGINT;
 CODE

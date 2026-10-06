@@ -1537,8 +1537,6 @@ PROCEDURE Init;
 TYPE Body = PROCEDURE;
 VAR i, err: LONGINT; body: Body; m: Module;
 BEGIN
-  err:=Linux0.SetSignal(Linux0.SIGCONT, SignalQuitHandler);
-  err:=Linux0.SetSignal(Linux0.SIGCHLD, SignalQuitHandler);
   i:=Linux0.GetTimeOfDay(SYSTEM.ADR(startTime), 0);
   m:=modules;
   WHILE m#NIL DO
@@ -1571,7 +1569,7 @@ BEGIN
 (*  err:=SetSignal(SIGPIPE, SignalHandler);*)
 
   err:= Linux0.SetSignal(Linux0.SIGCONT, SYSTEM.VAL( Linux0.Proc, 1));
-  err:= Linux0.SetSignal(Linux0.SIGCHLD, SYSTEM.VAL( Linux0.Proc, 1));
+  err:= Linux0.SetSignal(Linux0.SIGCHLD, SYSTEM.VAL( Linux0.Proc, 0));  (* polpo: SIG_DFL as on x86 and ARM; SIG_IGN reaps children, waitpid fails *)
 END InitTrap;
 
 BEGIN
