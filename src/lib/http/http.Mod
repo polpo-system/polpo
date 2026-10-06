@@ -2,7 +2,7 @@ MODULE http;  (** an HTTP/1.1 client: GET, with Content-Length, chunked or to th
 (* The same file serves voc and polpo; only the imports of Strings and Out differ.
    The transport (Connect, Read, ReadBuf, Write, Disconnect) are procedure fields of the client:
    https replaces them with TLS. Read with bytesToRead >= 0 reads exactly that many bytes. *)
-IMPORT IntStr := oocIntStr, Strings := strings, Files, Out := out,  (* voc: Strings, Out *)
+IMPORT IntStr, Strings := strings, Files, Out := out,  (* voc: IntStr := oocIntStr, Strings, Out *)
        hexIntStr, Internet, strTypes, strUtils, Base64;
 CONST
   defName = "unknown.html";

@@ -15,7 +15,7 @@ MODULE vocsync;  (** modules shared with voc: copies with the imports of voc or 
 
 IMPORT Files, texts, out;
 
-CONST NoSwaps = 4;
+CONST NoSwaps = 5;
 
 TYPE Buf = POINTER TO ARRAY OF CHAR;
 
@@ -155,6 +155,8 @@ BEGIN
   voc[1] := "IMPORT Out, Strings;  (* polpo: Out := out, Strings := strings *)";
   polpo[2] := "IMPORT Sockets, DNS, Linux0, Out := out, SYSTEM;  (* voc: Out *)";
   voc[2] := "IMPORT Sockets, DNS, Linux0, Out, SYSTEM;  (* polpo: Out := out *)";
-  polpo[3] := "IMPORT IntStr := oocIntStr, Strings := strings, Files, Out := out,  (* voc: Strings, Out *)";
-  voc[3] := "IMPORT IntStr := oocIntStr, Strings, Files, Out,  (* polpo: Strings := strings, Out := out *)"
+  polpo[3] := "IMPORT IntStr, Strings := strings, Files, Out := out,  (* voc: IntStr := oocIntStr, Strings, Out *)";
+  voc[3] := "IMPORT IntStr := oocIntStr, Strings, Files, Out,  (* polpo: IntStr, Strings := strings, Out := out *)";
+  polpo[4] := "IMPORT Conv := ConvTypes;  (* voc: Conv := oocConvTypes *)";
+  voc[4] := "IMPORT Conv := oocConvTypes;  (* polpo: Conv := ConvTypes *)"
 END vocsync.

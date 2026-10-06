@@ -1,5 +1,5 @@
 (*	$Id: Ascii.Mod,v 1.1 1997/02/07 07:45:32 oberon1 Exp $	*)
-MODULE oocAscii;  (* Standard short character names for control chars.  *)
+MODULE Ascii;  (* Standard short character names for control chars.  *)
 
 CONST
   nul* = 00X;   soh* = 01X;   stx* = 02X;   etx* = 03X;
@@ -17,4 +17,4 @@ CONST  (* often used synonyms *)
   xon*  = dc1;
   xoff* = dc3;
   
-END oocAscii.
+END Ascii.

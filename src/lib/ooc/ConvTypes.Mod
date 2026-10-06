@@ -1,5 +1,5 @@
 (*	$Id: ConvTypes.Mod,v 1.1 1997/02/07 07:45:32 oberon1 Exp $	*)
-MODULE oocConvTypes;
+MODULE ConvTypes;
  
   (* Common types used in the string conversion modules *)
  
@@ -30,4 +30,4 @@ TYPE
       p*: PROCEDURE (ch: CHAR; VAR cl: ScanClass; VAR st: ScanState);
     END;
  
-END oocConvTypes.
+END ConvTypes.

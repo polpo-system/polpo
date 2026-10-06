@@ -1,5 +1,5 @@
 (*  $Id: IntStr.Mod,v 1.4 1999/09/02 13:07:47 acken Exp $  *)
-MODULE oocIntStr;
+MODULE IntStr;
 (*  IntStr - Integer-number/string conversions.
     Copyright (C) 1995 Michael Griebling
 
@@ -19,7 +19,7 @@ MODULE oocIntStr;
 *)
 
 IMPORT
-  Conv := oocConvTypes, IntConv := oocIntConv;
+  Conv := ConvTypes, IntConv;
 
 TYPE
   (** possible values: strAllRight, strOutOfRange, strWrongFormat, strEmpty *)
@@ -96,5 +96,5 @@ BEGIN
   COPY(b, str) (* truncate output if necessary *)
 END IntToStr;
 
-END oocIntStr.
+END IntStr.
 

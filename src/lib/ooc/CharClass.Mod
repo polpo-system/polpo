@@ -1,5 +1,5 @@
 (*	$Id: CharClass.Mod,v 1.6 1999/10/03 11:43:57 ooc-devel Exp $	*)
-MODULE oocCharClass;  
+MODULE CharClass;  
 (*  Classification of values of the type CHAR.
     Copyright (C) 1997-1998  Michael van Acken
 
@@ -29,7 +29,7 @@ Notes:
 *)
 
 IMPORT
-  Ascii := oocAscii;
+  Ascii;
 
 CONST
   eol* = Ascii.lf;
@@ -92,4 +92,4 @@ PROCEDURE IsEol* (ch: CHAR): BOOLEAN;
 
 BEGIN
   systemEol[0] := Ascii.lf; systemEol[1] := 0X
-END oocCharClass.
+END CharClass.

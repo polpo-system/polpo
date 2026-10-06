@@ -1,7 +1,28 @@
-The OOC library modules oocIntStr needs, from voc (src/library/ooc), for code shared
-between voc and polpo (http). Copyright Michael Griebling and others, LGPL (see the
-module headers).
+The OOC library (oo2c 1.5.9, by Michael van Acken, Michael Griebling and others; LGPL, see the
+module headers), as voc has it (src/library/ooc), for polpo. In polpo the modules have no ooc
+prefix, except where polpo has a module of that name: oocStrings, oocFiles, oocRandomNumbers.
+voc keeps the prefix (oocIntStr); vocsync translates the imports of the shared modules.
 
-Changed for the polpo compilers: FOR loops are WHILE loops (the ARM compiler has no FOR),
-oocCharClass.systemEol is exported with * instead of - (read-only exports are not known
-to the ARM compiler). The interfaces are those of voc.
+Packages (arden base):
+  ooc-strings      Ascii, CharClass, oocStrings, Strings2, OakStrings
+  ooc-math         LowReal, LowLReal, RealMath, LRealMath, ComplexMath, LComplexMath, OakMath,
+                   oocRandomNumbers
+  ooc-conversions  ConvTypes, IntConv, IntStr, LongInts, RealConv, LRealConv, RealStr, LRealStr
+  ooc-time         SysClock, JulianDay; Time on x86
+  ooc-io           x86: Msg, Channel, FilesHost, oocFiles, ProgramArgsHost, ProgramArgs,
+                   TextRider, BinaryRider, Filenames
+Time and ooc-io use type-bound procedures: the x86 compiler takes them with /2; the ROP2 back
+ends (RISC-V, MIPS, ARMv7) cannot call them and the ARM compiler (OB) does not know them.
+
+Written for polpo (LGPL too, as the library they belong to):
+  SysClock         gettimeofday of Linux0
+  FilesHost        the host of oocFiles on Files of polpo: a handle is a file and a position;
+                   plain names are in the current directory; Truncate copies the file
+  ProgramArgsHost  the arguments of the command (Oberon.Par), the command name first
+Changed for the polpo compilers: FOR loops are WHILE loops and read-only exports (-) are *
+(the ARM compiler); LowReal uses the Reals of polpo; LRealMath builds its constants with
+Reals.RealL (no HUGEINT); small in LowReal and LowLReal is a quotient of powers of two (the
+polpo compilers refuse 1.17549435E-38 and 2.2250738585072014D-308); Filenames has no Rts.
+Fixed here and in voc (2026-10-06): sincos lost the sign of cos; REAL tan, sin and cos reduced
+with REAL pi; REAL arcsin and arccos gave wrong results after any earlier error; oocLowReal
+scale, intpart, trunc and round took a REAL for a 64 bit SET.

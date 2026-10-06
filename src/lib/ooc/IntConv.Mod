@@ -1,5 +1,5 @@
 (*	$Id: IntConv.Mod,v 1.5 2002/05/10 23:06:58 ooc-devel Exp $	*)
-MODULE oocIntConv;
+MODULE IntConv;
  
  (*
     IntConv -  Low-level integer/string conversions.       
@@ -23,7 +23,7 @@ MODULE oocIntConv;
 *)
  
 IMPORT
-  Char := oocCharClass, Str := oocStrings, Conv := oocConvTypes;
+  Char := CharClass, Str := oocStrings, Conv := ConvTypes;
  
 TYPE
   ConvResults = Conv.ConvResults; (* strAllRight, strOutOfRange, strWrongFormat, strEmpty *)
@@ -238,4 +238,4 @@ BEGIN
   (* kludge necessary because of recursive procedure declaration *)
   NEW(S); NEW(W); NEW(SI);  
   S.p:=SState; W.p:=WState; SI.p:=ScanInt
-END oocIntConv.
+END IntConv.
