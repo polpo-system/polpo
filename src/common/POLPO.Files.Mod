@@ -63,6 +63,7 @@ TYPE
       (** private fields for implementors *)
       Name: FileName;
       fd, addr, len, dirfd: LONGINT;
+      disk: LONGINT;  (* polpo: the length on disk of a file mapped shared, -1 for a private mapping *)
       changed: BOOLEAN;
   END;
 
@@ -223,7 +224,7 @@ BEGIN
 (* MAP_SHARED=1, MAP_PRIVATE=2, MAP_ANONYMOUS=20H, 800@MIPS, RW=3 Anonymous files have to be private for mmap to work! *)
     f.addr:=Linux0.Mmap20( 0, Linux0.PageSize, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0);
     IF (f.addr MOD 1000H) #0 THEN Kernel.WriteString("Files.New mmap failed"); Kernel.WriteHex(f.addr, 9); Kernel.WriteLn;END;
-    f.len:=0;
+    f.len:=0; f.disk:=-1;
     f.changed:=FALSE;
     Kernel.RegisterObject( f, Cleanup, FALSE);
     RETURN f;
@@ -266,9 +267,9 @@ BEGIN
     IF trace THEN Kernel.WriteString(" size: "); Kernel.WriteInt(f.len, 9); Kernel.WriteLn END;
 
     IF f.len = 0 THEN  (* polpo: a mapping of length 0 fails, an empty file got NIL; a page as in New *)
-      f.addr:=Linux0.Mmap20( 0, Linux0.PageSize, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0)
+      f.addr:=Linux0.Mmap20( 0, Linux0.PageSize, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0); f.disk:=-1
     ELSE
-      f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, Linux0.MAPSHARED, f.fd, 0)
+      f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, Linux0.MAPSHARED, f.fd, 0); f.disk:=f.len
     END;
     IF (f.addr MOD 1000H)#0 THEN
       Kernel.WriteString("Files.Old mmap failed"); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn;
@@ -322,6 +323,7 @@ BEGIN
           f.changed:=FALSE
         END;
         IF 0#Linux0.Ftruncate0( f.fd, f.len) THEN Kernel.WriteString("Files.Register 4"); HALT(102) END;
+        IF f.disk >= 0 THEN f.disk:=f.len END
       END;
     END;
     f:=NIL;
@@ -341,7 +343,7 @@ BEGIN
       res:=Linux0.LSeek0( f.fd, 0, Linux0.SEEKSET);
       res:=Linux0.Write0( f.fd, f.addr, f.len);
       IF res#f.len THEN Kernel.WriteString("Files.Close: write failed "); Kernel.WriteString(f.Name); Kernel.WriteHex(-res, 9); Kernel.WriteLn
-      ELSE res:=Linux0.Ftruncate0( f.fd, f.len); f.changed:=FALSE
+      ELSE res:=Linux0.Ftruncate0( f.fd, f.len); f.changed:=FALSE; IF f.disk >= 0 THEN f.disk:=f.len END
       END
     END
   END
@@ -479,28 +481,28 @@ END ReadNum;
 
 (** Writes the buffer x containing n bytes into a file at the Rider position. *)
 PROCEDURE WriteBytes*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.BYTE; n: LONGINT);
-VAR f: File;  lo, ln, disk, res: LONGINT; status: Linux0.Status; tail: ARRAY Linux0.PageSize OF CHAR;
+VAR f: File;  lo, ln: LONGINT;
 BEGIN
   f:=r.file;
-  lo:=(f.len+Linux0.PageSize-1)DIV Linux0.PageSize*Linux0.PageSize;
+  lo:=(f.len+Linux0.PageSize-1)DIV Linux0.PageSize*Linux0.PageSize;  (* the length of the mapping *)
   IF lo=0 THEN lo:= Linux0.PageSize END;
   ln:=(r.apos+n+Linux0.PageSize-1) DIV Linux0.PageSize*Linux0.PageSize;
-  IF ln> lo THEN
-    IF f.fd=-1 THEN
-      IF trace THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(f.addr, 9); Kernel.WriteHex(ln, 9); Kernel.WriteHex(lo, 9) END;
+  IF (f.disk >= 0) & (r.apos+n > f.disk) THEN
+    (* polpo: a file mapped shared is made longer on disk (whole pages) before the write: what is
+       written after its end on disk, in its last page, is zeroed by the kernel whenever the page is
+       written back, at any time (an .Arc archive lost a part of its entries now and then, on slow
+       qemu-arm). Close and Register cut it to its length. *)
+    IF ln < lo THEN ln:=lo END;
+    IF 0#Linux0.Ftruncate0( f.fd, ln) THEN Kernel.WriteString("Files.WriteBytes: ftruncate "); Kernel.WriteString(f.Name); Kernel.WriteLn; HALT(102) END;
+    f.disk:=ln;
+    IF ln > lo THEN
       f.addr:=Linux0.Mremap0( f.addr, lo, ln, MremapMaymove, 0);
-      IF trace OR ( f.addr<0) THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(r.apos, 9); Kernel.WriteHex(n, 9); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END;
-    ELSE  (* polpo: the file longer, then the mapping, keeping what was written: munmap and a new
-             private mapping lost the writes since the last growth (an .Arc archive got zeros) *)
-      (* what was written after the end of the file on disk, in its last page, is zeroed when
-         the file is extended: kept aside meanwhile (it was lost) *)
-      res:=Linux0.FStat0( f.fd, SYSTEM.ADR(status)); disk:=status.size;
-      IF (disk < f.len) & (f.len - disk <= LEN(tail)) THEN SYSTEM.MOVE( f.addr + disk, SYSTEM.ADR(tail), f.len - disk) ELSE disk:=f.len END;
-      IF 0#Linux0.Ftruncate0( f.fd, ln) THEN HALT(102) END;
-      f.addr:=Linux0.Mremap0( f.addr, lo, ln, MremapMaymove, 0);
-      IF (f.addr MOD 1000H = 0) & (disk < f.len) THEN SYSTEM.MOVE( SYSTEM.ADR(tail), f.addr + disk, f.len - disk) END;  (* an address, not an error; above 2 GB it is negative *)
-      IF f.addr MOD 1000H # 0 THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END
-    END;
+      IF f.addr MOD 1000H # 0 THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END  (* an address, not an error; above 2 GB it is negative *)
+    END
+  ELSIF ln > lo THEN  (* a private mapping: new files, empty old ones *)
+    IF trace THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(f.addr, 9); Kernel.WriteHex(ln, 9); Kernel.WriteHex(lo, 9) END;
+    f.addr:=Linux0.Mremap0( f.addr, lo, ln, MremapMaymove, 0);
+    IF trace OR ( f.addr MOD 1000H # 0) THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(r.apos, 9); Kernel.WriteHex(n, 9); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END;
   END;
   IF LEN(x)<n THEN
     Kernel.WriteString("Files.WriteBytes: Array too small "); Kernel.WriteHex( LEN(x), 8); Kernel.WriteHex(n, 9); Kernel.WriteLn;
