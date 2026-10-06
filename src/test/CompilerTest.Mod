@@ -11,7 +11,11 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    RISC-V, MIPS: the end of a block move loop computed from a register reused for its length
    (w.cur := w.issuer copied nothing, or ran over memory);
    ARMv7: SYSTEM.MOVE counted its length down in the register of the variable that held it (the
-   desktop sent X a request of the wrong length and hung), and copied a byte for a length of 0. *)
+   desktop sent X a request of the wrong length and hung), and copied a byte for a length of 0;
+   RISC-V: b := x >= y (and unsigned, CHAR) was always TRUE: SLT, then XORI -1 instead of 1
+   (2026-10-06, Coco/R of ETH found it);
+   ARMv7: IN with a variable element and a shift by a variable count used R0 as scratch and
+   destroyed a function result in it: F(t) # (t IN s), ASH(F(5), n) (2026-10-06) *)
 
 IMPORT SYSTEM, out;
 
@@ -80,7 +84,7 @@ BEGIN
 END Moved;
 
 PROCEDURE Run*;
-VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M;
+VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
   fails := 0; checks := 0;
   i := 47;
@@ -98,6 +102,14 @@ BEGIN
   Check("b := x = 5 keeps x", flag & (x = 5));
   x := 5; flag := x # 5;
   Check("b := x # 5 keeps x", ~flag & (x = 5));
+  x := -1; flag := x >= 0;
+  Check("b := x >= 0, x = -1", ~flag);
+  x := 3; flag := x >= 3;
+  Check("b := x >= 3, x = 3", flag);
+  c := "A"; flag := c >= "a";
+  Check("b := c >= 'a', c = 'A'", ~flag);
+  flag := c >= "A";
+  Check("b := c >= 'A', c = 'A'", flag);
   mm.one.len := 7; r.len := 0; CopyOne(a, 0, 1, mm, r);
   Check("record copy from a VAR parameter at offset 2252", r.len = 7);
   Frame;

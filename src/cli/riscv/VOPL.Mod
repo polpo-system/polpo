@@ -701,8 +701,8 @@ END PutTrap;
             IF (x.reg2#0) THEN PutR( XOR, rt, x.reg, x.reg2); PutI( SLTIU, rt, rt, 1)
             ELSE PutI( SLTIU, rt, x.reg, 1)
             END;
-          ELSIF (x.offset= BGE) THEN PutR( SLT, rt, x.reg, x.reg2); PutI( XORI, rt, rt, -1);
-          ELSIF (x.offset= BGEU) THEN PutR( SLTU, rt, x.reg, x.reg2); PutI( XORI, rt, rt, -1);
+          ELSIF (x.offset= BGE) THEN PutR( SLT, rt, x.reg, x.reg2); PutI( XORI, rt, rt, 1);  (* polpo: 1, not -1: NOT of 0/1 gave -1/-2, always TRUE *)
+          ELSIF (x.offset= BGEU) THEN PutR( SLTU, rt, x.reg, x.reg2); PutI( XORI, rt, rt, 1);
           ELSE OPM.err( 700);
           END;
         ELSIF (rt=x.reg) & (0=x.reg2) THEN FixLink(x.Fjmp); FixLink(x.Tjmp);  (* we already are bool; too agressive ? *)
