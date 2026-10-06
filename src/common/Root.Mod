@@ -100,6 +100,15 @@ MODULE Root;  (** polpo installation root: where bin/, obj/, share/, tools/, fon
       END;
       IF s[0] # 0X THEN Strip(s, 3) END;  (* <root>/bin/<arch>/loksh *)
       COPY(s, path)
+    END;
+    IF (path[0] # 0X) & (path[0] # "/") THEN  (* relative (qemu-user gives the exe as typed): absolute, so a chdir keeps it *)
+      n := Linux0.Readlinkat0(Linux0.ATFDCWD, SYSTEM.ADR("/proc/self/cwd"), SYSTEM.ADR(s[0]), LEN(s)-2);
+      IF n > 0 THEN
+        s[n] := "/"; s[n+1] := 0X;
+        IF (path[0] = ".") & (path[1] = "/") THEN i := 2 ELSE i := 0 END;
+        n := Length(s); WHILE (path[i] # 0X) & (n < LEN(s)-1) DO s[n] := path[i]; INC(n); INC(i) END; s[n] := 0X;
+        COPY(s, path)
+      END
     END
   END Init;
 
