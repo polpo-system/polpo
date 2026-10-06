@@ -89,18 +89,25 @@ VAR
   nofSearch: LONGINT;
 
 PROCEDURE SetSYS*( s: ARRAY OF CHAR);
+VAR old, r: LONGINT;
 BEGIN
+  old:=sysfd;  (* polpo: closed when replaced (fs.Cd); kept if s cannot be opened *)
   sysfd:=Linux0.Openat0( Linux0.ATFDCWD, SYSTEM.ADR(s[0]), Linux0.ORDonly+Linux0.ODirectory , 0);
-  IF sysfd<=0 THEN Kernel.WriteString("Files.SetSYS: "); Kernel.WriteHex( -sysfd, 9); Kernel.WriteLn END;
+  IF sysfd<=0 THEN Kernel.WriteString("Files.SetSYS: "); Kernel.WriteHex( -sysfd, 9); Kernel.WriteLn; sysfd:=old
+  ELSIF (old>0) & (old#sysfd) & (old#wrkfd) THEN r:=Linux0.Close0(old)  (* a number reused after a close (portia's tests) stays *)
+  END;
 END SetSYS;
 
 PROCEDURE SetWRK*( s: ARRAY OF CHAR);
+VAR old, r: LONGINT;
 BEGIN
+  old:=wrkfd;  (* polpo: closed when replaced, unless the number was reused *)
   IF s="" THEN wrkfd:=-1;
   ELSE
     wrkfd:=Linux0.Openat0( Linux0.ATFDCWD, SYSTEM.ADR(s[0]), Linux0.ORDonly+Linux0.ODirectory , 0);
     IF wrkfd<=0 THEN Kernel.WriteString("Files.SetWRK: "); Kernel.WriteHex( -wrkfd, 9); Kernel.WriteLn END;
   END;
+  IF (old>0) & (old#wrkfd) & (old#sysfd) THEN r:=Linux0.Close0(old) END;
 END SetWRK;
 
 PROCEDURE GetDirfd(VAR s: ARRAY OF CHAR): LONGINT;
