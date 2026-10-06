@@ -15,8 +15,9 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
    portia.Upgrade [/arch] [name ...]  the installed packages with newer versions in the tree
    When the interface of a module changes (its symbol file), the installed packages with a
    module importing it are recompiled, and so on.
-   portia.Remove [/arch] [/src | /all] name ...   delete their objects and unrecord them, if
-                            nothing needs them; /src: the downloaded sources only, /all: both
+   portia.Remove [/arch] [/src | /all] [/deps] name ...   delete their objects and unrecord
+                            them, if nothing needs them (/deps: what needs them goes too);
+                            /src: the downloaded sources only, /all: both
    portia.Test name ...     run the tests of installed packages ([TESTS]); Install /t and
                             Build /t test after building
    portia.Fetch name ...    download the sources of remote packages, checked by their sums
@@ -79,6 +80,7 @@ VAR
   assumeYes: BOOLEAN;  (* /y: do not ask *)
   delObj, delSrc: BOOLEAN;
   doTest: BOOLEAN;  (* /t: Install and Build test the packages *)
+  withDeps: BOOLEAN;  (* /deps: Remove also removes the installed packages that need the named ones *)
   entries: Item;  (* of Collect: the entries of a directory, s with "/" at the end for directories *)  (* Remove: the objects (default), the downloaded sources (/src), both (/all) *)
   changedMods: Item;  (* modules whose interface changed in this run *)
 
@@ -1257,14 +1259,26 @@ BEGIN
   END
 END Needers;
 
+(* the installed packages that need p, directly or through others, added to list *)
+PROCEDURE AllNeeders(p: Package; VAR list: Item);
+VAR direct, it: Item; q: Package;
+BEGIN
+  direct := NIL; Needers(p, direct); it := direct;
+  WHILE it # NIL DO
+    IF ~Has(list, it.s) THEN Add(list, it.s); q := Find(it.s); IF q # NIL THEN AllNeeders(q, list) END END;
+    it := it.next
+  END
+END AllNeeders;
+
 (* the arguments: /arch and package names *)
 PROCEDURE Args(VAR names: Item);
 VAR A: Texts.Reader; name: Name; n: LONGINT;
 BEGIN
-  Texts.OpenArgs(A); names := NIL; SetArch(hostArch); assumeYes := FALSE; delObj := TRUE; delSrc := FALSE; doTest := FALSE;
+  Texts.OpenArgs(A); names := NIL; SetArch(hostArch); assumeYes := FALSE; delObj := TRUE; delSrc := FALSE; doTest := FALSE; withDeps := FALSE;
   WHILE Texts.Arg(A, name) DO
     IF (name = "/y") OR (name = "/Y") THEN assumeYes := TRUE
     ELSIF name = "/t" THEN doTest := TRUE
+    ELSIF name = "/deps" THEN withDeps := TRUE
     ELSIF name = "/src" THEN delObj := FALSE; delSrc := TRUE
     ELSIF name = "/all" THEN delObj := TRUE; delSrc := TRUE
     ELSIF name[0] = "/" THEN
@@ -1541,15 +1555,16 @@ BEGIN
   out.String("}"); out.Ln
 END Graph;
 
-(** portia.Remove [/arch] [/src | /all] name ... -- delete the objects of the packages and
-  unrecord them, not while installed packages need them; the files a remote package copied out
+(** portia.Remove [/arch] [/src | /all] [/deps] name ... -- delete the objects of the packages
+  and unrecord them, not while installed packages need them (/deps: those go too, directly or
+  indirectly needing ones); the files a remote package copied out
   of src/pkg/<name>/ go too. /src: only the downloaded sources of remote packages (they stay
   installed), /all: both. Sources and data of the base system stay *)
 PROCEDURE Remove*;
 VAR names, it, needers, n2: Item; p: Package; ok: BOOLEAN; n: LONGINT;
 BEGIN
   Args(names);
-  IF names = NIL THEN out.String("usage: portia.Remove [/arch] [/src | /all] [/y] name ..."); out.Ln; SetArch(hostArch); RETURN END;
+  IF names = NIL THEN out.String("usage: portia.Remove [/arch] [/src | /all] [/deps] [/y] name ..."); out.Ln; SetArch(hostArch); RETURN END;
   IF ~LoadTree() THEN SetArch(hostArch); RETURN END;
   IF ~haveDb THEN RecordAll(FALSE) END;
   ok := TRUE; it := names;
@@ -1563,11 +1578,15 @@ BEGIN
     ELSIF delObj & ~IsInstalled(p) & ~(delSrc & HasSources(p)) THEN
       Pre; out.String(it.s); out.String(" is not installed"); out.Ln; ok := FALSE
     ELSIF delObj & IsInstalled(p) THEN
-      needers := NIL; Needers(p, needers);
+      needers := NIL; AllNeeders(p, needers);
       n2 := needers; WHILE n2 # NIL DO IF Has(names, n2.s) THEN Drop(needers, n2.s); n2 := needers ELSE n2 := n2.next END END;
-      IF needers # NIL THEN  (* needed by a package that stays *)
+      IF needers = NIL THEN
+      ELSIF withDeps THEN  (* they go too *)
+        n2 := needers; WHILE n2 # NIL DO IF ~Has(names, n2.s) THEN Add(names, n2.s) END; n2 := n2.next END
+      ELSE  (* needed by packages that stay *)
         Pre; out.String(p.name); out.String(" is needed by");
-        n2 := needers; WHILE n2 # NIL DO out.Char(" "); out.String(n2.s); n2 := n2.next END; out.Ln; ok := FALSE
+        n2 := needers; WHILE n2 # NIL DO out.Char(" "); out.String(n2.s); n2 := n2.next END; out.Ln;
+        Pre; out.String("portia.Remove /deps "); out.String(p.name); out.String(" removes them too"); out.Ln; ok := FALSE
       END
     END;
     it := it.next
