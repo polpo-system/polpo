@@ -490,10 +490,11 @@ BEGIN
       IF trace THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(f.addr, 9); Kernel.WriteHex(ln, 9); Kernel.WriteHex(lo, 9) END;
       f.addr:=Linux0.Mremap0( f.addr, lo, ln, MremapMaymove, 0);
       IF trace OR ( f.addr<0) THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(r.apos, 9); Kernel.WriteHex(n, 9); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END;
-    ELSE
-      f.addr:=Linux0.Munmap0( f.addr, lo);
+    ELSE  (* polpo: the file longer, then the mapping, keeping what was written: munmap and a new
+             private mapping lost the writes since the last growth (an .Arc archive got zeros) *)
       IF 0#Linux0.Ftruncate0( f.fd, ln) THEN HALT(102) END;
-      f.addr:=Linux0.Mmap20( 0, (ln +Linux0.PageSize-1) DIV Linux0.PageSize*Linux0.PageSize, 3, Linux0.MAPPRIVATE, f.fd, 0);
+      f.addr:=Linux0.Mremap0( f.addr, lo, ln, MremapMaymove, 0);
+      IF f.addr<0 THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END
     END;
   END;
   IF LEN(x)<n THEN
