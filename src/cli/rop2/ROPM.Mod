@@ -202,7 +202,7 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
     IF n >= 0 THEN
       noerr := FALSE;
       IF (pos < lastpos) OR (lastpos + 9 < pos) THEN lastpos := pos; LogWLn; LogWStr("  ");
-        IF n < 249 THEN LogWStr("  pos"); LogWNum(pos, 6); LogWStr("  err"); LogWNum(n, 4)
+        IF (n < 249) OR (n > 255) THEN LogWStr("  pos"); LogWNum(pos, 6); LogWStr("  err"); LogWNum(n, 4)  (* polpo: the back end's errors (700...) printed a stale objname *)
         ELSIF n = 255 THEN LogWStr("pos"); LogWNum(pos, 6); LogWStr("  pc "); LogWHex(breakpc)
         ELSIF n = 254 THEN LogWStr("pc not found")
         ELSE LogWStr(objname);

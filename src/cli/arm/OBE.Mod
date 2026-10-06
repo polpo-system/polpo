@@ -70,6 +70,14 @@ CONST
     END
   END MakeItem;
 
+  (* polpo: the condition of a branch: NV (never; a constant relation, or AL inverted) is not an
+     instruction on ARMv6 and later (SIGILL): TST R0, #0 sets Z, and NE never branches *)
+  PROCEDURE Never(cc: LONGINT): LONGINT;
+  BEGIN
+    IF cc = OBC.NV THEN OBC.PutDP1(OBC.TST, 0, 0, 0); cc := OBC.NE END;
+    RETURN cc
+  END Never;
+
   PROCEDURE setCC*(VAR x: OBT.Item; cc: LONGINT);
   BEGIN
     OBC.Release(x);
@@ -157,13 +165,19 @@ CONST
     VAR cc : LONGINT; 
   BEGIN
     cc:=x.r; x.mode:=OC.Reg; OBC.GetReg(x.r);
-    IF (x.a=0) & (x.b=0) THEN (* no fix-lists, use short version *)
+    (* polpo: the condition NV (never, from a constant relation such as 1 = 2, or inverted from
+       AL) is not an instruction on ARMv6 and later (SIGILL): a plain MOV, no branch *)
+    IF (x.a=0) & (x.b=0) & ((cc = OBC.AL) OR (cc = OBC.NV)) THEN
+      IF cc = OBC.AL THEN OBC.PutDP1(OBC.MOV,x.r,0,1) ELSE OBC.PutDP1(OBC.MOV,x.r,0,0) END
+    ELSIF (x.a=0) & (x.b=0) THEN (* no fix-lists, use short version *)
       OBC.PutDP1(OBC.MOV,x.r,0,0); OBC.SetCondition(OBC.pc-1,OBC.InvertedCC(cc));
       OBC.PutDP1(OBC.MOV,x.r,0,1); OBC.SetCondition(OBC.pc-1,cc); 
     ELSE 
       DEC(OBC.allowConstFlushing);
-      OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(OBC.pc-1,OBC.InvertedCC(cc));  
-      x.b := OBC.pc-1; 
+      IF cc # OBC.AL THEN  (* the jump to FALSE; never taken for AL *)
+        OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(OBC.pc-1,OBC.InvertedCC(cc));
+        x.b := OBC.pc-1
+      END; 
       OBC.FixLink(x.a);
       OBC.PutDP1(OBC.MOV,x.r,0,1);
       OBC.PutB(OBC.B,OBC.pc+2);
@@ -823,12 +837,12 @@ CONST
   END RealMOpH;
   
   PROCEDURE MOp*(op: INTEGER; VAR x: OBT.Item);
-    VAR f: INTEGER; a: LONGINT; set : SET; r : REAL; lr : LONGREAL;
+    VAR f: INTEGER; a, cc: LONGINT; set : SET; r : REAL; lr : LONGREAL;
   BEGIN f := x.typ.form; 
     CASE op OF
       OC.and: (*&*)
       IF x.mode # OC.CC THEN loadCC(x) END;
-      OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(OBC.pc-1,OBC.InvertedCC(x.r));  x.b := OBC.pc-1; OBC.FixLink(x.a)
+      cc := Never(OBC.InvertedCC(x.r)); OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(OBC.pc-1,cc);  x.b := OBC.pc-1; OBC.FixLink(x.a)
     | OC.plus: (*+*)
       IF ~(f IN intSet + realSet) THEN OBS.Mark(96) END
     | OC.minus: (*-*)
@@ -852,7 +866,7 @@ CONST
       END
     | OC.or: (*OR*)
       IF x.mode#OC.CC THEN loadCC(x) END;
-      OBC.PutBabs(OBC.B,x.a); OBC.SetCondition(OBC.pc-1,x.r); x.a:=OBC.pc-1; OBC.FixLink(x.b); x.b:=0;
+      cc := Never(x.r); OBC.PutBabs(OBC.B,x.a); OBC.SetCondition(OBC.pc-1,cc); x.a:=OBC.pc-1; OBC.FixLink(x.b); x.b:=0;
     | OC.eql .. OC.geq: (*relations*)
       IF x.mode = OC.CC THEN loadB(x) END
     | OC.not: (*~*)
@@ -979,13 +993,14 @@ CONST
   END FJ;
 
   PROCEDURE CFJ*(VAR x: OBT.Item; VAR loc: LONGINT);
+  VAR cc: LONGINT;
   BEGIN
     IF x.typ.form = OC.Bool THEN
       IF x.mode # OC.CC THEN loadCC(x)  END
     ELSE OBS.Mark(120); setCC(x, 0)
     END ;
-    loc:=OBC.pc;
-    OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(loc,OBC.InvertedCC(x.r)); OBC.FixLink(x.a);
+    cc := Never(OBC.InvertedCC(x.r)); loc:=OBC.pc;
+    OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(loc,cc); OBC.FixLink(x.a);
   END CFJ;
 
   PROCEDURE BJ*(loc: LONGINT);
@@ -993,12 +1008,13 @@ CONST
   END BJ;
 
   PROCEDURE CBJ*(VAR x: OBT.Item; loc: LONGINT);
+  VAR cc: LONGINT;
   BEGIN
     IF x.typ.form = OC.Bool THEN
       IF x.mode # OC.CC THEN loadCC(x) END
     ELSE OBS.Mark(120); setCC(x, 0)
     END ;
-    OBC.PutB(OBC.B,loc); OBC.SetCondition(OBC.pc-1,OBC.InvertedCC(x.r));
+    cc := Never(OBC.InvertedCC(x.r)); OBC.PutB(OBC.B,loc); OBC.SetCondition(OBC.pc-1,cc);
     OBC.FixLinkWith(x.b, loc); OBC.FixLink(x.a)
   END CBJ;
 

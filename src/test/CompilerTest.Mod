@@ -20,7 +20,11 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    went to the nested procedure (DelNode of the ETH Coco/R, 2026-10-06);
    RISC-V: SYSTEM.MOVE loaded one byte ahead and read the byte after its source, a fault when the
    source ends a mapping (Files growing a mapped file, 2026-10-06). A fault there ends the run
-   without the last line. *)
+   without the last line;
+   ARM: RETURN f(x) of a REAL kept a VFP register; after 15 of them in a module it did not compile
+   (out of registers, err 216; RealMath of OOC, 2026-10-06);
+   ARM: a constant relation (1 = 1, SYSTEM.VAL(LONGINT, c) = n) as a value or in & and OR gave
+   the condition NV, not an instruction on ARMv6 and later: SIGILL (2026-10-06). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -111,6 +115,34 @@ BEGIN
   RETURN n
 END Moved;
 
+(* constant relations as values *)
+PROCEDURE ConstRel(): BOOLEAN;
+CONST c = 1.5;
+VAR b: BOOLEAN; i: LONGINT;
+BEGIN
+  i := 5; b := (1 = 1) & ~(1 = 2) & ((i = 5) & (1 = 1)) & ((1 = 2) OR (i = 5)) & ~((1 = 2) OR (i = 6));
+  RETURN b & (SYSTEM.VAL(LONGINT, c) = 3FC00000H)
+END ConstRel;
+
+(* 16 times RETURN of a REAL function result (each kept a register on ARM) *)
+PROCEDURE Sq(x: REAL): REAL; BEGIN RETURN x * x END Sq;
+PROCEDURE RF1(x: REAL): REAL; BEGIN RETURN Sq(x) END RF1;
+PROCEDURE RF2(x: REAL): REAL; BEGIN RETURN Sq(x) END RF2;
+PROCEDURE RF3(x: REAL): REAL; BEGIN RETURN Sq(x) END RF3;
+PROCEDURE RF4(x: REAL): REAL; BEGIN RETURN Sq(x) END RF4;
+PROCEDURE RF5(x: REAL): REAL; BEGIN RETURN Sq(x) END RF5;
+PROCEDURE RF6(x: REAL): REAL; BEGIN RETURN Sq(x) END RF6;
+PROCEDURE RF7(x: REAL): REAL; BEGIN RETURN Sq(x) END RF7;
+PROCEDURE RF8(x: REAL): REAL; BEGIN RETURN Sq(x) END RF8;
+PROCEDURE RF9(x: REAL): REAL; BEGIN RETURN Sq(x) END RF9;
+PROCEDURE RF10(x: REAL): REAL; BEGIN RETURN Sq(x) END RF10;
+PROCEDURE RF11(x: REAL): REAL; BEGIN RETURN Sq(x) END RF11;
+PROCEDURE RF12(x: REAL): REAL; BEGIN RETURN Sq(x) END RF12;
+PROCEDURE RF13(x: REAL): REAL; BEGIN RETURN Sq(x) END RF13;
+PROCEDURE RF14(x: REAL): REAL; BEGIN RETURN Sq(x) END RF14;
+PROCEDURE RF15(x: REAL): REAL; BEGIN RETURN Sq(x) END RF15;
+PROCEDURE RF16(x: REAL): REAL; BEGIN RETURN Sq(x) END RF16;
+
 (* bytes that end exactly at the end of a mapping, the page after it unmapped *)
 PROCEDURE EndOfMap(): BOOLEAN;
 VAR page, n, r: LONGINT; buf: ARRAY 64 OF CHAR;
@@ -164,6 +196,8 @@ BEGIN
   Check("SYSTEM.MOVE keeps its length variable", Moved("OberonProperty", flag) = 14);
   Check("SYSTEM.MOVE of 0 bytes copies nothing", flag);
   Check("SYSTEM.MOVE up to the end of a mapping", EndOfMap());
+  Check("constant relations as values", ConstRel());
+  Check("16 RETURN of a REAL function result", (RF1(3.0) = 9.0) & (RF16(2.0) = 4.0) & (RF8(RF9(1.5)) = 5.0625));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

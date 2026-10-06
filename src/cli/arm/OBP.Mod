@@ -865,6 +865,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         END
       END ;
       OBC.FreeRegs({});
+      OBC.FreeRegsF({});  (* polpo: the VFP registers too: RETURN f(x) of a REAL kept one (out of registers, err 216, after 15) *)
       IF sym = OC.semicolon THEN OBS.Get(sym)
       ELSIF (sym <= OC.ident) OR (OC.if <= sym) & (sym <= OC.return) THEN OBS.Mark(38)
       ELSE EXIT
