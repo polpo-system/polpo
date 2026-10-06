@@ -26,6 +26,8 @@ CONST
   MaxHist = 64;
 
 VAR
+  saved, reading, running: nTermios.Termios;  (* the terminal: at the start, reading a line, running a command *)
+  entered: BOOLEAN;  (* Interactive ran before: entering it again means a command stopped *)
   (* shared state for all Tab completion callbacks *)
   cmpPfx:        ARRAY 64 OF CHAR;
   cmpPfxLen:     INTEGER;   (* length of name prefix already typed *)
@@ -647,9 +649,35 @@ END LineLoop;
 
 (* ---- entry point --------------------------------------------------- *)
 
+
+(* the interactive shell; also where the kernel goes after a trap or Ctrl+C in a command
+   (Kernel.InstallLoop: a fresh stack), so the shell goes on with the next line *)
+PROCEDURE Interactive;
+VAR buf: ARRAY 256 OF CHAR; len: INTEGER; r: LONGINT; quit: BOOLEAN;
+BEGIN
+  IF entered THEN
+    nOut.Ln; nOut.String("loksh: the command stopped (Ctrl+C, or a trap: Kernel.Log has the details)"); nOut.Ln
+  END;
+  entered := TRUE; quit := FALSE;
+  WHILE ~quit DO
+    nOut.String("> ");
+    r := nTermios.Set(0, reading);
+    ReadLine(buf, len, quit);
+    r := nTermios.Set(0, running);
+    IF ~quit & (len > 0) THEN
+      IF ooc2Strings.Equal(buf, "quit") OR ooc2Strings.Equal(buf, "exit") THEN
+        quit := TRUE
+      ELSE
+        Exec(buf)
+      END
+    END
+  END;
+  r := nTermios.Leave(0, saved);
+  Kernel.Shutdown(0)
+END Interactive;
+
 PROCEDURE Run*;
 VAR
-  saved, reading, running: nTermios.Termios;
   buf: ARRAY 256 OF CHAR;
   arg: ARRAY 256 OF CHAR;
   cmd, name: ARRAY 64 OF CHAR;
@@ -678,7 +706,7 @@ BEGIN
       nOut.Ln;
       nOut.String("Interactive keys:"); nOut.Ln;
       nOut.String("  Tab     complete module name or procedure name"); nOut.Ln;
-      nOut.String("  Ctrl+C  cancel current line (while a command runs: stop loksh)"); nOut.Ln;
+      nOut.String("  Ctrl+C  cancel current line; while a command runs: stop the command"); nOut.Ln;
       nOut.String("  Ctrl+D  exit"); nOut.Ln;
       nOut.String("  quit / exit"); nOut.Ln;
        Kernel.Shutdown(0)
@@ -708,25 +736,11 @@ BEGIN
       LineLoop;
       Kernel.Shutdown(0)
     END;
-    (* reading a line: Ctrl+C is a key (cancel the line); running a command: Ctrl+C stops loksh,
-       and Kernel restores the terminal through termios *)
+    (* reading a line: Ctrl+C is a key (cancel the line); running a command: Ctrl+C stops the
+       command (a trap) and the shell goes on, as after any trap in a command *)
     r := nTermios.Get(0, running); reading := running; EXCL(reading.lflag, nTermios.ISIG);
-    quit := FALSE;
-    WHILE ~quit DO
-      nOut.String("> ");
-      r := nTermios.Set(0, reading);
-      ReadLine(buf, len, quit);
-      r := nTermios.Set(0, running);
-      IF ~quit & (len > 0) THEN
-        IF ooc2Strings.Equal(buf, "quit") OR ooc2Strings.Equal(buf, "exit") THEN
-          quit := TRUE
-        ELSE
-          Exec(buf)
-        END
-      END
-    END;
-    r := nTermios.Leave(0, saved);
-    Kernel.Shutdown(0)
+    Kernel.InstallLoop(Interactive);
+    Interactive
   END
 END Run;
 

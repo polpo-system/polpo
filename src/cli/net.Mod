@@ -15,6 +15,8 @@ IMPORT Texts := texts, Sockets, DNS, out;
 
 CONST MaxAddrs = 8;
 
+VAR listener, conn: Sockets.Socket;  (* of net.Echo: closed by the next Echo when Ctrl+C stopped one *)
+
 PROCEDURE Number(VAR s: ARRAY OF CHAR; VAR n: LONGINT): BOOLEAN;
 VAR i: LONGINT;
 BEGIN
@@ -39,7 +41,7 @@ BEGIN
   Ln("  net.Send host port text     connects, sends text, prints what comes back");
   Ln("  net.UDP host port text      sends one datagram, prints the answer and who sent it");
   Ln("  net.Echo port [count]       a server: waits on port, sends back what each of count");
-  Ln("                              connections sends (default 1)");
+  Ln("                              connections sends (default 1); Ctrl+C stops it");
   Ln("  A host is a name or an address. Text with blanks goes in quotes.");
   Ln("examples:");
   Ln("  net.Lookup norayr.am");
@@ -135,6 +137,8 @@ PROCEDURE Echo*;
 VAR A: Texts.Reader; arg, peer: ARRAY 256 OF CHAR; port, count, pport, n, r: LONGINT;
   l, c: Sockets.Socket; a: Sockets.Address; buf: ARRAY 4096 OF CHAR;
 BEGIN
+  IF conn # NIL THEN Sockets.Close(conn); conn := NIL END;  (* left by an Echo stopped with Ctrl+C *)
+  IF listener # NIL THEN Sockets.Close(listener); listener := NIL END;
   Texts.OpenArgs(A);
   IF ~Texts.Arg(A, arg) OR ~Number(arg, port) THEN
     Ln("usage: net.Echo port [count]  (a server: waits for count connections on port, default 1,");
@@ -143,19 +147,21 @@ BEGIN
   IF ~Texts.Arg(A, arg) OR ~Number(arg, count) THEN count := 1 END;
   l := Sockets.Listen(Sockets.Inet6, port, 8);
   IF l = NIL THEN Error("listen", Sockets.res); RETURN END;
-  out.String("net: echoing on port "); out.Int(port, 0); out.Ln;
+  listener := l;
+  out.String("net: echoing on port "); out.Int(port, 0); out.String(", "); out.Int(count, 0);
+  out.String(" connection(s); Ctrl+C stops"); out.Ln;
   WHILE count > 0 DO
     c := Sockets.Accept(l, a, pport);
     IF c = NIL THEN Error("accept", l.res); count := 0
     ELSE
-      Sockets.AddressToString(a, peer);
+      conn := c; Sockets.AddressToString(a, peer);
       out.String("net: connection from "); out.String(peer); out.String(" port "); out.Int(pport, 0); out.Ln;
       n := Sockets.Receive(c, buf, LEN(buf));
       WHILE n > 0 DO r := Sockets.Send(c, buf, n); n := Sockets.Receive(c, buf, LEN(buf)) END;
-      Sockets.Close(c); DEC(count)
+      Sockets.Close(c); conn := NIL; DEC(count)
     END
   END;
-  Sockets.Close(l)
+  Sockets.Close(l); listener := NIL
 END Echo;
 
 (** net.UDP host port text -- send a datagram (to the host's first address), print the answer and who sent it *)
