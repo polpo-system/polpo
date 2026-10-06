@@ -265,7 +265,11 @@ BEGIN
     f.len:=status.size;
     IF trace THEN Kernel.WriteString(" size: "); Kernel.WriteInt(f.len, 9); Kernel.WriteLn END;
 
-    f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, Linux0.MAPSHARED, f.fd, 0);
+    IF f.len = 0 THEN  (* polpo: a mapping of length 0 fails, an empty file got NIL; a page as in New *)
+      f.addr:=Linux0.Mmap20( 0, Linux0.PageSize, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0)
+    ELSE
+      f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, Linux0.MAPSHARED, f.fd, 0)
+    END;
     IF (f.addr MOD 1000H)#0 THEN
       Kernel.WriteString("Files.Old mmap failed"); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn;
       r:= Linux0.Close0( fd);
