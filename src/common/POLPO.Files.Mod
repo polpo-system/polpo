@@ -314,9 +314,12 @@ BEGIN
           HALT( 108);
         END;
         IF f.len#Linux0.Write0( f.fd, f.addr, f.len) THEN Kernel.WriteString("Files.Register 2"); HALT( 107) END;
+        f.changed:=FALSE
       ELSE
-        IF f.changed THEN
+        IF f.changed THEN  (* polpo: from the start; at the descriptor's position a second Register appended *)
+          res:=Linux0.LSeek0( f.fd, 0, Linux0.SEEKSET);
           IF f.len#Linux0.Write0( f.fd, f.addr, f.len) THEN Kernel.WriteString("Files.Register 3"); HALT( 110) END;
+          f.changed:=FALSE
         END;
         IF 0#Linux0.Ftruncate0( f.fd, f.len) THEN Kernel.WriteString("Files.Register 4"); HALT(102) END;
       END;
@@ -326,25 +329,22 @@ BEGIN
 END Register;
 
 (** Flushes the changes made to a file to disk. Register will automatically Close a file. *)
+(* polpo: a file with a descriptor (registered, or opened with Old) is written if it changed; it
+   stays usable and keeps its name (Close cleared the name: a later Register wrote nothing, so the
+   zlib, Zip and Compress code of ETH Oberon lost its files). A new file is written by Register. *)
 PROCEDURE Close*(f: File);
 VAR res: LONGINT; 
 BEGIN
   IF f# NIL THEN
     IF trace THEN Kernel.WriteString("Files.Close "); Kernel.WriteString(f.Name); Kernel.WriteLn END;
-    IF f.fd>0 THEN
-(*      res:=Linux0.LSeek0( f.fd, 0, Linux0.SEEKSET);    (* not needed (only if mmap shared??) *)
-      IF res#0 THEN Kernel.WriteString("Files.Close lseek res.="); Kernel.WriteString(f.Name); Kernel.WriteHex( -res, 9); Kernel.WriteLn; HALT( 107) END;
-      IF f.changed THEN
-        res:=Linux0.Write0( f.fd, f.addr, f.len);
-        IF f.len#res THEN Kernel.WriteString("Files.Close write res.="); Kernel.WriteHex( -res, 9); Kernel.WriteLn; HALT( 108) END;
-      END;*)
-    END;
-(*
-    IF f.addr# 0 THEN f.addr:=Kernel.Munmap0( f.addr, (f.len+bsize-1)DIV bsize*bsize) END;
-    IF f.fd#-1 THEN res:= Kernel.Close0( f.fd); f.fd:=-1; END;
-*)
-    f.Name:="";
-  END;
+    IF (f.fd>0) & f.changed THEN
+      res:=Linux0.LSeek0( f.fd, 0, Linux0.SEEKSET);
+      res:=Linux0.Write0( f.fd, f.addr, f.len);
+      IF res#f.len THEN Kernel.WriteString("Files.Close: write failed "); Kernel.WriteString(f.Name); Kernel.WriteHex(-res, 9); Kernel.WriteLn
+      ELSE res:=Linux0.Ftruncate0( f.fd, f.len); f.changed:=FALSE
+      END
+    END
+  END
 END Close;
 
 (** Returns the current length of a file. *)
@@ -479,7 +479,7 @@ END ReadNum;
 
 (** Writes the buffer x containing n bytes into a file at the Rider position. *)
 PROCEDURE WriteBytes*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.BYTE; n: LONGINT);
-VAR f: File;  lo, ln: LONGINT;
+VAR f: File;  lo, ln, disk, res: LONGINT; status: Linux0.Status; tail: ARRAY Linux0.PageSize OF CHAR;
 BEGIN
   f:=r.file;
   lo:=(f.len+Linux0.PageSize-1)DIV Linux0.PageSize*Linux0.PageSize;
@@ -492,9 +492,14 @@ BEGIN
       IF trace OR ( f.addr<0) THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(r.apos, 9); Kernel.WriteHex(n, 9); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END;
     ELSE  (* polpo: the file longer, then the mapping, keeping what was written: munmap and a new
              private mapping lost the writes since the last growth (an .Arc archive got zeros) *)
+      (* what was written after the end of the file on disk, in its last page, is zeroed when
+         the file is extended: kept aside meanwhile (it was lost) *)
+      res:=Linux0.FStat0( f.fd, SYSTEM.ADR(status)); disk:=status.size;
+      IF (disk < f.len) & (f.len - disk <= LEN(tail)) THEN SYSTEM.MOVE( f.addr + disk, SYSTEM.ADR(tail), f.len - disk) ELSE disk:=f.len END;
       IF 0#Linux0.Ftruncate0( f.fd, ln) THEN HALT(102) END;
       f.addr:=Linux0.Mremap0( f.addr, lo, ln, MremapMaymove, 0);
-      IF f.addr<0 THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END
+      IF (f.addr MOD 1000H = 0) & (disk < f.len) THEN SYSTEM.MOVE( SYSTEM.ADR(tail), f.addr + disk, f.len - disk) END;  (* an address, not an error; above 2 GB it is negative *)
+      IF f.addr MOD 1000H # 0 THEN Kernel.WriteString("mremap: "); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn END
     END;
   END;
   IF LEN(x)<n THEN
