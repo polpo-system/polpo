@@ -431,6 +431,7 @@ END GetTimeOfDay;
 PROCEDURE Renameat0*( olddfd, old, newdfd, new, flags: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( NRR, 276);        (* renameat2: RISC-V has no renameat (38) *)
+  SYSTEM.CODE( LWr14);            (* polpo: flags, argument 5, from the stack (was garbage: EINVAL) *)
   SYSTEM.CODE( ECALL);
   SYSTEM.CODE( JALR);
 END Renameat0;
