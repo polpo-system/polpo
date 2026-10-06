@@ -280,34 +280,24 @@ MODULE browser;  (** portable, except where noted *)
   END GetModule;
 
   PROCEDURE ShowDef*;
-    VAR S: Texts.Scanner; vname, name: OPS.Name;
-        fullarg: ARRAY 256 OF CHAR;
+    VAR A: Texts.Reader; vname, name: OPS.Name;
+        fullarg, opt: ARRAY 256 OF CHAR;
         i, j: INTEGER; R: Texts.Reader; ch: CHAR;
-  BEGIN  GetArgs(S); SignOn; show := FALSE; extend := FALSE; hidden := FALSE;
-    IF  S.class=Texts.Name  THEN
-      (* Reassemble path from scanner tokens: "src/cli/nOut.Mod" arrives as
-         Name '/' Name '/' Name '.' Name.  Consume until no more '/' follow. *)
-      COPY(S.s, fullarg);
-      i := 0; WHILE fullarg[i] # 0X DO INC(i) END;
-      Texts.Scan(S);
-      WHILE (S.class=Texts.Char) & (S.c='/') DO
-        fullarg[i] := '/'; INC(i);
-        Texts.Scan(S);
-        IF S.class=Texts.Name THEN
-          j := 0;
-          WHILE (S.s[j] # 0X) & (i < LEN(fullarg)-2) DO
-            fullarg[i] := S.s[j]; INC(i); INC(j)
-          END;
-          Texts.Scan(S)
+  BEGIN  SignOn; show := FALSE; extend := FALSE; hidden := FALSE;
+    (* polpo: words (texts.Arg): the module or a path, then options /d /e (also \d or -d, as
+       compiler.Compile /s); the scanner read "fs /e" as the path fs/e *)
+    Texts.OpenArgs(A);
+    IF Texts.Arg(A, fullarg) THEN
+      WHILE Texts.Arg(A, opt) DO
+        IF (opt[0] = "/") OR (opt[0] = "\") OR (opt[0] = "-") THEN
+          i := 1; WHILE opt[i] # 0X DO
+            IF opt[i]="d" THEN show:=TRUE END;
+            IF opt[i]="e" THEN extend:=TRUE END;
+            INC(i)
+          END
         END
       END;
-      fullarg[i] := 0X;
-      (* consume trailing extension (.Mod / .Obj / etc.) if present *)
-      IF (S.class=Texts.Char) & (S.c='.') THEN
-        Texts.Scan(S);
-        IF S.class=Texts.Name THEN Texts.Scan(S) END
-      END;
-      (* derive module name: basename of fullarg (after last '/'), without extension *)
+      (* the module name: the file name of fullarg, without extension (.Mod, .Obj) *)
       j := -1; i := 0;
       WHILE fullarg[i] # 0X DO IF fullarg[i]='/' THEN j:=i END; INC(i) END;
       IF j >= 0 THEN
@@ -317,21 +307,9 @@ MODULE browser;  (** portable, except where noted *)
       ELSE
         COPY(fullarg, name)
       END;
-      (* strip .Mod / .Obj / etc extension *)
       i := 0; j := -1;
       WHILE name[i] # 0X DO IF name[i]='.' THEN j:=i END; INC(i) END;
       IF j > 0 THEN name[j] := 0X END;
-      (* options *)
-      IF (S.class=Texts.Char) & (S.c=Oberon.OptionChar) THEN
-        Texts.Scan(S);
-        IF (S.class IN {Texts.Name, Texts.String}) THEN
-          i := 0; WHILE S.s[i] # 0X DO
-            IF S.s[i]="d" THEN show:=TRUE END;
-            IF S.s[i]="e" THEN extend:=TRUE END;
-            INC(i)
-          END
-        END
-      END;
       Root.Obj("x86", OPM.outputPath);
       theMod:=GetModule(name);
       IF  theMod#NIL  THEN
@@ -376,13 +354,13 @@ END ShowScope;
 PROCEDURE Help*;
 BEGIN
   out.String("browser: the interface (definition) of a module, from its symbol file (x86 objects)"); out.Ln;
-  out.String("  browser.ShowDef module [-d] [-e]   what module exports: types, variables, procedures"); out.Ln;
-  out.String("     -d  with field offsets, addresses and parameter offsets"); out.Ln;
-  out.String("     -e  records with the fields of their base types written out"); out.Ln;
+  out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); out.Ln;
+  out.String("     /d  with field offsets, addresses and parameter offsets"); out.Ln;
+  out.String("     /e  records with the fields of their base types written out"); out.Ln;
   out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); out.Ln;
   out.String("  browser.ShowScope   the scope of the compiler (while compiling)"); out.Ln;
   out.String("  In the desktop: XBrowser.ShowDef ^ (the selected name) shows it in a viewer."); out.Ln;
-  out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 -e"); out.Ln
+  out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); out.Ln
 END Help;
 
 BEGIN

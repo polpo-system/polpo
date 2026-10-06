@@ -3,9 +3,9 @@ MODULE fs;  (** directories and files of Linux in the console: cd, pwd, ls, mkdi
 (* fs.Cd [path]              the current directory of loksh (and of Files) becomes path; $HOME
                               without one; ~ at the start is $HOME
    fs.Pwd                    the current directory
-   fs.Ls [-l] [-a] [path ...]  the files of the directories (the current one without a path),
-                              sorted, directories with "/"; -l with type, size and date (UTC),
-                              -a with the names that start with "."
+   fs.Ls [/l] [/a] [path ...]  the files of the directories (the current one without a path),
+                              sorted, directories with "/"; /l with type, size and date (UTC),
+                              /a with the names that start with "."
    fs.Mkdir path ...         new directories
    fs.Rm file ...            removes files
    fs.Rmdir path ...         removes empty directories
@@ -175,8 +175,10 @@ VAR A: texts.Reader; arg: Name; paths: ARRAY 64 OF Name; n, i: INTEGER; long, al
 BEGIN
   texts.OpenArgs(A); n := 0; long := FALSE; all := FALSE;
   WHILE texts.Arg(A, arg) DO
-    IF arg = "-l" THEN long := TRUE ELSIF arg = "-a" THEN all := TRUE
-    ELSIF (arg = "-la") OR (arg = "-al") THEN long := TRUE; all := TRUE
+    (* /l /a /la as other commands (compiler.Compile /s), also -l -a -la; only these words:
+       other words starting with "/" are paths *)
+    IF (arg = "/l") OR (arg = "-l") THEN long := TRUE ELSIF (arg = "/a") OR (arg = "-a") THEN all := TRUE
+    ELSIF (arg = "/la") OR (arg = "/al") OR (arg = "-la") OR (arg = "-al") THEN long := TRUE; all := TRUE
     ELSIF n < LEN(paths) THEN Expand(arg); COPY(arg, paths[n]); INC(n)
     END
   END;

@@ -87,9 +87,9 @@ DEFINITION Oberon0;
 	...
 ```
 
-- `browser.ShowDef module -e` writes out the fields a record inherits from its base types.
-  Without `-e`, an extension shows only as `RECORD (Base)`.
-- `browser.ShowDef module -d` adds record field offsets, the addresses of variables and the
+- `browser.ShowDef module /e` writes out the fields a record inherits from its base types.
+  Without `/e`, an extension shows only as `RECORD (Base)`.
+- `browser.ShowDef module /d` adds record field offsets, the addresses of variables and the
   offsets of parameters.
 - The module can be given as a path: `browser.ShowDef src/cli/net.Mod`.
 - The `IMPORT` list includes the modules imported indirectly, through other imports.
@@ -111,6 +111,10 @@ as Linux0 and Kernel).
 - `out.String`, `out.Int(x, width)`, `out.Hex`, `out.Char` and `out.Ln` write to the terminal.
 - When the arguments are missing or wrong, print a line `usage: module.Command ...` that says
   what the command does.
+- Options are words that start with `/`, after the command or after its arguments:
+  `compiler.Compile /s file`, `portia.Install /y name`, `browser.ShowDef Oberon0 /e`, `fs.Ls /l`.
+  (A few older commands also take `-` options, as `grep -i`.) Paths can start with `/` too:
+  accept only the option words the command knows.
 - A console module should have a `Help` command that describes its commands, with examples.
   `loksh module` alone lists the commands of a module and points to `module.Help`.
 

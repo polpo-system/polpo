@@ -2,7 +2,7 @@ Fs, directories and files of Linux in the console
 
 fs.Pwd                       the current directory
 fs.Cd [path]                 changes it ($HOME without a path; ~ is $HOME)
-fs.Ls [-l] [-a] [path ...]   the files, sorted; -l type, size, date (UTC); -a dot files too
+fs.Ls [/l] [/a] [path ...]   the files, sorted; /l type, size, date (UTC); /a dot files too
 fs.Mkdir path ...            new directories
 fs.Rm file ...               removes files
 fs.Rmdir path ...            removes empty directories
