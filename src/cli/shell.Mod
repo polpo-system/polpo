@@ -11,7 +11,7 @@ MODULE shell;
     always reflects the latest compiled state. *)
 
 IMPORT nIn := in, nOut := out, nTermios := termios, Kernel, Files, FATFiles,
-  Modules, Modules0, Oberon0, oberon, nTexts := texts, ooc2Strings := strings;
+  Modules, Modules0, Oberon0, oberon, nTexts := texts, strings;
 
 CONST
   TAB = 9X;
@@ -453,7 +453,7 @@ VAR i: INTEGER;
 BEGIN
   IF len = 0 THEN RETURN END;
   (* skip duplicate of most recent entry *)
-  IF (histCount > 0) & ooc2Strings.Equal(hist[histCount - 1], buf) THEN RETURN END;
+  IF (histCount > 0) & strings.Equal(hist[histCount - 1], buf) THEN RETURN END;
   IF histCount < MaxHist THEN
     COPY(buf, hist[histCount]); INC(histCount)
   ELSE
@@ -639,7 +639,7 @@ BEGIN
     nOut.String("> ");
     nIn.Line(line);
     IF ~nIn.Done THEN quit := TRUE
-    ELSIF ooc2Strings.Equal(line, "quit") OR ooc2Strings.Equal(line, "exit") THEN
+    ELSIF strings.Equal(line, "quit") OR strings.Equal(line, "exit") THEN
       quit := TRUE
     ELSE
       Exec(line)
@@ -666,7 +666,7 @@ BEGIN
     ReadLine(buf, len, quit);
     r := nTermios.Set(0, running);
     IF ~quit & (len > 0) THEN
-      IF ooc2Strings.Equal(buf, "quit") OR ooc2Strings.Equal(buf, "exit") THEN
+      IF strings.Equal(buf, "quit") OR strings.Equal(buf, "exit") THEN
         quit := TRUE
       ELSE
         Exec(buf)
@@ -696,7 +696,7 @@ BEGIN
     IF (cmd[0] = "-") & (cmd[1] = "P") THEN INC(firstArg); Kernel.GetArg(firstArg, cmd) END
   END;
   IF Kernel.NoOfArgs > firstArg THEN
-    IF ooc2Strings.Equal(cmd, "--help") OR ooc2Strings.Equal(cmd, "-h") THEN
+    IF strings.Equal(cmd, "--help") OR strings.Equal(cmd, "-h") THEN
       nOut.String("loksh - Linux Oberon Kommand Shell"); nOut.Ln;
       nOut.Ln;
        nOut.String("Usage:"); nOut.Ln;
@@ -711,7 +711,7 @@ BEGIN
       nOut.String("  Ctrl+D  exit"); nOut.Ln;
       nOut.String("  quit / exit"); nOut.Ln;
        Kernel.Shutdown(0)
-    ELSIF ooc2Strings.Equal(cmd, "shell.Run") THEN
+    ELSIF strings.Equal(cmd, "shell.Run") THEN
       nOut.String("shell.Run is started automatically; omit it from the command line."); nOut.Ln;
       Kernel.Shutdown(1)
     END;

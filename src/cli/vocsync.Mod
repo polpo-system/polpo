@@ -149,8 +149,8 @@ BEGIN
 END From;
 
 BEGIN
-  polpo[0] := "IMPORT S := strTypes, Strings := strings, Out := out;  (* voc: Strings := ooc2Strings, Out *)";
-  voc[0] := "IMPORT S := strTypes, Strings := ooc2Strings, Out;  (* polpo: Strings := strings, Out := out *)";
+  polpo[0] := "IMPORT S := strTypes, Strings := strings, Out := out;  (* voc: Strings := oocStrings, Out *)";
+  voc[0] := "IMPORT S := strTypes, Strings := oocStrings, Out;  (* polpo: Strings := strings, Out := out *)";
   polpo[1] := "IMPORT Out := out, Strings := strings;  (* voc: Out, Strings *)";
   voc[1] := "IMPORT Out, Strings;  (* polpo: Out := out, Strings := strings *)";
   polpo[2] := "IMPORT Sockets, DNS, Linux0, Out := out, SYSTEM;  (* voc: Out *)";
