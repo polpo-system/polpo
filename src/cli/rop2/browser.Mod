@@ -295,19 +295,41 @@ MODULE browser;
     IF Linux0.ARCH = "MIPS" THEN COPY("mips", a) ELSIF Linux0.ARCH = "ARMv7" THEN COPY("armv7", a) ELSE COPY("riscv", a) END
   END Arch;
 
+  (** the definition of the module name into T (the desktop's RBrowser uses it too); detail: with
+    offsets, addresses and sizes; ext: records with the fields of their base types. FALSE if name
+    has no symbol file in obj/<arch>/ *)
+  PROCEDURE Definition*(VAR name: ARRAY OF CHAR; detail, ext: BOOLEAN; T: Texts.Text): BOOLEAN;
+    VAR dummyR: Texts.Reader; dummyT: Texts.Text; arch: ARRAY 8 OF CHAR; n: OPS.Name; done: BOOLEAN;
+  BEGIN
+    IF detail THEN option := "x" ELSE option := 0X END; extend := ext;
+    COPY(name, n);
+    Arch(arch); Root.Obj(arch, OPM.Dir);  (* obj/<arch>/ of the current directory, else of the root *)
+    NEW(dummyT); Texts.Open(dummyT, ""); Texts.OpenReader(dummyR, dummyT, 0);
+    OPM.Init(dummyR, Oberon.Log);
+    OPT.Init(n, {}); OPT.SelfName := "AvoidErr154";
+    done := WModule(n, T);
+    OPT.Close;
+    RETURN done
+  END Definition;
+
+  (** the directory searched for symbol files, after Definition *)
+  PROCEDURE Dir*(VAR dir: ARRAY OF CHAR);
+  BEGIN COPY(OPM.Dir, dir)
+  END Dir;
+
   (** browser.ShowDef module [/d] [/e] -- the interface of module (or of the path src/.../X.Mod) *)
   PROCEDURE ShowDef*;
-    VAR A, R, dummyR: Texts.Reader; arg, opt: ARRAY 256 OF CHAR; name: OPS.Name;
-      T, dummyT: Texts.Text; i, j: INTEGER; ch: CHAR; arch: ARRAY 8 OF CHAR;
+    VAR A, R: Texts.Reader; arg, opt: ARRAY 256 OF CHAR; name: OPS.Name;
+      T: Texts.Text; i, j: INTEGER; ch: CHAR; detail, ext: BOOLEAN;
   BEGIN
-    option := 0X; extend := FALSE;
+    detail := FALSE; ext := FALSE;
     Texts.OpenArgs(A);
     IF ~Texts.Arg(A, arg) THEN out.String("usage: browser.ShowDef module [/d] [/e]  (browser.Help)"); out.Ln; RETURN END;
     WHILE Texts.Arg(A, opt) DO  (* /d /e, also \d or -d *)
       IF (opt[0] = "/") OR (opt[0] = "\") OR (opt[0] = "-") THEN
         i := 1; WHILE opt[i] # 0X DO
-          IF opt[i] = "d" THEN option := "x" END;
-          IF opt[i] = "e" THEN extend := TRUE END;
+          IF opt[i] = "d" THEN detail := TRUE END;
+          IF opt[i] = "e" THEN ext := TRUE END;
           INC(i)
         END
       END
@@ -316,19 +338,14 @@ MODULE browser;
     j := -1; i := 0; WHILE arg[i] # 0X DO IF arg[i] = "/" THEN j := i END; INC(i) END;
     i := 0; INC(j); WHILE (arg[j] # 0X) & (arg[j] # ".") & (i < LEN(name) - 1) DO name[i] := arg[j]; INC(i); INC(j) END;
     name[i] := 0X;
-    Arch(arch); Root.Obj(arch, OPM.Dir);  (* obj/<arch>/ of the current directory, else of the root *)
-    NEW(dummyT); Texts.Open(dummyT, ""); Texts.OpenReader(dummyR, dummyT, 0);
-    OPM.Init(dummyR, Oberon.Log);
-    OPT.Init(name, {}); OPT.SelfName := "AvoidErr154";
     NEW(T); Texts.Open(T, "");
-    IF WModule(name, T) THEN
+    IF Definition(name, detail, ext, T) THEN
       Texts.OpenReader(R, T, 0); Texts.Read(R, ch);
       WHILE ~R.eot DO IF ch = 0DX THEN out.Ln ELSE out.Char(ch) END; Texts.Read(R, ch) END
     ELSE
       out.String("browser: no module "); out.String(name); out.String(" (no "); out.String(name);
       out.String(".Sym in "); out.String(OPM.Dir); out.String(")"); out.Ln
-    END;
-    OPT.Close
+    END
   END ShowDef;
 
   PROCEDURE Help*;

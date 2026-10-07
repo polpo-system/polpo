@@ -243,12 +243,12 @@ MODULE browser;  (** portable, except where noted *)
   BEGIN
     COPY(".Obj", OPM.extension);
     found:=FALSE; i:=0; ch0:=OPM.outputPath[0];
-    WHILE  (ch0#0X) & (i < 32)  DO  iname[i]:=ch0; INC(i); ch0:=OPM.outputPath[i]  END;
+    WHILE  (ch0#0X) & (i < LEN(iname) - 1)  DO  iname[i]:=ch0; INC(i); ch0:=OPM.outputPath[i]  END;
     j := 0;
     ch0:=name[j];
-    WHILE  (ch0#0X) & (i < 32)  DO  iname[i]:=ch0; INC(i); INC( j); ch0:=name[j]  END;
+    WHILE  (ch0#0X) & (i < LEN(iname) - 1)  DO  iname[i]:=ch0; INC(i); INC( j); ch0:=name[j]  END;
     j := 0;
-    WHILE (OPM.extension[j] # 0X) & (i < 32) DO
+    WHILE (OPM.extension[j] # 0X) & (i < LEN(iname) - 1) DO
       iname[i] := OPM.extension[j];  INC(i);  INC(j)
     END;
     iname[i] := 0X;
