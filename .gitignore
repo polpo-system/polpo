@@ -1,2 +1,6 @@
 # the sources of remote packages, downloaded by portia
 /src/pkg/
+
+# the hello example, compiled by whoever plays with it
+/obj/*/hello.Obj
+/obj/*/hello.Sym
