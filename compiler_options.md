@@ -49,6 +49,12 @@ Symbol files (.Sym) contain module interface information for separate compilatio
 |--------|-------------|-------------|
 | `/s` | Generate **new** symbol file | When interface changes (new exports) |
 | `/e` | Generate **extended** symbol file | When adding to interface (preserving compatibility) |
+| `/i` | Symbol file **inside** the `.Obj` (Native Oberon) | Only for compatibility: by default the compiler writes `Module.Sym` apart and a smaller `Module.Obj` |
+
+The x86 compiler writes the interface to `obj/x86/Module.Sym` and the code to `obj/x86/Module.Obj`,
+as the other ports do. A module compiled with `/i` (or before polpo had separate symbol files)
+has its symbol file in the `.Obj`; the compiler and the browser read it from there when there
+is no `.Sym`.
 
 ### Example: First Compilation
 ```bash

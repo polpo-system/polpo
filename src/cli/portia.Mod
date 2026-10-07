@@ -1067,16 +1067,18 @@ BEGIN
   F.GetDate(f, t, d); F.ReleaseRead(f); RETURN d * 1000000H + t  (* d:t, only compared *)
 END Stamp;
 
-(* a checksum of the interface of module mod: its symbol file, on x86 the symbol part of the
-   object file (tag, format, size, then the symbols); len 0 if there is none *)
+(* a checksum of the interface of module mod: its symbol file (on x86 the symbol part of the
+   object file when there is no .Sym: tag, format, size, then the symbols); len 0 if there is none *)
 PROCEDURE SymKey(VAR mod: ARRAY OF CHAR; VAR len, s1, s2: LONGINT);
-VAR path: Name; f: F.File; R: F.Rider; c, tag: CHAR; n: LONGINT;
+VAR path: Name; f: F.File; R: F.Rider; c, tag: CHAR; n: LONGINT; inObj: BOOLEAN;
 BEGIN
   len := 0; s1 := 0; s2 := 0;
-  ObjFile(mod, arch # "x86", path); Local(path);
-  f := F.Old(path); IF f = NIL THEN RETURN END;
+  ObjFile(mod, TRUE, path); Local(path);  (* the .Sym; on x86 the .Obj when it has none (compiled with /i) *)
+  f := F.Old(path); inObj := FALSE;
+  IF (f = NIL) & (arch = "x86") THEN ObjFile(mod, FALSE, path); Local(path); f := F.Old(path); inObj := TRUE END;
+  IF f = NIL THEN RETURN END;
   F.Set(R, f, 0);
-  IF arch = "x86" THEN
+  IF inObj THEN
     F.Read(R, tag); F.Read(R, c);
     IF tag # 0BBX THEN F.ReleaseRead(f); len := -1; RETURN END;
     F.ReadNum(R, n)

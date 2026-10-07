@@ -27,13 +27,14 @@ END greet.
 Compile it and call it:
 
 ```sh
-bin/x86/loksh compiler.Compile /s greet.Mod   # writes obj/x86/greet.Obj
+bin/x86/loksh compiler.Compile /s greet.Mod   # writes obj/x86/greet.Obj and greet.Sym
 bin/x86/loksh greet.Hello world
 ```
 
-`/s` lets the compiler write a new symbol file (the module's interface; on x86 it is part of
-the `.Obj`, the other ports also write a `.Sym`). It is needed the first
-time, and whenever the exports change. The modules that import a changed module must then be
+`/s` lets the compiler write a new symbol file, the module's interface. It is
+`Module.Sym`, next to `Module.Obj`, on every port (the x86 compiler puts it inside the `.Obj`
+only with `/i`, as Native Oberon did). It is needed the first time, and whenever the exports
+change. The modules that import a changed module must then be
 compiled again. Choose module names that polpo does not have yet: `loksh name` says
 "module not found" for a free name.
 

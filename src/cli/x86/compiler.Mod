@@ -34,6 +34,7 @@ MODULE compiler;  (** command-line version *)
       ELSIF ch = "z" THEN codeOpt := codeOpt / {OPM.fullstackinit}
       ELSIF ch = "q" THEN codeOpt := codeOpt / {OPM.trace}
       ELSIF ch = "s" THEN parserOpt := parserOpt / {OPM.newsf}
+      ELSIF ch = "i" THEN parserOpt := parserOpt / {OPM.symInObj}  (* polpo: the symbol file inside the .Obj *)
       ELSIF ch = "S" THEN parserOpt := parserOpt / {OPM.systemchk}
       ELSIF ch = "n" THEN parserOpt := parserOpt / {OPM.nofiles}
       ELSIF ch = "e" THEN parserOpt := parserOpt / {OPM.extsf}
@@ -232,6 +233,7 @@ BEGIN
   Out.Ln;
   Out.String("  Symbol Files:"); Out.Ln;
   Out.String("    /s   Generate new symbol file"); Out.Ln;
+  Out.String("    /i   Symbol file inside the .Obj (Native Oberon), not a separate .Sym"); Out.Ln;
   Out.String("    /e   Generate extended symbol file"); Out.Ln;
   Out.Ln;
   Out.String("  Language Modes:"); Out.Ln;

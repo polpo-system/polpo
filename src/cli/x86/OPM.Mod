@@ -124,6 +124,7 @@ MODULE OPM;  (** shared x86 compiler manager *)
     oberon2* = 19;   (** 2 - compile oberon-2 programs *)
     oberon1* = 21;  (** compile oberon-1 programs *)
     traceprocs* = 24;  (** trace procedure calls *)  (* temp *)
+    symInObj* = 25;  (** i - the symbol file inside the .Obj (Native Oberon); else a separate .Sym (polpo) *)
 
     DefaultCodeOpt* = {inxchk, typchk, ptrinit, fullstackinit, assert};
     DefaultParserOpt* = {};
@@ -160,6 +161,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
     W: Texts.Writer;
     oldSymF, newSymF, ObjF, RefF, ModF: Files.Rider;
     RefFile, ObjFile, ModFile, oldSymFile, newSymFile: Files.File;
+    SymFile: Files.File;  (* polpo: the separate .Sym, registered with the .Obj *)
+    SymFName: ARRAY 512 OF CHAR;
 
   PROCEDURE Init*(codeOpt, parserOpt: SET; source: Texts.Reader; log: Texts.Text);
     VAR i: SHORTINT;
@@ -429,9 +432,12 @@ MODULE OPM;  (** shared x86 compiler manager *)
     VAR  fileName: ARRAY 512 OF CHAR; ch, ch1: CHAR; symSize: LONGINT; F: Files.File; empty: ARRAY 1 OF CHAR; flags: SET;
   BEGIN
     empty[0] := 0X;
-    MakeFileName(outputPath, empty, name, fileName, extension);
-    done := FALSE;
+    (* polpo: the separate name.Sym if there is one, else the symbol part of name.Obj (objects
+       compiled with /i or before .Sym files); both start as an object file *)
+    MakeFileName(outputPath, empty, name, fileName, ".Sym");
     F := Files.Old(fileName);
+    IF F = NIL THEN MakeFileName(outputPath, empty, name, fileName, extension); F := Files.Old(fileName) END;
+    done := FALSE;
     IF F # NIL THEN done := TRUE; Files.Set(R, F, 0);
       Files.Read(R, ch);
       IF ch=OFtag THEN Files.Read(R, ch1); Files.ReadNum(R, symSize);
@@ -440,6 +446,7 @@ MODULE OPM;  (** shared x86 compiler manager *)
           IF exportDefinitions IN flags THEN err(151); done := FALSE END
         ELSIF ch1 # OFnative THEN
           err(151); done := FALSE
+        ELSIF symSize = 0 THEN done := FALSE  (* an object without its symbol file, and no .Sym *)
         END
       ELSE (* eb, 30.11.95 err(511); *) done := FALSE
       END
@@ -450,6 +457,7 @@ MODULE OPM;  (** shared x86 compiler manager *)
     VAR ObjFName: ARRAY 512 OF CHAR;
   BEGIN
     MakeFileName(outputPath, outputPrefix, modName, ObjFName, extension);
+    MakeFileName(outputPath, outputPrefix, modName, SymFName, ".Sym"); SymFile := NIL;
     ObjFile:=Files.New(ObjFName);
     IF ObjFile = NIL THEN  err(153);  RETURN  END;
     Files.Set(ObjF, ObjFile, 0); Files.Write(ObjF, OFtag);
@@ -470,16 +478,23 @@ MODULE OPM;  (** shared x86 compiler manager *)
   END Commit;
 
   PROCEDURE EndSym*;
-    VAR sfsize: LONGINT;
+    VAR sfsize: LONGINT; R, sR: Files.Rider; ch: CHAR;
   BEGIN  Files.Write(ModF, 0X);
     IF NewFileFormat THEN
       sfsize := 4 + Files.Length(newSymFile) + Files.Length(ModFile);
       Files.WriteNum(ObjF, sfsize);
       Files.WriteSet(ObjF, codeOptions)
-    ELSE
+    ELSIF symInObj IN parserOptions THEN
       sfsize:=Files.Length(newSymFile)+Files.Length(ModFile); Files.WriteNum(ObjF, sfsize)
+    ELSE  (* polpo: the symbol file apart, name.Sym; an empty symbol part in the .Obj *)
+      SymFile := Files.New(SymFName); Files.Set(R, SymFile, 0);
+      Files.Write(R, OFtag); Files.Write(R, OFnative);
+      Files.WriteNum(R, Files.Length(newSymFile)+Files.Length(ModFile));
+      Files.Set(sR, ModFile, 0); Files.Read(sR, ch); WHILE ~sR.eof DO Files.Write(R, ch); Files.Read(sR, ch) END;
+      Files.Set(sR, newSymFile, 0); Files.Read(sR, ch); WHILE ~sR.eof DO Files.Write(R, ch); Files.Read(sR, ch) END;
+      Files.WriteNum(ObjF, 0)
     END;
-    Commit(ModFile); Commit(newSymFile);
+    IF (SymFile = NIL) OR (NewFileFormat) THEN Commit(ModFile); Commit(newSymFile) END;
     refpatch:=Files.Pos(ObjF); ObjWInt(0); ObjWInt(0)
   END EndSym;
 
@@ -489,6 +504,7 @@ MODULE OPM;  (** shared x86 compiler manager *)
     refsize:=Files.Length(RefFile); ObjW(8DX); Commit(RefFile);
     Files.Set(ObjF, ObjFile, refpatch); ObjWBytes(refsize, 4);
     Files.Register(ObjFile);
+    IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
   END EndObj;
 
   PROCEDURE CloseObj*;
@@ -497,7 +513,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
     refsize:=Files.Length(RefFile);
     Files.Set(ref, RefFile, 0); Files.Read(ref, ch); WHILE ~ref.eof DO ObjW(ch); Files.Read(ref, ch) END;
     Files.Set(ObjF, ObjFile, refpatch); ObjWBytes(refsize, 4);
-    Files.Register(ObjFile)
+    Files.Register(ObjFile);
+    IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
   END CloseObj;
 
 BEGIN
