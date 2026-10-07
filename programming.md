@@ -94,8 +94,9 @@ DEFINITION Oberon0;
   offsets of parameters.
 - The module can be given as a path: `browser.ShowDef src/cli/net.Mod`.
 - `browser.Help` lists the commands and options.
-- In the desktop, `XBrowser.ShowDef ^` shows the definition of the selected module name in a
-  viewer.
+- In the desktop, the browser of the port shows the definition of the selected module name in
+  a viewer: `XBrowser.ShowDef ^` on x86, `ABrowser.ShowDef ^` on ARM, `RBrowser.ShowDef ^` on
+  ARMv7, RISC-V and MIPS (the same text as the console browser).
 
 Every port has its own console browser, with the same commands and options. Each one reads the
 symbol files of its port, in `obj/<arch>/` of the current directory or of the root:
