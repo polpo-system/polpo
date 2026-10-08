@@ -12,7 +12,9 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
    Install, Upgrade, Build and Remove show what they will do and ask; /y does not ask.
    portia.Install [/arch] name ...  build, link and record packages; dependencies only when
                             missing or older than needed
-   portia.Upgrade [/arch] [name ...]  the installed packages with newer versions in the tree
+   portia.Upgrade [/arch] [name ...]  the installed packages with newer versions in the tree,
+                            and the remote ones compiled before an interface they import
+                            changed (after a git pull of polpo)
    When the interface of a module changes (its symbol file), the installed packages with a
    module importing it are recompiled, and so on.
    portia.Remove [/arch] [/src | /all] [/deps] name ...   delete their objects and unrecord
@@ -1059,13 +1061,14 @@ BEGIN
   RETURN ok
 END TestPackage;
 
-(* the date of a file, 0 if there is none *)
-PROCEDURE Stamp(VAR path: ARRAY OF CHAR): LONGINT;
-VAR f: F.File; t, d: LONGINT;
+(* the date and time of the file path (found as Local finds it); FALSE if there is none *)
+PROCEDURE FileDate(VAR path: ARRAY OF CHAR; VAR d, t: LONGINT): BOOLEAN;
+VAR f: F.File;
 BEGIN
-  f := F.Old(path); IF f = NIL THEN RETURN 0 END;
-  F.GetDate(f, t, d); F.ReleaseRead(f); RETURN d * 1000000H + t  (* d:t, only compared *)
-END Stamp;
+  Local(path); f := F.Old(path); IF f = NIL THEN RETURN FALSE END;
+  F.GetDate(f, t, d); F.ReleaseRead(f); RETURN TRUE
+END FileDate;
+
 
 (* a checksum of the interface of module mod: its symbol file (on x86 the symbol part of the
    object file when there is no .Sym: tag, format, size, then the symbols); len 0 if there is none *)
@@ -1089,6 +1092,96 @@ BEGIN
   END;
   F.ReleaseRead(f)
 END SymKey;
+
+(* the interfaces the modules of a remote package p were compiled against, for Upgrade:
+   src/pkg/<name>/portia-<arch>.keys, a line "Module len s1 s2" (SymKey) for each import *)
+PROCEDURE KeysFile(p: Package; VAR full: ARRAY OF CHAR);
+VAR rel: Name;
+BEGIN
+  PackageDir(p, rel); Append(rel, "portia-"); Append(rel, arch); Append(rel, ".keys"); Root.Join(rel, full)
+END KeysFile;
+
+PROCEDURE SaveKeys(p: Package);
+VAR it, im, mods: Item; mod, full: Name; f: F.File; R: F.Rider; l, a, b: LONGINT;
+
+  PROCEDURE W(s: ARRAY OF CHAR);
+  VAR i: LONGINT;
+  BEGIN i := 0; WHILE s[i] # 0X DO F.Write(R, s[i]); INC(i) END
+  END W;
+
+  PROCEDURE N(x: LONGINT);
+  VAR d: ARRAY 12 OF CHAR; i: LONGINT;
+  BEGIN
+    F.Write(R, " "); IF x < 0 THEN F.Write(R, "-"); x := -x END;
+    i := 0; REPEAT d[i] := CHR(ORD("0") + x MOD 10); x := x DIV 10; INC(i) UNTIL x = 0;
+    WHILE i > 0 DO DEC(i); F.Write(R, d[i]) END
+  END N;
+
+BEGIN
+  mods := NIL; it := p.sources;
+  WHILE it # NIL DO
+    IF Header(it.s, mod) THEN
+      im := imports;
+      WHILE im # NIL DO IF (im.s # SYS) & ~Has(mods, im.s) THEN Add(mods, im.s) END; im := im.next END
+    END;
+    it := it.next
+  END;
+  KeysFile(p, full); f := F.New(full); IF f = NIL THEN RETURN END;
+  F.Set(R, f, 0); it := mods;
+  WHILE it # NIL DO SymKey(it.s, l, a, b); W(it.s); N(l); N(a); N(b); F.Write(R, 0AX); it := it.next END;
+  F.Register(f)
+END SaveKeys;
+
+(* a module of p was compiled before the interface of a module it imports changed, as after a
+   git pull of polpo that changed a base interface; why: that import. The keys recorded when p
+   was compiled (SaveKeys) are compared with the interfaces now; for a package compiled before
+   portia recorded them, an import whose symbol file (on x86 its object, when it has no .Sym)
+   is newer than the object of the module counts *)
+PROCEDURE Stale(p: Package; VAR why: ARRAY OF CHAR): BOOLEAN;
+VAR it, im: Item; mod, obj, sym, full: Name; od, ot, sd, st, i, j, k, l, a, b, v: LONGINT;
+  key: ARRAY 3 OF LONGINT; found, neg: BOOLEAN; buf: Buf;
+BEGIN
+  KeysFile(p, full);
+  IF ReadFile(full, buf) THEN
+    i := 0;
+    WHILE buf[i] # 0X DO
+      j := 0; WHILE buf[i] > " " DO IF j < NameLen - 1 THEN mod[j] := buf[i]; INC(j) END; INC(i) END; mod[j] := 0X;
+      k := 0;
+      WHILE k < 3 DO
+        WHILE buf[i] = " " DO INC(i) END;
+        neg := buf[i] = "-"; IF neg THEN INC(i) END;
+        v := 0; WHILE (buf[i] >= "0") & (buf[i] <= "9") DO v := v * 10 + ORD(buf[i]) - ORD("0"); INC(i) END;
+        IF neg THEN v := -v END; key[k] := v; INC(k)
+      END;
+      WHILE (buf[i] # 0X) & (buf[i] # 0AX) DO INC(i) END;
+      IF buf[i] = 0AX THEN INC(i) END;
+      IF mod[0] # 0X THEN
+        SymKey(mod, l, a, b);
+        IF (l # key[0]) OR (a # key[1]) OR (b # key[2]) THEN COPY(mod, why); RETURN TRUE END
+      END
+    END;
+    RETURN FALSE
+  END;
+  it := p.sources;
+  WHILE it # NIL DO
+    IF Header(it.s, mod) THEN
+      ObjFile(mod, FALSE, obj);
+      IF FileDate(obj, od, ot) THEN
+        im := imports;
+        WHILE im # NIL DO
+          IF im.s # SYS THEN
+            ObjFile(im.s, TRUE, sym); found := FileDate(sym, sd, st);
+            IF ~found & (arch = "x86") THEN ObjFile(im.s, FALSE, sym); found := FileDate(sym, sd, st) END;
+            IF found & ((sd > od) OR (sd = od) & (st > ot)) THEN COPY(im.s, why); RETURN TRUE END
+          END;
+          im := im.next
+        END
+      END
+    END;
+    it := it.next
+  END;
+  RETURN FALSE
+END Stale;
 
 (* compile the sources of p, each after the modules of p it imports; changed: the interface
    of a module that existed before changed, its importers must be recompiled *)
@@ -1137,6 +1230,7 @@ BEGIN
     END;
     IF ~progress THEN Pre; out.String("modules of "); out.String(p.name); out.String(" import each other in a cycle"); out.Ln; RETURN FALSE END
   END;
+  IF p.remote # "" THEN SaveKeys(p) END;
   RETURN TRUE
 END BuildPackage;
 
@@ -1463,15 +1557,26 @@ BEGIN
 END Install;
 
 (** portia.Upgrade [/arch] [name ...] -- build the installed packages with a newer version in
-  the tree (all, or the named ones), what they need, and the packages depending on them *)
+  the tree (all, or the named ones), what they need, and the packages depending on them; and
+  recompile the installed remote packages compiled before an interface they import changed
+  (after a git pull of polpo) *)
 PROCEDURE Upgrade*;
-VAR names, set: Item; p: Package; v: ARRAY 32 OF CHAR; ok: BOOLEAN;
+VAR names, set, it: Item; p: Package; v: ARRAY 32 OF CHAR; why: Name; ok: BOOLEAN;
 BEGIN
   IF ~Start(names) THEN RETURN END;
   set := NIL; ok := TRUE; p := packages;
   WHILE ok & (p # NIL) DO
     IF IsInstalled(p) & ((names = NIL) OR Has(names, p.name)) & InstVer(p, v) & ~Versions.AtLeast(v, p.version) THEN
       Add(set, p.name); ok := AddNeeded(p, set)
+    END;
+    p := p.next
+  END;
+  p := packages;
+  WHILE ok & (p # NIL) DO
+    IF IsInstalled(p) & (p.remote # "") & ((names = NIL) OR Has(names, p.name)) & ~Has(set, p.name) & Stale(p, why) THEN
+      Add(set, p.name); it := set; WHILE it.s # p.name DO it := it.next END;
+      COPY(why, it.v);  (* shown as "recompiled for the new <why>" *)
+      ok := AddNeeded(p, set)
     END;
     p := p.next
   END;

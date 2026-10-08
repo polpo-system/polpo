@@ -121,6 +121,22 @@ must be recompiled into its importers. `portia.Graph [name] >
 deps.dot` writes the dependencies as a Graphviz graph. The tree can also be set with the
 environment variable `PORTIA_TREE`.
 
+Updating: polpo itself (the base system, with its objects and binaries) and the package tree
+are git repositories, updated with git; then portia upgrades the other packages:
+
+```
+git pull                                   # in polpo
+git -C ../arden pull                       # the package tree
+bin/x86/loksh portia.Upgrade               # every installed package with a newer version
+bin/x86/loksh portia.Upgrade /arm          # the same for the ARM port (/armv7, /riscv, /mips)
+```
+
+`portia.Upgrade` also recompiles the packages you built (the remote ones) when the pull
+changed an interface they import: when portia compiles a package it records the interfaces
+(the keys of the symbol files) its modules import, in `src/pkg/<name>/portia-<arch>.keys`, and
+compares them with the new ones. A rebuild of polpo that leaves the interfaces as they were
+recompiles nothing.
+
 `portia.Record` records the installed packages (in `portia.<arch>`); display-x11 and
 display-sixel are alternatives providing `display`, `portia.Mark display-sixel` records the
 switch after `make sixel`. Installing, removing and fetching packages come next. The
