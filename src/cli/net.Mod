@@ -8,6 +8,7 @@ MODULE net;  (** minimal network tools over Sockets and DNS *)
    net.Lookup name ...            the addresses of the names, IPv6 and IPv4
    net.Resolve name ...           only the IPv4 addresses (A records)
    net.Resolve6 name ...          only the IPv6 addresses (AAAA records)
+   net.Reverse address ...        the names of addresses (/etc/hosts, PTR records)
    net.Address text ...           IP addresses in normal form (no lookup)
    A host is a name or an IPv4 or IPv6 address; its addresses are tried in turn. *)
 
@@ -36,6 +37,7 @@ BEGIN
   Ln("net: small network tools (TCP, UDP, DNS), IPv6 and IPv4");
   Ln("  net.Lookup name ...         the addresses of host names");
   Ln("  net.Resolve name ...        only IPv4 (A);  net.Resolve6 name ...  only IPv6 (AAAA)");
+  Ln("  net.Reverse address ...     the names of IPv4/IPv6 addresses (/etc/hosts, then PTR)");
   Ln("  net.Address addr ...        an IPv4/IPv6 address in normal form (does not look up names)");
   Ln("  net.Get host port [path]    an HTTP/1.0 GET; prints the whole answer");
   Ln("  net.Send host port text     connects, sends text, prints what comes back");
@@ -45,6 +47,7 @@ BEGIN
   Ln("  A host is a name or an address. Text with blanks goes in quotes.");
   Ln("examples:");
   Ln("  net.Lookup norayr.am");
+  Ln("  net.Reverse 1.1.1.1 2606:4700:4700::1111");
   Ln("  net.Get norayr.am 80 /");
   Ln("  net.Echo 7007 2      (and in another loksh)  net.Send localhost 7007 hello");
   Ln("  net.Address ::ffff:127.0.0.1  127.0.0.1")
@@ -227,6 +230,21 @@ END Resolve;
 PROCEDURE Resolve6*;
 BEGIN Names(Sockets.Inet6, "net.Resolve6 name ...  (the IPv6 addresses of host names)")
 END Resolve6;
+
+(** net.Reverse address ... -- the name of each address *)
+PROCEDURE Reverse*;
+VAR A: Texts.Reader; arg, name: ARRAY 256 OF CHAR; a: Sockets.Address; k: LONGINT;
+BEGIN
+  Texts.OpenArgs(A); k := 0;
+  WHILE Texts.Arg(A, arg) DO
+    INC(k);
+    IF ~Sockets.ParseAddress(arg, a) THEN out.String("net: not an address: "); Ln(arg)
+    ELSIF DNS.Reverse(a, name) THEN out.String(arg); out.String(": "); Ln(name)
+    ELSE LookupError(arg)
+    END
+  END;
+  IF k = 0 THEN Ln("usage: net.Reverse address ...  (the names of IPv4 and IPv6 addresses)") END
+END Reverse;
 
 (** net.Address text -- an IPv4 or IPv6 address in normal form (names are not looked up) *)
 PROCEDURE Address*;

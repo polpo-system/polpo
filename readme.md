@@ -141,11 +141,16 @@ bin/x86/loksh net.Get example.com 80 /           # HTTP/1.0 GET
 bin/x86/loksh net.Get ::1 8080 /index.html
 bin/x86/loksh net.Lookup example.com localhost   # the addresses of names
 bin/x86/loksh net.Resolve example.com           # only IPv4 (A); net.Resolve6: only IPv6 (AAAA)
+bin/x86/loksh net.Reverse 1.1.1.1 ::1           # the names of addresses (/etc/hosts, PTR)
 bin/x86/loksh net.Send 192.0.2.1 7 hello        # send a text, print the answer
 bin/x86/loksh net.Echo 7000 3                   # echo 3 connections, IPv6 and IPv4
 bin/x86/loksh net.UDP ::1 5353 hello            # a datagram, the answer and its sender
 bin/x86/loksh net.Address 2001:0db8:0:0:0:0:0:1 # addresses in normal form: 2001:db8::1
 ```
+
+`NetSystem` (`src/lib/native`) is the network interface of ETH Native Oberon (OpenConnection,
+ReadString, SendDG, GetIP, ...) over Sockets and DNS, for programs written for it; it is shared
+with voc (github.com/norayr/Internet, where its README lists how it differs from Native Oberon).
 
 `http` (`src/lib/http`) is an HTTP/1.1 client (Content-Length, chunked, or to the end of the
 connection), and `fetch` uses it:
