@@ -8,3 +8,8 @@
 # vocsync (src/test), compiled when modules are copied to or from voc
 /obj/*/vocsync.Obj
 /obj/*/vocsync.Sym
+
+# tool texts of remote packages, installed by portia
+/tools/Calc.Tool
+/tools/IFS.Tool
+/tools/Iris.Tool
