@@ -2,3 +2,4 @@
 *.Text     filter=convert-cr
 *.Mod diff eol=cr
 
+*.Mod linguist-language=Oberon
