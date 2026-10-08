@@ -4,3 +4,7 @@
 # the hello example, compiled by whoever plays with it
 /obj/*/hello.Obj
 /obj/*/hello.Sym
+
+# vocsync (src/test), compiled when modules are copied to or from voc
+/obj/*/vocsync.Obj
+/obj/*/vocsync.Sym
