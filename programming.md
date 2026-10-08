@@ -140,7 +140,10 @@ the desktop commands. A plain text `tools/Xxx.Tool` describes it, with commands 
 
 A command stops early in two ways:
 
-- **Ctrl+C** while it runs, or
+- **Ctrl+C** while it runs (in the desktop: in the terminal of loksh), or **Ctrl+Pause/Break** or
+  **Ctrl+Alt+C** in the desktop (X11 or sixel); the desktop sees these keys when the command reads
+  the keyboard or the clock (`Input.Available`, `Input.Read`, `Oberon.Time`), so a loop that does
+  neither is stopped only by Ctrl+C in the terminal, or
 - **a trap**: a NIL pointer, an index out of range, a failed `ASSERT`, `HALT(n)`, a division
   by zero.
 

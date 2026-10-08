@@ -143,6 +143,7 @@ VAR
 
 (* X11 *)
   CopyClip*, PasteClip*: PROCEDURE;  (* initialized in System *)
+  lastPoll: LONGINT;  (* the time Time last read the keyboard *)
   x11, mmbe, iemouse: BOOLEAN;
   myProperty: LONGINT;
   (* polpo: the X CLIPBOARD, Ctrl+C / Ctrl+V *)
@@ -494,6 +495,7 @@ END ReceiveSelection;
 
 PROCEDURE PollX;
 VAR
+  st: LONGINT; brk: BOOLEAN;
   detail, code, state, sym, grp, h, i, res, w, sw: LONGINT;
   event: Event;
   c: CHAR;
@@ -525,6 +527,10 @@ BEGIN
         END;
         INC(state, grp*2);
         sym:=Display.X11GetSym(detail, state);
+        (* polpo: Ctrl+Pause/Break and Ctrl+Alt+C interrupt the running command (trap 13), as Ctrl+C
+           in the terminal of loksh does *)
+        st := event.f MOD 10000H;
+        brk := ODD(st DIV 4) & ((sym = 0FF13H) OR (sym = 0FF6BH) OR ODD(st DIV 8) & (CAP(CHR(sym MOD 100H)) = "C") & (sym < 100H));
         IF trace THEN
           Kernel.WriteString("detail: "); Kernel.WriteHex(detail, 8); Kernel.WriteString(" symbol: "); Kernel.WriteHex( sym, 8);  WriteSH(" state: ", event.f);
         END;
@@ -582,7 +588,8 @@ BEGIN
 
         (* polpo: Ctrl+letter gives the control character, Ctrl+C = 03X *)
         IF ODD(event.f MOD 10000H DIV 4) & (CAP(c) >= "A") & (CAP(c) <= "Z") THEN c := CHR(ORD(CAP(c)) - 40H) END;
-        IF sym=0AFEH THEN Paste;  (* ctrl-v *)
+        IF brk THEN Linux0.break := TRUE
+        ELSIF sym=0AFEH THEN Paste;  (* ctrl-v *)
         ELSIF c#0X THEN
           Put(c, FALSE);
         END;
@@ -662,6 +669,7 @@ BEGIN
   IF x11 THEN PollX()
   ELSE PollTTY()
   END;
+  IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;  (* polpo: an interrupt key was read *)
   RETURN SHORT(cb2-cb1);
 END Available;
 
@@ -700,6 +708,7 @@ BEGIN
     IF x11 THEN PollX()
     ELSE PollTTY()
     END;
+    IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;
   END;
   ch:= buf[ cb1 MOD 32];
   isUTF := utf[cb1 MOD 32];
@@ -708,9 +717,15 @@ END ReadUTF8;
 
 (** Returns the elapsed number of timer ticks from Oberon startup. *)
 PROCEDURE Time*(): LONGINT;
+VAR t: LONGINT;
 BEGIN
+  t := Kernel.GetTimer();
+  IF t - lastPoll >= 100 THEN  (* polpo: the interrupt keys reach also loops that only watch the clock *)
+    lastPoll := t;
+    IF x11 THEN PollX() ELSE PollTTY() END
+  END;
   IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;
-  RETURN Kernel.GetTimer() (*MOD 80000000H MIPS compiler does not like this...*);
+  RETURN t (*MOD 80000000H MIPS compiler does not like this...*);
 END  Time;
 
 (** Restricts the extent of the mouse coordinates returned by Mouse. *)

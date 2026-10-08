@@ -147,6 +147,7 @@ VAR
 
 (* X11 *)
   CopyClip*, PasteClip*: PROCEDURE;  (* initialized in System *)
+  lastPoll: LONGINT;  (* the time Time last read the keyboard *)
   x11, mmbe, iemouse: BOOLEAN;
   myProperty: LONGINT;
 
@@ -373,11 +374,17 @@ BEGIN
 IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
   isUTF := ORD(ch) >= 080H;
   modState := 0;
+  IF (ch = 0C2X) & Avail( {kbdfd}, 0) THEN  (* polpo: xterm sends Ctrl+Alt+C as U+0083 (C2 83) *)
+    ReadChar( ch2);
+    IF ch2 = 83X THEN Linux0.break := TRUE; ch := 0X ELSE Put(ch, TRUE); ch := ch2 END
+  END;
   IF ( ch= 1BX) & Avail( {kbdfd}, 0) THEN
     isUTF := FALSE;
     ReadChar( ch);
 
-    IF ch="O" THEN       (* SS3: xterm often sends F1..F4 as ESC O P/Q/R/S *)
+    IF ch=03X THEN       (* polpo: Ctrl+Alt+C (Esc, then Ctrl+C) interrupts the running command *)
+      Linux0.break := TRUE; ch:=0X
+    ELSIF ch="O" THEN       (* SS3: xterm often sends F1..F4 as ESC O P/Q/R/S *)
       ch:=0X;
       IF Avail({kbdfd}, 0) THEN
         ReadChar(ch2);
@@ -590,6 +597,7 @@ END ReceiveSelection;
 
 PROCEDURE PollX;
 VAR
+  st: LONGINT; brk: BOOLEAN;
   detail, code, state, sym, grp, h, i, res, w, sw: LONGINT;
   event: Event;
   c: CHAR;
@@ -614,6 +622,10 @@ BEGIN
         END;
         INC(state, grp*2);
         sym:=Display.X11GetSym(detail, state);
+        (* polpo: Ctrl+Pause/Break and Ctrl+Alt+C interrupt the running command (trap 13), as Ctrl+C
+           in the terminal of loksh does *)
+        st := event.f MOD 10000H;
+        brk := ODD(st DIV 4) & ((sym = 0FF13H) OR (sym = 0FF6BH) OR ODD(st DIV 8) & (CAP(CHR(sym MOD 100H)) = "C") & (sym < 100H));
         IF trace THEN
           Kernel.WriteString("detail: "); Kernel.WriteHex(detail, 8); Kernel.WriteString(" symbol: "); Kernel.WriteHex( sym, 8);  WriteSH(" state: ", event.f);
         END;
@@ -667,7 +679,8 @@ BEGIN
           IF ORD(c) >= 0A0H THEN PutUnicode(ORD(c)); c:=0X END
         END;
 
-        IF sym=0AFEH THEN Paste;  (* ctrl-v *)
+        IF brk THEN Linux0.break := TRUE
+        ELSIF sym=0AFEH THEN Paste;  (* ctrl-v *)
         ELSIF c#0X THEN
           Put(c, FALSE);
         END;
@@ -745,6 +758,7 @@ BEGIN
   IF x11 THEN PollX()
   ELSE PollTTY()
   END;
+  IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;  (* polpo: an interrupt key was read *)
   RETURN SHORT(cb2-cb1);
 END Available;
 
@@ -778,6 +792,7 @@ BEGIN
     IF x11 THEN PollX()
     ELSE PollTTY()
     END;
+    IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;
   END;
   ch:= buf[ cb1 MOD 32];
   isUTF := utf[cb1 MOD 32];
@@ -791,9 +806,15 @@ END Read;
 
 (** Returns the elapsed number of timer ticks from Oberon startup. *)
 PROCEDURE Time*(): LONGINT;
+VAR t: LONGINT;
 BEGIN
+  t := Kernel.GetTimer();
+  IF t - lastPoll >= 100 THEN  (* polpo: the interrupt keys reach also loops that only watch the clock *)
+    lastPoll := t;
+    IF x11 THEN PollX() ELSE PollTTY() END
+  END;
   IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;
-  RETURN Kernel.GetTimer() (*MOD 80000000H MIPS compiler does not like this...*);
+  RETURN t (*MOD 80000000H MIPS compiler does not like this...*);
 END  Time;
 
 (** Restricts the extent of the mouse coordinates returned by Mouse. *)
