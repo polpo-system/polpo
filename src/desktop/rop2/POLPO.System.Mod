@@ -944,7 +944,7 @@ BEGIN
     |10: Texts.WriteString(W, "Division by zero")
     |11: Texts.WriteString(W, "General protection fault")
     |12: Texts.WriteString(W, "Stack overflow")
-    |13: Texts.WriteString(W, "Keyboard interrupt")
+    |13, 113: Texts.WriteString(W, "Keyboard interrupt")  (* 113: HALT of Input, Ctrl+Pause/Break or Ctrl+Alt+C *)
     |14: Texts.WriteString(W, "Out of memory")
     |15: Texts.WriteString(W, "Bad sector number")
     |16: Texts.WriteString(W, "Disk full")
