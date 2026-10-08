@@ -228,7 +228,7 @@ polpo has five compilers. To be accepted by all of them:
   INTEGER (16 bits) on x86: write `LONG(ORD(ch)) * 256`.
 - `EXIT` only inside `LOOP`. Use `HALT(100)` (the ports accept different trap numbers).
 - Module names shorter than 20 characters, identifiers shorter than 32. String constants
-  shorter than 128 characters, and less than 4 KB of them per module.
+  shorter than 128 characters, and less than 16 KB of them per module.
 - Real constants at the ends of the range (`1.17549435E-38`) are refused: write them as
   quotients of powers of two.
 

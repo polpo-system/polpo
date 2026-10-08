@@ -22,7 +22,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     ObjMark = 0F5X; 
     CodeLength = 32768; (* 128K Code. Don't make it bigger (because of fixup list limits! *)
     ConstLength = 1024; (* was 1024 in Words *)
-    StrConstLength = 4096; (* in Bytes, up to 4*4096 *)
+    StrConstLength = 16384; (* in Bytes: a string is addressed by its word offset in 12 bits, up to 4*4096 (polpo: was 4096) *)
     LRConstLength = 256;  (* length of longreal constants, up to 4096 *)
     RConstLength = 256;  (* lentgh of real constants, up to 4096 *)
     MaxConstDist = ConstLength-15; (* in Words including a safety range *)

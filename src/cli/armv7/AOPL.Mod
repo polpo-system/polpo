@@ -198,7 +198,7 @@ field descmode is the mode of an open array descriptor, reg2 -> reg, Tjmp -> off
     CodeLength =  32000; (* words *)
     CodeLim = CodeLength - 500;
     MaxEntryCode = 16;
-    ConstLength = 5000;
+    ConstLength = 16384;  (* strings, reals, type descriptors; conx is an INTEGER (polpo: was 5000) *)
     MaxComs = 128;
     MaxExts = 15;
     MaxLittleFrame = 127 ; (*255;*) (* on ARM might only work for leaf procedures *)
