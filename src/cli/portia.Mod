@@ -404,7 +404,7 @@ BEGIN
   COPY(tree, path); Append(path, "INDEX");
   IF ~ReadFile(path, buf) THEN
     Pre; out.String("no package tree at "); out.String(tree);
-    out.String(": portia.Sync"); out.Ln; RETURN FALSE
+    out.String(": portia.Sync downloads it (or PORTIA_TREE, Portia.Tree in Oberon.Text)"); out.Ln; RETURN FALSE
   END;
   i := 0; last := NIL;
   WHILE buf[i] # 0X DO
@@ -523,7 +523,7 @@ BEGIN
     RecName("", old);
     IF ReadRec(old, installed, x) THEN
       haveDb := TRUE; converted := TRUE; SaveDb; COPY(old, path); Append(path, ".old"); F.Rename(old, path, r);
-      Pre; out.String("record: portia.world."); out.String(arch); out.String(", old: "); out.String(path); out.Ln;
+      Pre; out.String("the record is now portia.world."); out.String(arch); out.String(" (the packages besides the base system); the old one is "); out.String(path); out.Ln;
       RETURN
     END
   END;
@@ -796,7 +796,7 @@ BEGIN
         WHILE im # NIL DO
           IF (im.s # SYS) & ~Provided(set, im.s) THEN
             out.String(p.name); out.String(": "); out.String(mod); out.String(" imports ");
-            out.String(im.s); out.String(", not in the package or its deps"); out.Ln; INC(problems)
+            out.String(im.s); out.String(", not in the package or its dependencies"); out.Ln; INC(problems)
           END;
           im := im.next
         END;
@@ -878,7 +878,7 @@ BEGIN
   IF Prefix(url, "https://") OR Prefix(url, "http://") THEN COPY("fetch.Get", cmd)
   ELSIF Prefix(url, "gemini://") THEN COPY("gemini.Get", cmd)
   ELSIF Prefix(url, "spartan://") THEN COPY("spartan.Get", cmd)
-  ELSE Pre; out.String("cannot download "); out.String(url); out.Ln; RETURN FALSE
+  ELSE Pre; out.String("cannot download "); out.String(url); out.String(" (https, http, gemini or spartan)"); out.Ln; RETURN FALSE
   END;
   RETURN TRUE
 END Downloader;
@@ -900,7 +900,7 @@ BEGIN
   IF ~Run(line) THEN Pre; out.String("is the package "); out.String(cmd); out.String(" installed?"); out.Ln; RETURN FALSE END;
   IF ~Root.Exists(part) THEN Pre; out.String(url); out.String(" was not downloaded"); out.Ln; RETURN FALSE END;
   IF ~Checksums.Matches(sum, part) THEN
-    Pre; out.String(r); out.String(" has another sum, refused"); out.Ln;
+    Pre; out.String(r); out.String(" does not have the sum of [SUMS], refused"); out.Ln;
     F.Delete(part, res); RETURN FALSE
   END;
   F.Rename(part, full, res);
@@ -1081,7 +1081,7 @@ BEGIN
   IF p.tcmds = NIL THEN Pre; out.String(p.name); out.String(" has no tests"); out.Ln; RETURN TRUE END;
   Kernel.GetConfig("DISPLAY", dir);
   IF p.tdisplay & (dir = "") THEN
-    Pre; out.String(p.name); out.String(": no DISPLAY, tests skipped"); out.Ln; RETURN TRUE
+    Pre; out.String(p.name); out.String(": tests skipped, they need the desktop (set DISPLAY)"); out.Ln; RETURN TRUE
   END;
   Kernel.GetConfig("TMPDIR", dir); IF dir = "" THEN dir := "/tmp" END;
   Append(dir, "/portia-test-"); Append(dir, p.name); Append(dir, "-"); Append(dir, arch);
@@ -1110,7 +1110,7 @@ BEGIN
       IF buf[i] = 0AX THEN INC(i) END
     END;
     COPY(EndMark, name);
-    IF ~Contains(buf^, name, TRUE) THEN Pre; out.String("the tests stopped early"); out.Ln; ok := FALSE END;
+    IF ~Contains(buf^, name, TRUE) THEN Pre; out.String("the tests stopped before their end"); out.Ln; ok := FALSE END;
     it := p.tok;
     WHILE it # NIL DO
       IF ~Contains(buf^, it.s, TRUE) THEN Pre; out.String("expected "); out.String(it.s); out.Ln; ok := FALSE END;
@@ -1339,7 +1339,7 @@ BEGIN
       WHILE it # NIL DO IF Has(installed, it.s) THEN skip := TRUE END; it := it.next END;
       IF skip THEN
         IF verbose THEN
-          out.String("not recorded "); out.String(p.name); out.String(", conflicting with a recorded one (portia.Mark "); out.String(p.name); out.String(" switches)"); out.Ln
+          out.String("not recorded "); out.String(p.name); out.String(", it conflicts with a recorded package (portia.Mark "); out.String(p.name); out.String(" switches)"); out.Ln
         END
       ELSE SetInstalled(p.name, p.version)
       END
@@ -1460,7 +1460,7 @@ VAR t: termios.Termios; c, answer: CHAR; r: LONGINT; echo: BOOLEAN;
 BEGIN
   IF assumeYes THEN RETURN TRUE END;
   IF termios.Get(0, t) # 0 THEN
-    Pre; out.String("no terminal to ask: add /y"); out.Ln; RETURN FALSE
+    Pre; out.String("not asking without a terminal; add /y to proceed"); out.Ln; RETURN FALSE
   END;
   echo := ~(termios.ECHO IN t.lflag);  (* the shell may have turned echo off *)
   out.String("Proceed "); out.String(what); out.String(" "); out.Int(n, 0);
@@ -1544,7 +1544,7 @@ BEGIN
     END;
     it := it.next
   END;
-  out.String("  (importers of a changed interface are recompiled too)"); out.Ln;
+  out.String("  (installed packages importing an interface that changes are recompiled too)"); out.Ln;
   IF ~Confirm(n, verb) THEN Pre; out.String("nothing done"); out.Ln; RETURN END;
   n := 0; changedMods := NIL;
   ok := TRUE; it := order;
@@ -1700,13 +1700,13 @@ BEGIN
   ELSE p := packages; WHILE p # NIL DO Add(set, p.name); p := p.next END
   END;
   out.String("digraph arden {"); out.Ln;
-  out.String("  rankdir=LR; node [shape=box];"); out.Ln;
+  out.String("  rankdir=LR; node [shape=box, fontname=sans];"); out.Ln;
   virt := NIL; it := set;
   WHILE it # NIL DO
     p := Find(it.s);
     IF p # NIL THEN
       out.String("  "); Q(p.name); out.String(" [label="); out.Char(22X); out.String(p.name); out.String("\n"); out.String(p.version); out.Char(22X);
-      IF IsInstalled(p) THEN out.String(", style=filled") END;
+      IF IsInstalled(p) THEN out.String(", style=filled, fillcolor=lightgrey") END;
       out.String("];"); out.Ln;
       d := p.deps;
       WHILE d # NIL DO
@@ -1749,7 +1749,7 @@ BEGIN
     p := Find(it.s);
     IF p = NIL THEN NoPackage(it.s); ok := FALSE
     ELSIF delSrc & ~delObj & (p.remote = "") THEN
-      Pre; out.String(it.s); out.String(" is in the base system"); out.Ln; ok := FALSE
+      Pre; out.String(it.s); out.String(" is part of the base system, its sources stay"); out.Ln; ok := FALSE
     ELSIF delSrc & ~delObj & ~HasSources(p) THEN
       Pre; out.String("the sources of "); out.String(it.s); out.String(" are not here"); out.Ln; ok := FALSE
     ELSIF delObj & ~IsInstalled(p) & ~(delSrc & HasSources(p)) THEN
@@ -1771,7 +1771,7 @@ BEGIN
   IF ok THEN
     Pre; out.String("removing for "); out.String(arch);
     IF ~delSrc THEN out.String(" (objects; sources stay):")
-    ELSIF ~delObj THEN out.String(" (sources only):")
+    ELSIF ~delObj THEN out.String(" (the downloaded sources; the packages stay installed):")
     ELSE out.String(" (objects and downloaded sources):")
     END;
     out.Ln;
@@ -1848,7 +1848,7 @@ BEGIN
   IF Get(path) THEN line := "tar.Unpack "; Append(line, tmp); Append(line, " "); Append(line, new); Append(line, " 1") END;
   COPY(new, path); Append(path, "/INDEX");
   IF ~Root.Exists(tmp) OR ~Run(line) OR ~Root.Exists(path) THEN
-    F.Delete(tmp, r); Pre; out.String("no tree downloaded"); out.Ln; RETURN
+    F.Delete(tmp, r); Pre; out.String("no tree downloaded, the old tree stays as it was"); out.Ln; RETURN
   END;
   F.Delete(tmp, r);
   COPY(new, path); Append(path, "/COMMIT"); f := F.New(path); F.Set(R, f, 0);
@@ -1871,7 +1871,7 @@ BEGIN
   WHILE it # NIL DO
     p := Find(it.s);
     IF p = NIL THEN NoPackage(it.s)
-    ELSIF p.remote = "" THEN Pre; out.String(p.name); out.String(" is in the base system"); out.Ln
+    ELSIF p.remote = "" THEN Pre; out.String(p.name); out.String(" is part of the base system, nothing to download"); out.Ln
     ELSIF FetchPackage(p, FALSE) THEN Pre; out.String(p.name); out.String(": the sources are here and correct"); out.Ln
     END;
     it := it.next
