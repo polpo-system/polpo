@@ -13,3 +13,13 @@
 /tools/Calc.Tool
 /tools/IFS.Tool
 /tools/Iris.Tool
+
+# portia: the package tree (portia.Sync), the record of this installation
+/arden/
+/portia.world.*
+/portia.*.old
+/portia.x86
+/portia.arm
+/portia.armv7
+/portia.riscv
+/portia.mips

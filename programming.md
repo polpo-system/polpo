@@ -238,8 +238,11 @@ Test on the other ports with qemu: compile with the port's compiler, then run, f
 
 ## Packages
 
-To make a module installable with `portia`, it needs a recipe in the package tree arden. The
-modules of polpo itself are described by `arden/tools/base.toml` and generated with
-`loksh genarden.Run arden`. Other packages live in their own repositories in the polpo-system
-organisation, with their sources pinned by commit and checked by sums. See "portia, the
-package manager" in `readme.md`.
+To make a module installable with `portia`, it needs a recipe in the package tree arden
+(github.com/polpo-system/arden). portia reads the copy in `arden/` that `portia.Sync` downloads;
+to change the tree, work in a git clone of it (for example `../arden`), and try it before pushing
+with `PORTIA_TREE=../arden`. The modules of polpo itself are described by `tools/base.toml` of
+the tree and generated with `loksh genarden.Run ../arden`, which also writes the base system
+lists `portia.base.<arch>` of polpo. Other packages live in their own repositories in the
+polpo-system organisation, with their sources pinned by commit and checked by sums. See
+"portia, the package manager" in `readme.md`.

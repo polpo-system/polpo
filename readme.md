@@ -71,8 +71,18 @@ are left alone.
 
 ### portia, the package manager
 
-polpo is described as packages in the tree arden (next to polpo, `../arden`, or
-`Portia.Tree` in `Oberon.Text`): core, console, xxs, the compilers, the desktop, the
+polpo is described as packages in the tree arden (github.com/polpo-system/arden), kept in
+`arden/` in the polpo directory. It does not come with the git clone: the first thing to do
+with a new polpo is to get it, and again later to see new packages and versions:
+
+```
+bin/x86/loksh portia.Sync    # the newest commit of arden from GitHub, as files, into arden/
+```
+
+Sync downloads one archive of the newest commit and remembers the commit in `arden/COMMIT`;
+when nothing changed it downloads nothing more. A tree that is a git checkout is left to
+`git pull`. Another tree can be named with `PORTIA_TREE` or `Portia.Tree` in `Oberon.Text`.
+The tree describes core, console, xxs, the compilers, the desktop, the
 display variants and more, each with its modules per architecture, data files and
 dependencies, sorted into categories: `linux` (packages producing Linux executables, like
 core with `loksh`), `system`, `devel`, `apps`, `lib`. portia reads it:
@@ -121,12 +131,12 @@ must be recompiled into its importers. `portia.Graph [name] >
 deps.dot` writes the dependencies as a Graphviz graph. The tree can also be set with the
 environment variable `PORTIA_TREE`.
 
-Updating: polpo itself (the base system, with its objects and binaries) and the package tree
-are git repositories, updated with git; then portia upgrades the other packages:
+Updating: polpo itself (the base system, with its objects and binaries) is updated with git,
+the package tree with portia.Sync; then portia upgrades the other packages:
 
 ```
-git pull                                   # in polpo
-git -C ../arden pull                       # the package tree
+git pull                                   # polpo
+bin/x86/loksh portia.Sync                  # the package tree
 bin/x86/loksh portia.Upgrade               # every installed package with a newer version
 bin/x86/loksh portia.Upgrade /arm          # the same for the ARM port (/armv7, /riscv, /mips)
 ```
@@ -137,9 +147,16 @@ changed an interface they import: when portia compiles a package it records the 
 compares them with the new ones. A rebuild of polpo that leaves the interfaces as they were
 recompiles nothing.
 
-`portia.Record` records the installed packages (in `portia.<arch>`); display-x11 and
-display-sixel are alternatives providing `display`, `portia.Mark display-sixel` records the
-switch after `make sixel`. Installing, removing and fetching packages come next. The
+The record of the installed packages has two parts for each architecture. `portia.base.<arch>`
+lists the base system, the packages that come built with polpo; it is in git, written by
+genarden from the build recipes, and changes with `git pull`. `portia.world.<arch>` is this
+installation's own and not in git: the packages installed besides the base system, and a line
+`-name` for a base package removed or replaced. portia writes only the world file. (A record
+`portia.<arch>` of earlier versions of portia is turned into a world file the first time, and
+kept as `portia.<arch>.old`.) `portia.Record` makes the world file from the files present;
+display-x11 and display-sixel are alternatives providing `display`, and `portia.Mark
+display-sixel` records the switch after `make sixel` (in the world file: `display-sixel` and
+`-display-x11`). Installing, removing and fetching packages come next. The
 package descriptions are TOML. Libraries the base system needs live in `src/lib/<name>/`
 (`toml`, `versions`), each a package of the `lib` category.
 

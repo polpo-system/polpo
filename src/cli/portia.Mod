@@ -26,10 +26,16 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
    portia.Sums name [dir]   the [SUMS] section of a remote package, from its files in dir
                             (default: where portia keeps them)
    portia.Graph [name]      the dependencies as a Graphviz (.dot) graph
-   portia.Record, portia.Mark name, portia.Unmark name   the record of installed packages
+   portia.Record, portia.Mark name, portia.Unmark name   the record of installed packages:
+                            portia.base.<arch> (the base system, comes with polpo) and
+                            portia.world.<arch> (local: packages added, "-name" for base
+                            packages removed)
+
+   portia.Sync              the package tree: the newest commit of github.com/polpo-system/arden,
+                            downloaded as files into <polpo root>/arden/ (not into a git checkout)
 
    The tree: the environment variable PORTIA_TREE, Portia.Tree in Oberon.Text, or
-   <polpo root>/../arden/. Package descriptions
+   <polpo root>/arden/. Package descriptions
    are TOML: <tree>/<category>/<name>/<name>-<version>.arden; INDEX lists category/name
    and version. Packages are found by name or by category/name.
 
@@ -49,6 +55,7 @@ CONST
   EndMark = "portia: end of the tests";  (* the tests ran to their end *)
   PkgDir = "src/pkg/"; PkgDirLen = 8;  (* the sources of remote packages, src/pkg/<name>/ *)
   ATREMOVEDIR = 200H;
+  TreeRepo = "polpo-system/arden"; TreeBranch = "master";  (* where portia.Sync gets the tree *)
 
 TYPE
   Name = ARRAY NameLen OF CHAR;
@@ -78,7 +85,9 @@ VAR
   arch, hostArch: ARRAY 16 OF CHAR;  (* the architecture packages are read for, the one running *)
   packages: Package;
   imports: Item;  (* of the last source parsed *)
-  installed: Item; haveDb: BOOLEAN;  (* the installed packages of this architecture, portia.<arch> *)
+  installed: Item; haveDb: BOOLEAN;  (* the installed packages of this architecture *)
+  base: Item;  (* the base system of this architecture, portia.base.<arch> *)
+  converted: BOOLEAN;  (* LoadDb made portia.world.<arch> from portia.<arch> *)
   assumeYes: BOOLEAN;  (* /y: do not ask *)
   delObj, delSrc: BOOLEAN;
   doTest: BOOLEAN;  (* /t: Install and Build test the packages *)
@@ -91,6 +100,10 @@ VAR
 PROCEDURE Pre;  (* the start of a message; one string for the ARM compiler's 4 KB of strings *)
 BEGIN out.String("portia: ")
 END Pre;
+
+PROCEDURE Usage(s: ARRAY OF CHAR);  (* "usage: portia." s *)
+BEGIN out.String("usage: portia."); out.String(s); out.Ln
+END Usage;
 
 PROCEDURE NoPackage(VAR name: ARRAY OF CHAR);
 BEGIN Pre; out.String("no package "); out.String(name); out.Ln
@@ -380,16 +393,18 @@ BEGIN
 END Load;
 
 PROCEDURE ^LoadDb;
+PROCEDURE ^SaveDb;
+PROCEDURE ^Drop(VAR list: Item; s: ARRAY OF CHAR);
 
 PROCEDURE LoadTree(): BOOLEAN;
 VAR path: Name; buf: Buf; i, j: LONGINT; name, version: Name; p, last: Package;
 BEGIN
-  LoadDb;
+  converted := FALSE; LoadDb;
   IF packages # NIL THEN RETURN TRUE END;
   COPY(tree, path); Append(path, "INDEX");
   IF ~ReadFile(path, buf) THEN
     Pre; out.String("no package tree at "); out.String(tree);
-    out.String(" (Portia.Tree in Oberon.Text)"); out.Ln; RETURN FALSE
+    out.String(": portia.Sync"); out.Ln; RETURN FALSE
   END;
   i := 0; last := NIL;
   WHILE buf[i] # 0X DO
@@ -402,6 +417,11 @@ BEGIN
       p := Load(name, version);
       IF p # NIL THEN IF last = NIL THEN packages := p ELSE last.next := p END; last := p END
     END
+  END;
+  IF converted THEN  (* the old record had base packages of other architectures, empty here *)
+    p := packages;
+    WHILE p # NIL DO IF (p.remote = "") & ~Has(base, p.name) THEN Drop(installed, p.name) END; p := p.next END;
+    SaveDb; converted := FALSE
   END;
   RETURN TRUE
 END LoadTree;
@@ -453,45 +473,93 @@ BEGIN
   RETURN p.sources # NIL
 END HasSources;
 
-(* ----- the installed packages: <root>portia.<arch>, lines "name version" ----- *)
+(* ----- the installed packages ----- *)
 
-PROCEDURE DbName(VAR path: ARRAY OF CHAR);
+(* <root>portia.base.<arch>: the base system, installed with polpo (written by genarden, in git);
+   <root>portia.world.<arch>: this installation (not in git): the packages added, lines
+   "name version", and "-name" for a base package removed or replaced. installed: both together *)
+
+PROCEDURE RecName(kind: ARRAY OF CHAR; VAR path: ARRAY OF CHAR);
 VAR n: Name;
-BEGIN n := "portia."; Append(n, arch); Root.Join(n, path)
-END DbName;
+BEGIN n := "portia."; Append(n, kind); IF kind # "" THEN Append(n, ".") END; Append(n, arch); Root.Join(n, path)
+END RecName;
+
+(* the lines of the record file path into list (with versions), the "-name" ones into removed *)
+PROCEDURE ReadRec(VAR path: ARRAY OF CHAR; VAR list, removed: Item): BOOLEAN;
+VAR buf: Buf; i, j: LONGINT; name, ver: Name; it: Item;
+BEGIN
+  list := NIL; removed := NIL;
+  IF ~ReadFile(path, buf) THEN RETURN FALSE END;
+  i := 0;
+  WHILE buf[i] # 0X DO
+    j := 0; WHILE buf[i] > " " DO name[j] := buf[i]; INC(i); INC(j) END; name[j] := 0X;
+    WHILE (buf[i] = " ") OR (buf[i] = 09X) DO INC(i) END;
+    j := 0; WHILE buf[i] > " " DO ver[j] := buf[i]; INC(i); INC(j) END; ver[j] := 0X;
+    WHILE (buf[i] # 0X) & (buf[i] # 0AX) DO INC(i) END;
+    IF buf[i] = 0AX THEN INC(i) END;
+    IF name[0] = "-" THEN
+      j := 0; WHILE name[j+1] # 0X DO name[j] := name[j+1]; INC(j) END; name[j] := 0X; Add(removed, name)
+    ELSIF name # "" THEN
+      Add(list, name); it := list; WHILE it.next # NIL DO it := it.next END; COPY(ver, it.v)
+    END
+  END;
+  RETURN TRUE
+END ReadRec;
+
+PROCEDURE Ver(list: Item; VAR name, v: ARRAY OF CHAR): BOOLEAN;  (* the version of name in list *)
+BEGIN
+  WHILE (list # NIL) & (list.s # name) DO list := list.next END;
+  IF list = NIL THEN RETURN FALSE END;
+  COPY(list.v, v); RETURN TRUE
+END Ver;
 
 PROCEDURE LoadDb;
-VAR path: Name; buf: Buf; i, j: LONGINT; name, ver: Name; it: Item;
+VAR path, old: Name; world, removed, it, x: Item; haveBase, haveWorld: BOOLEAN; v: ARRAY 32 OF CHAR; r: INTEGER;
 BEGIN
-  installed := NIL; DbName(path); haveDb := ReadFile(path, buf);
-  IF haveDb THEN
-    i := 0;
-    WHILE buf[i] # 0X DO
-      j := 0; WHILE buf[i] > " " DO name[j] := buf[i]; INC(i); INC(j) END; name[j] := 0X;
-      WHILE (buf[i] = " ") OR (buf[i] = 09X) DO INC(i) END;
-      j := 0; WHILE buf[i] > " " DO ver[j] := buf[i]; INC(i); INC(j) END; ver[j] := 0X;
-      WHILE (buf[i] # 0X) & (buf[i] # 0AX) DO INC(i) END;
-      IF buf[i] = 0AX THEN INC(i) END;
-      IF name # "" THEN
-        Add(installed, name); it := installed; WHILE it.next # NIL DO it := it.next END; COPY(ver, it.v)
-      END
+  installed := NIL;
+  RecName("base", path); haveBase := ReadRec(path, base, x);
+  RecName("world", path); haveWorld := ReadRec(path, world, removed);
+  IF ~haveWorld THEN  (* the record of before: everything in portia.<arch>; what differs from base goes to world *)
+    RecName("", old);
+    IF ReadRec(old, installed, x) THEN
+      haveDb := TRUE; converted := TRUE; SaveDb; COPY(old, path); Append(path, ".old"); F.Rename(old, path, r);
+      Pre; out.String("record: portia.world."); out.String(arch); out.String(", old: "); out.String(path); out.Ln;
+      RETURN
     END
-  END
+  END;
+  it := base;
+  WHILE it # NIL DO
+    IF ~Has(removed, it.s) THEN Add(installed, it.s); x := installed; WHILE x.next # NIL DO x := x.next END; COPY(it.v, x.v) END;
+    it := it.next
+  END;
+  it := world;
+  WHILE it # NIL DO
+    x := installed; WHILE (x # NIL) & (x.s # it.s) DO x := x.next END;
+    IF x = NIL THEN Add(installed, it.s); x := installed; WHILE x.next # NIL DO x := x.next END END;
+    COPY(it.v, x.v); it := it.next
+  END;
+  haveDb := haveBase OR haveWorld
 END LoadDb;
 
+(* portia.world.<arch>: installed against base *)
 PROCEDURE SaveDb;
-VAR path: Name; f: F.File; R: F.Rider; it: Item; i: LONGINT;
+VAR path: Name; f: F.File; R: F.Rider; it: Item; i: LONGINT; v: ARRAY 32 OF CHAR;
 
   PROCEDURE W(s: ARRAY OF CHAR);
   BEGIN i := 0; WHILE s[i] # 0X DO F.Write(R, s[i]); INC(i) END
   END W;
 
 BEGIN
-  DbName(path); f := F.New(path);
+  RecName("world", path); f := F.New(path);
   IF f = NIL THEN Pre; out.String("cannot write "); out.String(path); out.Ln; RETURN END;
   F.Set(R, f, 0); it := installed;
   WHILE it # NIL DO
-    W(it.s); W(" "); W(it.v); F.Write(R, 0AX);
+    IF ~Ver(base, it.s, v) OR (v # it.v) THEN W(it.s); W(" "); W(it.v); F.Write(R, 0AX) END;
+    it := it.next
+  END;
+  it := base;
+  WHILE it # NIL DO
+    IF ~Has(installed, it.s) THEN W("-"); W(it.s); F.Write(R, 0AX) END;
     it := it.next
   END;
   F.Register(f); haveDb := TRUE
@@ -579,7 +647,7 @@ END List;
 PROCEDURE Info*;
 VAR name: Name; p: Package; n: LONGINT; it: Item;
 BEGIN
-  IF ~Arg(name) THEN out.String("usage: portia.Info name"); out.Ln; RETURN END;
+  IF ~Arg(name) THEN Usage("Info name"); RETURN END;
   IF ~LoadTree() THEN RETURN END;
   p := Find(name);
   IF p = NIL THEN NoPackage(name); RETURN END;
@@ -622,7 +690,7 @@ END FilesCmd;
 PROCEDURE Files*;
 VAR name: Name; p: Package;
 BEGIN
-  IF ~Arg(name) THEN out.String("usage: portia.Files name"); out.Ln; RETURN END;
+  IF ~Arg(name) THEN Usage("Files name"); RETURN END;
   IF ~LoadTree() THEN RETURN END;
   p := Find(name);
   IF p = NIL THEN NoPackage(name) ELSE FilesCmd(p) END
@@ -632,7 +700,7 @@ END Files;
 PROCEDURE Owner*;
 VAR file, path: Name; p: Package; it: Item; i, j: LONGINT; found: BOOLEAN;
 BEGIN
-  IF ~Arg(file) THEN out.String("usage: portia.Owner file"); out.Ln; RETURN END;
+  IF ~Arg(file) THEN Usage("Owner file"); RETURN END;
   IF ~LoadTree() THEN RETURN END;
   (* relative to the polpo root *)
   i := 0; WHILE (Root.path[i] # 0X) & (file[i] = Root.path[i]) DO INC(i) END;
@@ -728,7 +796,7 @@ BEGIN
         WHILE im # NIL DO
           IF (im.s # SYS) & ~Provided(set, im.s) THEN
             out.String(p.name); out.String(": "); out.String(mod); out.String(" imports ");
-            out.String(im.s); out.String(", not in the package or its dependencies"); out.Ln; INC(problems)
+            out.String(im.s); out.String(", not in the package or its deps"); out.Ln; INC(problems)
           END;
           im := im.next
         END;
@@ -810,7 +878,7 @@ BEGIN
   IF Prefix(url, "https://") OR Prefix(url, "http://") THEN COPY("fetch.Get", cmd)
   ELSIF Prefix(url, "gemini://") THEN COPY("gemini.Get", cmd)
   ELSIF Prefix(url, "spartan://") THEN COPY("spartan.Get", cmd)
-  ELSE Pre; out.String("cannot download "); out.String(url); out.String(" (https, http, gemini or spartan)"); out.Ln; RETURN FALSE
+  ELSE Pre; out.String("cannot download "); out.String(url); out.Ln; RETURN FALSE
   END;
   RETURN TRUE
 END Downloader;
@@ -832,7 +900,7 @@ BEGIN
   IF ~Run(line) THEN Pre; out.String("is the package "); out.String(cmd); out.String(" installed?"); out.Ln; RETURN FALSE END;
   IF ~Root.Exists(part) THEN Pre; out.String(url); out.String(" was not downloaded"); out.Ln; RETURN FALSE END;
   IF ~Checksums.Matches(sum, part) THEN
-    Pre; out.String(r); out.String(" does not have the sum of [SUMS], refused"); out.Ln;
+    Pre; out.String(r); out.String(" has another sum, refused"); out.Ln;
     F.Delete(part, res); RETURN FALSE
   END;
   F.Rename(part, full, res);
@@ -1013,7 +1081,7 @@ BEGIN
   IF p.tcmds = NIL THEN Pre; out.String(p.name); out.String(" has no tests"); out.Ln; RETURN TRUE END;
   Kernel.GetConfig("DISPLAY", dir);
   IF p.tdisplay & (dir = "") THEN
-    Pre; out.String(p.name); out.String(": tests skipped, they need the desktop (set DISPLAY)"); out.Ln; RETURN TRUE
+    Pre; out.String(p.name); out.String(": no DISPLAY, tests skipped"); out.Ln; RETURN TRUE
   END;
   Kernel.GetConfig("TMPDIR", dir); IF dir = "" THEN dir := "/tmp" END;
   Append(dir, "/portia-test-"); Append(dir, p.name); Append(dir, "-"); Append(dir, arch);
@@ -1042,7 +1110,7 @@ BEGIN
       IF buf[i] = 0AX THEN INC(i) END
     END;
     COPY(EndMark, name);
-    IF ~Contains(buf^, name, TRUE) THEN Pre; out.String("the tests stopped before their end"); out.Ln; ok := FALSE END;
+    IF ~Contains(buf^, name, TRUE) THEN Pre; out.String("the tests stopped early"); out.Ln; ok := FALSE END;
     it := p.tok;
     WHILE it # NIL DO
       IF ~Contains(buf^, it.s, TRUE) THEN Pre; out.String("expected "); out.String(it.s); out.Ln; ok := FALSE END;
@@ -1271,7 +1339,7 @@ BEGIN
       WHILE it # NIL DO IF Has(installed, it.s) THEN skip := TRUE END; it := it.next END;
       IF skip THEN
         IF verbose THEN
-          out.String("not recorded "); out.String(p.name); out.String(", it conflicts with a recorded package (portia.Mark "); out.String(p.name); out.String(" switches)"); out.Ln
+          out.String("not recorded "); out.String(p.name); out.String(", conflicting with a recorded one (portia.Mark "); out.String(p.name); out.String(" switches)"); out.Ln
         END
       ELSE SetInstalled(p.name, p.version)
       END
@@ -1291,7 +1359,7 @@ END Record;
 PROCEDURE Mark*;
 VAR name: Name; p: Package; it: Item;
 BEGIN
-  IF ~Arg(name) THEN out.String("usage: portia.Mark name"); out.Ln; RETURN END;
+  IF ~Arg(name) THEN Usage("Mark name"); RETURN END;
   IF ~LoadTree() THEN RETURN END;
   p := Find(name);
   IF p = NIL THEN NoPackage(name); RETURN END;
@@ -1304,7 +1372,7 @@ END Mark;
 PROCEDURE Unmark*;
 VAR name: Name;
 BEGIN
-  IF ~Arg(name) THEN out.String("usage: portia.Unmark name"); out.Ln; RETURN END;
+  IF ~Arg(name) THEN Usage("Unmark name"); RETURN END;
   IF ~LoadTree() THEN RETURN END;
   Drop(installed, name); SaveDb; out.String(name); out.String(" unmarked"); out.Ln
 END Unmark;
@@ -1392,7 +1460,7 @@ VAR t: termios.Termios; c, answer: CHAR; r: LONGINT; echo: BOOLEAN;
 BEGIN
   IF assumeYes THEN RETURN TRUE END;
   IF termios.Get(0, t) # 0 THEN
-    Pre; out.String("not asking without a terminal; add /y to proceed"); out.Ln; RETURN FALSE
+    Pre; out.String("no terminal to ask: add /y"); out.Ln; RETURN FALSE
   END;
   echo := ~(termios.ECHO IN t.lflag);  (* the shell may have turned echo off *)
   out.String("Proceed "); out.String(what); out.String(" "); out.Int(n, 0);
@@ -1476,7 +1544,7 @@ BEGIN
     END;
     it := it.next
   END;
-  out.String("  (installed packages importing an interface that changes are recompiled too)"); out.Ln;
+  out.String("  (importers of a changed interface are recompiled too)"); out.Ln;
   IF ~Confirm(n, verb) THEN Pre; out.String("nothing done"); out.Ln; RETURN END;
   n := 0; changedMods := NIL;
   ok := TRUE; it := order;
@@ -1541,7 +1609,7 @@ PROCEDURE Install*;
 VAR names, set, it: Item; p: Package; v: ARRAY 32 OF CHAR; ok: BOOLEAN;
 BEGIN
   IF ~Start(names) THEN RETURN END;
-  IF names = NIL THEN out.String("usage: portia.Install [/arch] name ..."); out.Ln; SetArch(hostArch); RETURN END;
+  IF names = NIL THEN Usage("Install [/arch] name ..."); SetArch(hostArch); RETURN END;
   set := NIL; ok := TRUE; it := names;
   WHILE ok & (it # NIL) DO
     p := Find(it.s);
@@ -1632,13 +1700,13 @@ BEGIN
   ELSE p := packages; WHILE p # NIL DO Add(set, p.name); p := p.next END
   END;
   out.String("digraph arden {"); out.Ln;
-  out.String("  rankdir=LR; node [shape=box, fontname=sans];"); out.Ln;
+  out.String("  rankdir=LR; node [shape=box];"); out.Ln;
   virt := NIL; it := set;
   WHILE it # NIL DO
     p := Find(it.s);
     IF p # NIL THEN
       out.String("  "); Q(p.name); out.String(" [label="); out.Char(22X); out.String(p.name); out.String("\n"); out.String(p.version); out.Char(22X);
-      IF IsInstalled(p) THEN out.String(", style=filled, fillcolor=lightgrey") END;
+      IF IsInstalled(p) THEN out.String(", style=filled") END;
       out.String("];"); out.Ln;
       d := p.deps;
       WHILE d # NIL DO
@@ -1673,7 +1741,7 @@ PROCEDURE Remove*;
 VAR names, it, needers, n2: Item; p: Package; ok: BOOLEAN; n: LONGINT;
 BEGIN
   Args(names);
-  IF names = NIL THEN out.String("usage: portia.Remove [/arch] [/src | /all] [/deps] [/y] name ..."); out.Ln; SetArch(hostArch); RETURN END;
+  IF names = NIL THEN Usage("Remove [/arch] [/src | /all] [/deps] [/y] name ..."); SetArch(hostArch); RETURN END;
   IF ~LoadTree() THEN SetArch(hostArch); RETURN END;
   IF ~haveDb THEN RecordAll(FALSE) END;
   ok := TRUE; it := names;
@@ -1681,7 +1749,7 @@ BEGIN
     p := Find(it.s);
     IF p = NIL THEN NoPackage(it.s); ok := FALSE
     ELSIF delSrc & ~delObj & (p.remote = "") THEN
-      Pre; out.String(it.s); out.String(" is part of the base system, its sources stay"); out.Ln; ok := FALSE
+      Pre; out.String(it.s); out.String(" is in the base system"); out.Ln; ok := FALSE
     ELSIF delSrc & ~delObj & ~HasSources(p) THEN
       Pre; out.String("the sources of "); out.String(it.s); out.String(" are not here"); out.Ln; ok := FALSE
     ELSIF delObj & ~IsInstalled(p) & ~(delSrc & HasSources(p)) THEN
@@ -1703,7 +1771,7 @@ BEGIN
   IF ok THEN
     Pre; out.String("removing for "); out.String(arch);
     IF ~delSrc THEN out.String(" (objects; sources stay):")
-    ELSIF ~delObj THEN out.String(" (the downloaded sources; the packages stay installed):")
+    ELSIF ~delObj THEN out.String(" (sources only):")
     ELSE out.String(" (objects and downloaded sources):")
     END;
     out.Ln;
@@ -1726,19 +1794,84 @@ BEGIN
   SetArch(hostArch)
 END Remove;
 
+(** portia.Sync -- the package tree from GitHub: the newest commit of polpo-system/arden, as files,
+  into the tree (default <root>arden/; its commit in COMMIT); a tree that is a git checkout is left
+  to git *)
+PROCEDURE Sync*;
+VAR dir, path, line, tmp, new, sha, have: Name; buf: Buf; i, j: LONGINT; r: INTEGER; f: F.File; R: F.Rider;
+
+  PROCEDURE At(VAR b: ARRAY OF CHAR; i: LONGINT; pat: ARRAY OF CHAR): BOOLEAN;  (* pat at b[i] *)
+  VAR k: LONGINT;
+  BEGIN k := 0; WHILE (pat[k] # 0X) & (b[i+k] = pat[k]) DO INC(k) END; RETURN pat[k] = 0X
+  END At;
+
+  PROCEDURE Tree(s: ARRAY OF CHAR);
+  BEGIN Pre; out.String("tree at "); out.String(sha); out.String(s); out.Ln
+  END Tree;
+
+  PROCEDURE Get(url: ARRAY OF CHAR): BOOLEAN;  (* https://<url> into tmp *)
+  BEGIN
+    line := "fetch.Get https://"; Append(line, url); Append(line, " "); Append(line, tmp);
+    RETURN Run(line) & Root.Exists(tmp)
+  END Get;
+
+  PROCEDURE Hex(c: CHAR): BOOLEAN;
+  BEGIN RETURN (c >= "0") & (c <= "9") OR (c >= "a") & (c <= "f")
+  END Hex;
+
+BEGIN
+  COPY(tree, dir); i := Len(dir); IF (i > 1) & (dir[i-1] = "/") THEN dir[i-1] := 0X END;
+  COPY(tree, path); Append(path, ".git");
+  IF Root.Exists(path) THEN Pre; out.String(dir); out.String(" is a git checkout: git pull there"); out.Ln; RETURN END;
+  Root.Join("portia.tmp", tmp); sha := "";
+  path := "api.github.com/repos/"; Append(path, TreeRepo); Append(path, "/commits/"); Append(path, TreeBranch);
+  IF Get(path) & ReadFile(tmp, buf) THEN  (* the newest commit: the first "sha": "..." *)
+    i := 0; WHILE (buf[i] # 0X) & ~At(buf^, i, '"sha"') DO INC(i) END;
+    IF buf[i] # 0X THEN
+      INC(i, 5); WHILE (buf[i] # 0X) & (buf[i] # 22X) DO INC(i) END;
+      IF buf[i] # 0X THEN INC(i) END;
+      j := 0; WHILE (j < 40) & Hex(buf[i]) DO sha[j] := buf[i]; INC(i); INC(j) END;
+      IF j = 40 THEN sha[j] := 0X ELSE sha := "" END
+    END
+  END;
+  F.Delete(tmp, r);
+  IF sha = "" THEN Pre; out.String("no commit found"); out.Ln; RETURN END;
+  COPY(tree, path); Append(path, "COMMIT");
+  IF ReadFile(path, buf) THEN
+    i := 0; WHILE (i < NameLen - 1) & (buf[i] > " ") DO have[i] := buf[i]; INC(i) END; have[i] := 0X;
+    IF have = sha THEN Tree(", up to date"); RETURN END
+  END;
+  (* the files of the commit into dir.new, then in place of dir *)
+  COPY(dir, new); Append(new, ".new");
+  COPY(new, path); Append(path, "/"); IF Root.Exists(path) THEN DeleteTree(new) END;
+  path := "codeload.github.com/"; Append(path, TreeRepo); Append(path, "/tar.gz/"); Append(path, sha);
+  IF Get(path) THEN line := "tar.Unpack "; Append(line, tmp); Append(line, " "); Append(line, new); Append(line, " 1") END;
+  COPY(new, path); Append(path, "/INDEX");
+  IF ~Root.Exists(tmp) OR ~Run(line) OR ~Root.Exists(path) THEN
+    F.Delete(tmp, r); Pre; out.String("no tree downloaded"); out.Ln; RETURN
+  END;
+  F.Delete(tmp, r);
+  COPY(new, path); Append(path, "/COMMIT"); f := F.New(path); F.Set(R, f, 0);
+  i := 0; WHILE sha[i] # 0X DO F.Write(R, sha[i]); INC(i) END; F.Write(R, 0AX); F.Register(f);
+  COPY(dir, path); Append(path, "/"); IF Root.Exists(path) THEN DeleteTree(dir) END;
+  F.Rename(new, dir, r);
+  IF r # 0 THEN Pre; out.String("cannot move "); out.String(new); out.Ln; RETURN END;
+  packages := NIL; Tree("")
+END Sync;
+
 (** portia.Fetch name ... -- download the sources of remote packages (src/pkg/<name>/), checked
   by their sums; installing does this too *)
 PROCEDURE Fetch*;
 VAR names, it: Item; p: Package;
 BEGIN
   Args(names);
-  IF names = NIL THEN out.String("usage: portia.Fetch name ..."); out.Ln; SetArch(hostArch); RETURN END;
+  IF names = NIL THEN Usage("Fetch name ..."); SetArch(hostArch); RETURN END;
   IF ~LoadTree() THEN SetArch(hostArch); RETURN END;
   it := names;
   WHILE it # NIL DO
     p := Find(it.s);
     IF p = NIL THEN NoPackage(it.s)
-    ELSIF p.remote = "" THEN Pre; out.String(p.name); out.String(" is part of the base system, nothing to download"); out.Ln
+    ELSIF p.remote = "" THEN Pre; out.String(p.name); out.String(" is in the base system"); out.Ln
     ELSIF FetchPackage(p, FALSE) THEN Pre; out.String(p.name); out.String(": the sources are here and correct"); out.Ln
     END;
     it := it.next
@@ -1762,7 +1895,7 @@ VAR A: Texts.Reader; name, dir, path: Name; p: Package; it: Item; hex: ARRAY 72 
 
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, name) THEN out.String("usage: portia.Sums name [dir]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, name) THEN Usage("Sums name [dir]"); RETURN END;
   IF ~LoadTree() THEN RETURN END;
   p := Find(name);
   IF p = NIL THEN NoPackage(name); RETURN END;
@@ -1782,7 +1915,7 @@ PROCEDURE Test*;
 VAR names, it: Item; p: Package; failed: LONGINT;
 BEGIN
   Args(names);
-  IF names = NIL THEN out.String("usage: portia.Test name ..."); out.Ln; SetArch(hostArch); RETURN END;
+  IF names = NIL THEN Usage("Test name ..."); SetArch(hostArch); RETURN END;
   SetArch(hostArch);
   IF ~LoadTree() THEN RETURN END;
   failed := 0; it := names;
@@ -1809,7 +1942,7 @@ BEGIN
   IF tree = "" THEN
     Oberon.OpenScanner(S, "Portia.Tree");
     IF S.class IN {Texts.Name, Texts.String} THEN COPY(S.s, tree)
-    ELSE Root.Join("../arden/", tree)
+    ELSE Root.Join("arden/", tree)
     END
   END;
   i := 0; WHILE tree[i] # 0X DO INC(i) END;

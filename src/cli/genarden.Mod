@@ -4,8 +4,11 @@ MODULE genarden;  (** the recipes of the base system of polpo for the package tr
                         packages of the base system: categories, descriptions, dependencies, the
                         rules saying which package a module belongs to, files), writes a recipe
                         for each of these packages into dir and the INDEX of all the recipes of
-                        dir (the remote packages too, found in its directories).
-   dir defaults to the tree of portia (PORTIA_TREE, Portia.Tree in Oberon.Text, <root>arden/).
+                        dir (the remote packages too, found in its directories); and
+                        portia.base.<arch> in the polpo root: the packages the build recipe of
+                        each architecture builds (and those without sources), installed with polpo.
+   dir defaults to the tree of portia (PORTIA_TREE, Portia.Tree in Oberon.Text, <root>arden/); a
+   tree made by portia.Sync (it has COMMIT) is refused: changes go into a git clone of arden.
    Run it after changing the build recipes, then portia.Check. *)
 
 IMPORT SYSTEM, Kernel, Linux0, Files, FATFiles, Root, Texts := Texts0, Oberon := Oberon0, texts, TOML, out;
@@ -24,6 +27,7 @@ TYPE
     name: Name;
     sec: TOML.Section;
     match, sources: Item;
+    built: SET;  (* the architectures whose build recipe compiles a source of it *)
     next: Package
   END;
 
@@ -235,7 +239,7 @@ VAR path: Name; T: Texts.Text; R: Texts.Reader; ch: CHAR; line: ARRAY MaxLine OF
       IF (j > 4) & (src[j-4] = ".") & (src[j-3] = "M") THEN
         p := PackageOf(src);
         IF p = NIL THEN out.String("genarden: no package for "); out.String(src); out.Ln; INC(problems)
-        ELSE AddSource(p, src, a, Pos(line, " /x ") >= 0, Pos(line, " /2 ") >= 0)
+        ELSE AddSource(p, src, a, Pos(line, " /x ") >= 0, Pos(line, " /2 ") >= 0); INCL(p.built, a)
         END
       END
     END;
@@ -387,6 +391,23 @@ BEGIN
   COPY(cat, tok); Append(tok, "/"); Append(tok, p.name); Append(tok, " "); Append(tok, Version); x := Add(index, tok)
 END Write;
 
+(* <root>portia.base.<arch>: the base packages of each architecture, lines "name version": the ones
+   its build recipe compiles, and those without sources (data); for portia's record *)
+PROCEDURE Bases;
+VAR a: INTEGER; p: Package; name, path: Name; f: Files.File;
+BEGIN
+  a := 0;
+  WHILE a < MaxArchs DO
+    name := "portia.base."; Append(name, archs[a]); Root.Join(name, path);
+    f := Files.New(path); Files.Set(W, f, 0); p := packages;
+    WHILE p # NIL DO
+      IF (a IN p.built) OR (p.sources = NIL) THEN Ws(p.name); Ws(" "); Ws(Version); Ln END;
+      p := p.next
+    END;
+    Files.Register(f); INC(a)
+  END
+END Bases;
+
 (* the other recipes, for the INDEX: category/name/name-version.arden as category/name version *)
 PROCEDURE Others(recipes: Item; VAR index: Item);
 VAR line: Name; i, k, n: LONGINT; x: Item;
@@ -416,6 +437,10 @@ BEGIN
     END
   END;
   i := Len(tree); IF (i > 0) & (tree[i-1] # "/") THEN Append(tree, "/") END;
+  COPY(tree, path); Append(path, "COMMIT");
+  IF Files.Old(path) # NIL THEN
+    out.String("genarden: "); out.String(tree); out.String(" is a copy made by portia.Sync; give a git clone of arden (../arden)"); out.Ln; RETURN
+  END;
   COPY(tree, path); Append(path, "tools/base.toml");
   IF ~ReadFile(path, buf) THEN out.String("genarden: no "); out.String(path); out.Ln; RETURN END;
   doc := TOML.Parse(buf^);
@@ -423,7 +448,7 @@ BEGIN
   packages := NIL; last := NIL; s := doc.first;
   WHILE s # NIL DO
     IF s.name # "" THEN
-      NEW(p); COPY(s.name, p.name); p.sec := s; p.match := Items(s, "match"); p.sources := NIL; p.next := NIL;
+      NEW(p); COPY(s.name, p.name); p.sec := s; p.match := Items(s, "match"); p.sources := NIL; p.built := {}; p.next := NIL;
       IF last = NIL THEN packages := p ELSE last.next := p END; last := p
     END;
     s := s.next
@@ -450,8 +475,10 @@ BEGIN
   COPY(tree, path); Append(path, "INDEX"); f := Files.New(path); Files.Set(W, f, 0);
   it := index; WHILE it # NIL DO Ws(it.s); Ln; it := it.next END;
   Files.Register(f);
+  Bases;
   i := 0; it := index; WHILE it # NIL DO INC(i); it := it.next END;
   out.String("genarden: "); out.Int(i, 0); out.String(" recipes in the INDEX of "); out.String(tree);
+  out.String(", portia.base.<arch> in the polpo root");
   IF problems > 0 THEN out.String(", "); out.Int(problems, 0); out.String(" problems") END;
   out.Ln
 END Run;
