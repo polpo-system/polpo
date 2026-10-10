@@ -705,7 +705,8 @@ END PutTrap;
           ELSIF (x.offset= BGEU) THEN PutR( SLTU, rt, x.reg, x.reg2); PutI( XORI, rt, rt, 1);
           ELSE OPM.err( 700);
           END;
-        ELSIF (rt=x.reg) & (0=x.reg2) THEN FixLink(x.Fjmp); FixLink(x.Tjmp);  (* we already are bool; too agressive ? *)
+        (* polpo: no shortcut for rt = x.reg (FixLink only, x.reg taken as the boolean): RETURN ~T() & (C() < 0)
+           tested C's result in RRI and returned it, or T's result coming by Fjmp: TRUE; the last case does it *)
         ELSIF   (rt#x.reg) & (rt#x.reg2) & (x.Tjmp = 0) THEN
           PutI( ORI, rt, 0, 1); PutCond(x, 2, TRUE); FixLink(x.Fjmp); PutI( ORI, rt, 0, 0)
         ELSIF  (rt#x.reg) & (rt#x.reg2) & (x.Fjmp = 0) THEN Invert(x.offset);

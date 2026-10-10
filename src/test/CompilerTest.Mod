@@ -144,6 +144,11 @@ PROCEDURE RF15(x: REAL): REAL; BEGIN RETURN Sq(x) END RF15;
 PROCEDURE RF16(x: REAL): REAL; BEGIN RETURN Sq(x) END RF16;
 
 (* bytes that end exactly at the end of a mapping, the page after it unmapped *)
+PROCEDURE True(): BOOLEAN; BEGIN RETURN TRUE END True;
+PROCEDURE Minus(): LONGINT; BEGIN RETURN -1 END Minus;
+PROCEDURE NotAnd(): BOOLEAN; BEGIN RETURN ~True() & (Minus() < 0) END NotAnd;  (* FALSE *)
+PROCEDURE OrRel(): BOOLEAN; BEGIN RETURN ~True() OR (Minus() > 0) END OrRel;    (* FALSE *)
+
 PROCEDURE EndOfMap(): BOOLEAN;
 VAR page, n, r: LONGINT; buf: ARRAY 64 OF CHAR;
 BEGIN
@@ -197,6 +202,7 @@ BEGIN
   Check("SYSTEM.MOVE of 0 bytes copies nothing", flag);
   Check("SYSTEM.MOVE up to the end of a mapping", EndOfMap());
   Check("constant relations as values", ConstRel());
+  Check("RETURN ~F() & (G() < 0), the result of G in the result register", ~NotAnd() & ~OrRel());
   Check("16 RETURN of a REAL function result", (RF1(3.0) = 9.0) & (RF16(2.0) = 4.0) & (RF8(RF9(1.5)) = 5.0625));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
