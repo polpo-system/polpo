@@ -20,6 +20,16 @@ This is an attempt to contunie development of ETH Linux Oberon in some way.
 `obj/x86/`; `make` rebuilds the whole system with it (`tools/build.Tool`) and links
 `bin/x86/loksh2`.
 
+A recipe like `tools/build.Tool` is an Oberon text of commands, one per line, mostly
+`compiler.Compile /s src/...` in the order of the imports, ending with the link; `make` only
+runs `bin/x86/loksh < tools/build.Tool`, and you can do the same, or click the commands in the
+desktop. `make arm`, `make armv7`, `make riscv` and `make mips` do it for the other ports (see
+below). The recipes build the base system, the modules in this repository. Other software is
+in packages with repositories of their own (the servers agena and cobweb, games, image
+formats, ...), which portia downloads, checks and compiles: `bin/x86/loksh portia.Install
+agena` (see portia below). After `make`, `bin/x86/loksh portia.Upgrade` compiles installed
+packages again whose imports changed.
+
 New to Oberon? Start with [a gentle introduction to polpo](gentle-introduction.md).
 
 To use the desktop (the mouse, commands in texts, editing, fonts, stopping and pausing commands),
@@ -215,15 +225,21 @@ tests are in `src/lib/tls/test` (`TLS_TEST_CERTS=src/lib/tls/test/certs loksh TL
 and so on).
 
 The same TLS has a server side, `TLS13Server`: a certificate chain with an ECDSA P-256 key,
-X25519 or P-256, no session tickets and no client certificates. `agena` is a Gemini server on it:
+X25519 or P-256, no session tickets and no client certificates. Two servers use it, in packages
+of their own (github.com/polpo-system/agena and cobweb): `agena` for Gemini and `cobweb` for the
+web.
 
 ```
-bin/x86/loksh agena.Serve capsule cert.pem key.pem    # the files below capsule, on port 1965
+bin/x86/loksh portia.Install agena cobweb                    # /t runs their tests too
+bin/x86/loksh agena.Serve capsule cert.pem key.pem           # gemini://, port 1965
+bin/x86/loksh cobweb.Serve site                              # http://, port 8080
+bin/x86/loksh cobweb.Serve site 8443 /tls cert.pem key.pem   # https://
 ```
 
-A directory gives its `index.gmi`, or a list of its files; names starting with a dot are not
-served, and each request is logged. One connection is served at a time, each with a timeout of
-ten seconds. `agena.Help` shows how to make a self-signed certificate with openssl.
+Both serve the files below a directory and log each request; they serve one client at a time,
+the others waiting in the queue of the listening socket, and Ctrl+C stops them. `agena.Help`,
+`cobweb.Help` and the READMEs of their repositories tell the rest, and how to make a
+self-signed certificate with openssl.
 
 `http`, `Internet`, `Sockets`, `DNS`, `strUtils` and `Base64` are the same files in voc
 (github.com/norayr: http, Internet, strutils, base64: main, master for Internet), apart from their

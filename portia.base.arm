@@ -29,7 +29,6 @@ http 0.1.0
 tls 0.1.0
 fetch 0.1.0
 gemini 0.1.0
-agena 0.1.0
 spartan 0.1.0
 net 0.1.0
 compiler-arm 0.1.0
