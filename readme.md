@@ -20,6 +20,8 @@ This is an attempt to contunie development of ETH Linux Oberon in some way.
 `obj/x86/`; `make` rebuilds the whole system with it (`tools/build.Tool`) and links
 `bin/x86/loksh2`.
 
+New to Oberon? Start with [a gentle introduction to polpo](gentle-introduction.md).
+
 To use the desktop (the mouse, commands in texts, editing, fonts, stopping and pausing commands),
 read [desktop.md](desktop.md). To write your own modules and commands, read
 [programming.md](programming.md): arguments, how loksh runs commands, Ctrl+C and traps, closing resources with `Oberon0.OnStop`, and code
