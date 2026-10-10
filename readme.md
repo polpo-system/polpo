@@ -210,12 +210,24 @@ downgrade), KeyUpdate is followed, and a body that ends without its length, its 
 close_notify is reported incomplete (fetch does not save it). `fetch.Verbose` shows the handshake.
 `gemini` trusts a server without a CA on first use, as the Gemini specification recommends: the
 SHA-256 of its key is kept in `$HOME/.gemini_hosts`, and a different key later is refused.
-`tools/fromvoc.py` copies a module of the tls repository with polpo's imports; the tests are in
-`src/lib/tls/test` (`TLS_TEST_CERTS=src/lib/tls/test/certs loksh TLSTestChain.Run` and so on).
+`vocsync.From` (in `src/test`) copies a module of the tls repository with polpo's imports; the
+tests are in `src/lib/tls/test` (`TLS_TEST_CERTS=src/lib/tls/test/certs loksh TLSTestChain.Run`
+and so on).
+
+The same TLS has a server side, `TLS13Server`: a certificate chain with an ECDSA P-256 key,
+X25519 or P-256, no session tickets and no client certificates. `agena` is a Gemini server on it:
+
+```
+bin/x86/loksh agena.Serve capsule cert.pem key.pem    # the files below capsule, on port 1965
+```
+
+A directory gives its `index.gmi`, or a list of its files; names starting with a dot are not
+served, and each request is logged. One connection is served at a time, each with a timeout of
+ten seconds. `agena.Help` shows how to make a self-signed certificate with openssl.
 
 `http`, `Internet`, `Sockets`, `DNS`, `strUtils` and `Base64` are the same files in voc
 (github.com/norayr: http, Internet, strutils, base64: main, master for Internet), apart from their
-import lines; `tools/tovoc.py` writes the voc version of a file.
+import lines; `vocsync.To` writes the voc version of a file.
 
 ### xxs, a console editor
 
