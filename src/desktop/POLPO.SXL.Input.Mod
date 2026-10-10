@@ -147,7 +147,9 @@ VAR
 
 (* X11 *)
   CopyClip*, PasteClip*: PROCEDURE;  (* initialized in System *)
+  Pause*: PROCEDURE;  (** polpo: Ctrl+Alt+P pauses or continues a command, set by Oberon *)
   lastPoll: LONGINT;  (* the time Time last read the keyboard *)
+  pauseReq: BOOLEAN;  (* Ctrl+Alt+P was read, Pause is to be called *)
   x11, mmbe, iemouse: BOOLEAN;
   myProperty: LONGINT;
 
@@ -374,9 +376,12 @@ BEGIN
 IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
   isUTF := ORD(ch) >= 080H;
   modState := 0;
-  IF (ch = 0C2X) & Avail( {kbdfd}, 0) THEN  (* polpo: xterm sends Ctrl+Alt+C as U+0083 (C2 83) *)
+  IF (ch = 0C2X) & Avail( {kbdfd}, 0) THEN  (* polpo: xterm sends Ctrl+Alt+C as U+0083 (C2 83), Ctrl+Alt+P as U+0090 *)
     ReadChar( ch2);
-    IF ch2 = 83X THEN Linux0.break := TRUE; ch := 0X ELSE Put(ch, TRUE); ch := ch2 END
+    IF ch2 = 83X THEN Linux0.break := TRUE; ch := 0X
+    ELSIF ch2 = 90X THEN pauseReq := TRUE; ch := 0X  (* Ctrl+Alt+P: U+0090 *)
+    ELSE Put(ch, TRUE); ch := ch2
+    END
   END;
   IF ( ch= 1BX) & Avail( {kbdfd}, 0) THEN
     isUTF := FALSE;
@@ -384,6 +389,8 @@ IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
 
     IF ch=03X THEN       (* polpo: Ctrl+Alt+C (Esc, then Ctrl+C) interrupts the running command *)
       Linux0.break := TRUE; ch:=0X
+    ELSIF ch=10X THEN    (* polpo: Ctrl+Alt+P (Esc, then Ctrl+P) pauses or continues it *)
+      pauseReq := TRUE; ch:=0X
     ELSIF ch="O" THEN       (* SS3: xterm often sends F1..F4 as ESC O P/Q/R/S *)
       ch:=0X;
       IF Avail({kbdfd}, 0) THEN
@@ -597,7 +604,7 @@ END ReceiveSelection;
 
 PROCEDURE PollX;
 VAR
-  st: LONGINT; brk: BOOLEAN;
+  st: LONGINT; brk, pz: BOOLEAN;
   detail, code, state, sym, grp, h, i, res, w, sw: LONGINT;
   event: Event;
   c: CHAR;
@@ -626,6 +633,7 @@ BEGIN
            in the terminal of loksh does *)
         st := event.f MOD 10000H;
         brk := ODD(st DIV 4) & ((sym = 0FF13H) OR (sym = 0FF6BH) OR ODD(st DIV 8) & (CAP(CHR(sym MOD 100H)) = "C") & (sym < 100H));
+        pz := ODD(st DIV 4) & ODD(st DIV 8) & (CAP(CHR(sym MOD 100H)) = "P") & (sym < 100H);  (* Ctrl+Alt+P: pause *)
         IF trace THEN
           Kernel.WriteString("detail: "); Kernel.WriteHex(detail, 8); Kernel.WriteString(" symbol: "); Kernel.WriteHex( sym, 8);  WriteSH(" state: ", event.f);
         END;
@@ -680,6 +688,7 @@ BEGIN
         END;
 
         IF brk THEN Linux0.break := TRUE
+        ELSIF pz THEN pauseReq := TRUE
         ELSIF sym=0AFEH THEN Paste;  (* ctrl-v *)
         ELSIF c#0X THEN
           Put(c, FALSE);
@@ -753,12 +762,19 @@ END PollX;
 (* ---- Interface ---- *)
 
   (** Returns the number of keystrokes in the keyboard input buffer. *)
+(* polpo: the pause key was read: Oberon.Pause, which may run the desktop until it is read again *)
+PROCEDURE CheckPause;
+BEGIN
+  IF pauseReq & (Pause # NIL) THEN pauseReq := FALSE; Pause END
+END CheckPause;
+
 PROCEDURE Available*(): INTEGER;
 BEGIN
   IF x11 THEN PollX()
   ELSE PollTTY()
   END;
   IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;  (* polpo: an interrupt key was read *)
+  CheckPause;
   RETURN SHORT(cb2-cb1);
 END Available;
 
@@ -793,6 +809,7 @@ BEGIN
     ELSE PollTTY()
     END;
     IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;
+    CheckPause
   END;
   ch:= buf[ cb1 MOD 32];
   isUTF := utf[cb1 MOD 32];
@@ -814,6 +831,7 @@ BEGIN
     IF x11 THEN PollX() ELSE PollTTY() END
   END;
   IF Linux0.break THEN Linux0.break := FALSE; HALT( 113) END;
+  CheckPause;
   RETURN t (*MOD 80000000H MIPS compiler does not like this...*);
 END  Time;
 

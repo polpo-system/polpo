@@ -3,7 +3,8 @@ Refer to the license.txt file provided with this distribution. *)
 
 MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
 
-(** Oberon system manager for dispatch of keyboard and mouse input,scheduling of tasks, cursor handling and command execution.
+(** Oberon system manager for dispatch of keyboard and mouse input,
+scheduling of tasks, cursor handling and command execution.
 *)
 
   IMPORT Kernel, Modules, Display, Input, Objects, Viewers, Fonts, Texts, Files, Oberon0;
@@ -25,7 +26,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
   Marker* = RECORD
     Fade*, Draw*: Painter  (** Remove and draw marker. *)
   END;
-  Cursor* = RECORD
+
+  Cursor* = RECORD
       marker*: Marker;  (** Cursor marker. *)
       on*: BOOLEAN;  (** Is cursor shown? *)
       X*, Y*: INTEGER  (** Absolute cursor position. *)
@@ -88,8 +90,12 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
       active: BOOLEAN;  (* is task active? used to avoid recursive task calls *)
       handle*: Handler  (** Task handler. *)
     END;
-  VAR
+
+  VAR
   looped: BOOLEAN;  (* polpo: Loop ran before: entered again after a trap, the stopped command's cleanups run (Oberon0.Stopped) *)
+  idle: BOOLEAN;  (* polpo: the loop itself is reading the input, no command or handler runs *)
+  paused: INTEGER;  (* polpo: commands paused with Ctrl+Alt+P, each under a loop of Pause *)
+  resume: BOOLEAN;  (* polpo: the innermost Pause is to end *)
   Arrow*, Star*: Marker;  (** Normal Oberon arrow, and the star marker. *)
   Mouse*, Pointer*: Cursor;  (** Normal Oberon mouse, and the star pointer. *)
 
@@ -106,10 +112,12 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
   NextTask*: Task;  (** non-portable, for internal use. *)
 
   New*: BOOLEAN;  (** enable new style mouse handling suitable for two-button mice *)
-    DW, DH, CL, W0, H0, H1, H2, H3: INTEGER;
+
+    DW, DH, CL, W0, H0, H1, H2, H3: INTEGER;
 
     GCTask: Task; (* garbage collection task *)
-    PalTab: POINTER TO ARRAY 3*256 OF CHAR;
+
+    PalTab: POINTER TO ARRAY 3*256 OF CHAR;
     ScreenOn: BOOLEAN;
   FillerColor: SHORTINT;
 
@@ -157,7 +165,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
    PROCEDURE OpenCursor* (VAR c: Cursor);
     BEGIN c.on := FALSE; c.X := 0; c.Y := 0
     END OpenCursor;
- (** Fade cursor if visible. *)
+
+ (** Fade cursor if visible. *)
    PROCEDURE FadeCursor* (VAR c: Cursor);
     BEGIN IF c.on THEN c.marker.Fade(c.X, c.Y); c.on := FALSE END
     END FadeCursor;
@@ -175,13 +184,15 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
 
 (*display management*)
 
-(** Remove the caret by broadcasting a ControlMsg into the display space.Afterwards, no visual object should own either a caret for inserting text or objects. *)
+(** Remove the caret by broadcasting a ControlMsg into the display space.
+Afterwards, no visual object should own either a caret for inserting text or objects. *)
     PROCEDURE Defocus*;
       VAR M: ControlMsg;
     BEGIN M.F := NIL; M.id := defocus; Display.Broadcast(M)
     END Defocus;
 
-(** Fade the mouse and pointer cursors if located inside the screen area X, Y, W, H.This is required before drawing inside the area X, Y, W, H. *)
+(** Fade the mouse and pointer cursors if located inside the screen area X, Y, W, H.
+This is required before drawing inside the area X, Y, W, H. *)
     PROCEDURE RemoveMarks* (X, Y, W, H: INTEGER);
     BEGIN
       IF (Mouse.X > X - 16) & (Mouse.X < X + W + 16) & (Mouse.Y > Y - 16) & (Mouse.Y < Y + H + 16) THEN
@@ -201,7 +212,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
           END;
         ELSIF M IS ControlMsg THEN
            WITH M: ControlMsg DO
-             IF M.id = mark THEN               IF (M.X >= V.X) & (M.X < V.X + V.W) & (M.Y >= V.Y) & (M.Y < V.Y + V.H) THEN
+             IF M.id = mark THEN
+               IF (M.X >= V.X) & (M.X < V.X + V.W) & (M.Y >= V.Y) & (M.Y < V.Y + V.H) THEN
                  FadeCursor(Mouse);
                  DrawCursor(Pointer, Star, M.X, M.Y)
                END
@@ -232,7 +244,11 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
       END
     END HandleFiller;
 
-(** Initialize a new display with user track width UW, system track width SW,and height H. The display is appended to the display space starting at X positionViewers.curW. Normally this procedure is only called once to configure thedefault layout of the Oberon screen. *)    PROCEDURE OpenDisplay* (UW, SW, H: INTEGER);  (** non-portable *)
+(** Initialize a new display with user track width UW, system track width SW,
+and height H. The display is appended to the display space starting at X position
+Viewers.curW. Normally this procedure is only called once to configure the
+default layout of the Oberon screen. *)
+    PROCEDURE OpenDisplay* (UW, SW, H: INTEGER);  (** non-portable *)
        VAR Filler: Viewers.Viewer;
     BEGIN
        Input.SetMouseLimits(0, 0, Viewers.curW + UW + SW, H);
@@ -241,7 +257,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
          NEW(Filler); Filler.handle := HandleFiller;
          Viewers.InitTrack(UW, H, Filler) (*init user track*)
        END;
-       IF SW # 0 THEN         NEW(Filler); Filler.handle := HandleFiller;
+       IF SW # 0 THEN
+         NEW(Filler); Filler.handle := HandleFiller;
          Viewers.InitTrack(SW, H, Filler) (*init system track*)
        END
     END OpenDisplay;
@@ -254,7 +271,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
       dcm.F := NIL;  dcm.id := Display.suspend;  Display.Broadcast(dcm);
       dcm.F := NIL;  dcm.id := Display.restore;  Display.Broadcast(dcm)
     END UpdateDisplay;
-(** Returns the width in pixels of the display that contains the X coordinate. *)
+
+(** Returns the width in pixels of the display that contains the X coordinate. *)
     PROCEDURE DisplayWidth* (X: INTEGER): INTEGER;
     BEGIN RETURN DW
     END DisplayWidth;
@@ -290,7 +308,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
       RETURN max.Y + max.H DIV 2
     END UY;
 
-(** Allocate a new user viewer within the display located at DX. (X, Y)returns the suggested position. *)
+(** Allocate a new user viewer within the display located at DX. (X, Y)
+returns the suggested position. *)
     PROCEDURE AllocateUserViewer* (DX: INTEGER; VAR X, Y: INTEGER);
     BEGIN
       IF Pointer.on THEN X := Pointer.X; Y := Pointer.Y
@@ -311,7 +330,8 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
       RETURN alt.Y + alt.H DIV 2
     END SY;
 
-(** Allocate a new system viewer within the display located at DX.(X, Y) returns the suggested position. *)
+(** Allocate a new system viewer within the display located at DX.
+(X, Y) returns the suggested position. *)
     PROCEDURE AllocateSystemViewer* (DX: INTEGER; VAR X, Y: INTEGER);
     BEGIN
       IF Pointer.on THEN X := Pointer.X; Y := Pointer.Y
@@ -359,7 +379,13 @@ END MarkedText;
 
   (*command interpretation*)
 
-(** Execute an Oberon command. Name should be a string of the form"M.P", where M is the module and P is the procedure of the command.Par is the command parameter record; it will be assigned to Oberon.Parso that the command can pick up its parameters. The new flag indicatesif the module M should be reloaded from disk (obly possible if M is a "top"module, i.e. it has no clients. Res indicates success (res = 0) or failure (res # 0).Modules.resMsg contains an explanation of what went wrong when res # 0. *)
+(** Execute an Oberon command. Name should be a string of the form
+"M.P", where M is the module and P is the procedure of the command.
+Par is the command parameter record; it will be assigned to Oberon.Par
+so that the command can pick up its parameters. The new flag indicates
+if the module M should be reloaded from disk (obly possible if M is a "top"
+module, i.e. it has no clients. Res indicates success (res = 0) or failure (res # 0).
+Modules.resMsg contains an explanation of what went wrong when res # 0. *)
   PROCEDURE Call* (name: ARRAY OF CHAR; par: ParList; new: BOOLEAN; VAR res: INTEGER);
     BEGIN
       Par := par;
@@ -376,7 +402,8 @@ END MarkedText;
     END
   END SyncPar;
 
-(** Returns the selected stretch [beg, end[ of the current selected text T.Time indicates the time of selection; time = -1 indicates that no text is currently selected. *)
+(** Returns the selected stretch [beg, end[ of the current selected text T.
+Time indicates the time of selection; time = -1 indicates that no text is currently selected. *)
     PROCEDURE GetSelection* (VAR text: Texts.Text; VAR beg, end, time: LONGINT);
       VAR M: SelectMsg;
     BEGIN
@@ -390,7 +417,8 @@ END MarkedText;
       Kernel.GC
     END GC;
 
-(** Install a background task. The background task is periodically activatedby calling its handler when the system has nothing else to do. *)
+(** Install a background task. The background task is periodically activated
+by calling its handler when the system has nothing else to do. *)
     PROCEDURE Install* (T: Task);
       VAR t: Task;
     BEGIN t := NextTask; T.active := FALSE;
@@ -498,7 +526,8 @@ END MarkedText;
     END;
     CurTask := p  (* restore the previously active task *)
   END CallTask;
-(* Recover after a task has trapped. *)
+
+(* Recover after a task has trapped. *)
   PROCEDURE HandleTaskTrap;
   VAR t: Task;
   BEGIN
@@ -508,16 +537,11 @@ END MarkedText;
     CurTask := NIL  (* now no task is active *)
   END HandleTaskTrap;
 
-(** Main Oberon task dispatcher. Reads the mouse position and characterstyped, informing the viewer of the display space of events using theDisplay.InputMsg. The loop broadcasts a ControlMsg (id = mark) when themarker is set. Pressing the neutralise key results in a ControlMsg (id = neutralize)to be broadcast. All frames receiving the neutralize message should removeselections and the caret. The Loop periodically activates background tasks andthe garbage collector, if no mouse or keyboard events are arriving. *)
-   PROCEDURE Loop*;
-      VAR V: Viewers.Viewer; M: InputMsg; N: ControlMsg;
-        X, Y: INTEGER; keys, shift, oldshift: SET; ch: CHAR; utf: BOOLEAN;
+
+  (* one round of the loop: an input event, or the background tasks until one comes *)
+  PROCEDURE Step(VAR keys, oldshift: SET; VAR X, Y: INTEGER);
+      VAR V: Viewers.Viewer; M: InputMsg; N: ControlMsg; shift: SET; ch: CHAR; utf: BOOLEAN;
     BEGIN
-      IF CurTask # NIL THEN HandleTaskTrap END;
-      IF looped THEN Oberon0.Stopped END;  (* polpo: the cleanups registered with Oberon0.OnStop *)
-      looped := TRUE;
-      Input.Mouse(keys, X, Y); oldshift := {};
-      LOOP
         IF Input.Available() > 0 THEN
           Input.ReadUTF8(ch, utf);
           IF ~ScreenOn THEN ToggleScreen
@@ -534,7 +558,7 @@ END MarkedText;
           ELSE
             M.F := NIL; M.id := consume; M.ch := ch; M.utf := utf;
             M.fnt := CurFnt; M.col := CurCol; M.voff := CurOff;
-            Display.Broadcast(M);
+            idle := FALSE; Display.Broadcast(M); idle := TRUE;
             DEC(GCTask.time, ActVal)
           END;
           Input.Mouse(keys, X, Y)
@@ -543,27 +567,75 @@ END MarkedText;
             M.keys := keys; M.X := X; M.Y := Y;
             M.dlink := NIL; M.x := 0; M.y := 0;
             M.res := MIN(INTEGER); Objects.Stamp(M);
-            V := Viewers.This(M.X, M.Y); V.handle(V, M);
+            V := Viewers.This(M.X, M.Y); idle := FALSE; V.handle(V, M); idle := TRUE;
             Input.Mouse(keys, X, Y)
-          UNTIL (keys = {}) OR (Input.Available() # 0);
+          UNTIL (keys = {}) OR (Input.Available() # 0) OR resume;
           DEC(GCTask.time, ActVal)
         ELSE (*keys = {}*)
           M.F := NIL; M.id := track; M.keys := keys; M.X := X; M.Y := Y;
           M.dlink := NIL; M.x := 0; M.y := 0;
           M.res := MIN(INTEGER); Objects.Stamp(M);
-          V := Viewers.This(X, Y); V.handle(V, M);
+          V := Viewers.This(X, Y); idle := FALSE; V.handle(V, M); idle := TRUE;
           Input.Mouse(keys, X, Y);
           LOOP
             Input.KeyState(shift);
-            IF (keys # {}) OR (X # M.X) OR (Y # M.Y) OR (Input.Available() # 0) OR (shift # oldshift) THEN EXIT END;
-            CallTask;
+            IF (keys # {}) OR (X # M.X) OR (Y # M.Y) OR (Input.Available() # 0) OR (shift # oldshift) OR resume THEN EXIT END;
+            CallTask;  (* the background tasks are the desktop's: idle, Ctrl+Alt+P read by them continues *)
             Input.Mouse(keys, X, Y);
             IF ~Mouse.on THEN EXIT END  (* a task or handler switched off the mouse *)
           END;
           oldshift := shift
         END
-      END
+    END Step;
+
+(** Main Oberon task dispatcher. Reads the mouse position and characters
+typed, informing the viewer of the display space of events using the
+Display.InputMsg. The loop broadcasts a ControlMsg (id = mark) when the
+marker is set. Pressing the neutralise key results in a ControlMsg (id = neutralize)
+to be broadcast. All frames receiving the neutralize message should remove
+selections and the caret. The Loop periodically activates background tasks and
+the garbage collector, if no mouse or keyboard events are arriving. *)
+   PROCEDURE Loop*;
+      VAR X, Y: INTEGER; keys, oldshift: SET; W: Texts.Writer;
+    BEGIN
+      IF CurTask # NIL THEN HandleTaskTrap END;
+      IF looped THEN Oberon0.Stopped END;  (* polpo: the cleanups registered with Oberon0.OnStop *)
+      IF paused > 0 THEN  (* polpo: a trap ended the paused commands too *)
+        Texts.OpenWriter(W); Texts.WriteInt(W, paused, 0); Texts.WriteString(W, " paused command(s) ended by the trap");
+        Texts.WriteLn(W); Texts.Append(Log, W.buf)
+      END;
+      looped := TRUE; idle := TRUE; paused := 0; resume := FALSE;
+      Input.Mouse(keys, X, Y); oldshift := {};
+      LOOP Step(keys, oldshift, X, Y) END
     END Loop;
+
+(* a line in the Log, on a line of its own *)
+  PROCEDURE LogLine(s: ARRAY OF CHAR);
+    VAR W: Texts.Writer; R: Texts.Reader; ch: CHAR;
+  BEGIN
+    Texts.OpenWriter(W);
+    IF Log.len > 0 THEN Texts.OpenReader(R, Log, Log.len - 1); Texts.Read(R, ch); IF ch # 0DX THEN Texts.WriteLn(W) END END;
+    Texts.WriteString(W, s); Texts.WriteLn(W); Texts.Append(Log, W.buf)
+  END LogLine;
+
+(* polpo: Ctrl+Alt+P, read by Input. While a command runs it pauses: the desktop goes on in a loop of
+   its own, above the waiting command, until Ctrl+Alt+P again in the desktop continues it. Paused
+   commands continue in reverse order (the last paused first); at most 8. *)
+  PROCEDURE Pause;
+    CONST Max = 8;
+    VAR X, Y: INTEGER; keys, oldshift: SET;
+  BEGIN
+    IF idle THEN  (* the desktop read the key: the innermost paused command continues *)
+      IF paused > 0 THEN resume := TRUE END
+    ELSIF paused < Max THEN
+      INC(paused); LogLine("paused (Ctrl+Alt+P continues it)");
+      idle := TRUE; resume := FALSE;
+      Input.Mouse(keys, X, Y); oldshift := {};
+      WHILE ~resume DO Step(keys, oldshift, X, Y) END;
+      resume := FALSE; idle := FALSE; DEC(paused);
+      LogLine("continued")
+    END
+  END Pause;
 
   PROCEDURE Init;
   VAR s: ARRAY 8 OF CHAR;
@@ -579,6 +651,7 @@ BEGIN
   Oberon0.SetOptionChar("\"); OptionChar := Oberon0.OptionChar;
   Oberon0.SetParHook(SyncPar);
   Log := Oberon0.Log; OpenText := NIL; CurTask := NIL;
+  idle := FALSE; paused := 0; resume := FALSE; Input.Pause := Pause;  (* polpo: Ctrl+Alt+P; commands run before Loop (System.InitCommands) are not idle *)
   Arrow.Fade := FlipArrow; Arrow.Draw := FlipArrow;
   Star.Fade := FlipStar; Star.Draw := FlipStar;
   OpenCursor(Mouse); OpenCursor(Pointer);
@@ -611,27 +684,109 @@ END Oberon.
 (** Remarks:
 
 1. Command execution
-Execution of commands is the task of modules Module. Oberon.Call provides anabstraction for this mechanism and also a way to pass parameters in the form ofa text to the executed command. After command execution, the global variableOberon.Par is a pointer to a parameter record specifying a parameter text, aposition in that text, and details what objects are involved in the commands.The vwr field of the ParRec points to the viewer in which the command was executed.The frame field of the ParRec points to the direct child of the vwr (the menu or themain frame) from which the command was executed. This semantics is compatiblewith older Oberon applications and is seldomly used today. The obj field of theParRec points to the object (normally a frame) that executed the command.The Oberon.Par pointer is initialized before command execution to the parameterrecord passed to Oberon.Call.
+Execution of commands is the task of modules Module. Oberon.Call provides an
+abstraction for this mechanism and also a way to pass parameters in the form of
+a text to the executed command. After command execution, the global variable
+Oberon.Par is a pointer to a parameter record specifying a parameter text, a
+position in that text, and details what objects are involved in the commands.
+The vwr field of the ParRec points to the viewer in which the command was executed.
+The frame field of the ParRec points to the direct child of the vwr (the menu or the
+main frame) from which the command was executed. This semantics is compatible
+with older Oberon applications and is seldomly used today. The obj field of the
+ParRec points to the object (normally a frame) that executed the command.
+The Oberon.Par pointer is initialized before command execution to the parameter
+record passed to Oberon.Call.
 
 2. Cursors and Markers
-Markers are a way to draw and undraw a shape on the display. Typically, drawand undraw can be realized by an invert display operation. Cursors keep track ofthe current position and state (visible or not) of a marker. The Mouse cursor is thestandard mouse arrow, and the Pointer cursor is the star marker placed with theSetup key. Repeatedly calling Oberon.DrawCursor with different coordinates move acursor (and marker) across the display. Before drawing in a certain area of thedisplay, cursors should be removed with Oberon.RemoveMarks or Oberon.FadeCursor(failingly to do so may result in the cursor leaving garbage on the display whendrawing operations are performed in its vicinity). Note that on some Oberon hostplatforms (Windows, Mac, Unix) the mouse cursor is under control of the hostwindowing system, and is automatically faded when required. It is recommendedto fade the cursor on these platforms anyway, as your Oberon programs will thenalso work on native Oberon systems.
+Markers are a way to draw and undraw a shape on the display. Typically, draw
+and undraw can be realized by an invert display operation. Cursors keep track of
+the current position and state (visible or not) of a marker. The Mouse cursor is the
+standard mouse arrow, and the Pointer cursor is the star marker placed with the
+Setup key. Repeatedly calling Oberon.DrawCursor with different coordinates move a
+cursor (and marker) across the display. Before drawing in a certain area of the
+display, cursors should be removed with Oberon.RemoveMarks or Oberon.FadeCursor
+(failingly to do so may result in the cursor leaving garbage on the display when
+drawing operations are performed in its vicinity). Note that on some Oberon host
+platforms (Windows, Mac, Unix) the mouse cursor is under control of the host
+windowing system, and is automatically faded when required. It is recommended
+to fade the cursor on these platforms anyway, as your Oberon programs will then
+also work on native Oberon systems.
 
 3. The InputMsg
-The InputMsg informs the frames of the display space of the current mouse positionand character typed. It is repeatedly broadcast into the display space by theOberon.Loop for each input event. An InputMsg id of Oberon.consume indicates akey was pressed. The ASCII keycode is contained in the ch field of the message(check the description of module Input for special keycodes). The fields fnt, col andvoff give information about the requested font, color (index), and verticall offset(in pixels). These values are copied from hidden variables in the Oberon module,which are set with the procedures SetFont, SetColor, and SetOffset. Note that theTextGadgets ignore these fields when typing. Instead the font, color and verticaloffset of the character immediately before the caret is used (thus the fields havefallen out of use). A frame should only process the consume message if it has thecaret set. Afterwards the message should be invalidated by setting the message resfield to 0 or a positive value. This prevents the character being consumed by otherframes in the display space and also terminates the message broadcast.
- An InputMsg id of track indicates a mouse event. The display space normally only forwards this message to the frame located at position X, Y on the display. Field X, Y indicates the absolute mouse position (cursor hotspot) and keys the mouse button state (which mouse buttons are pressed). The mouse buttons are numbered 0, 1, 2 for right, middle, and left respectively. It is typical for a frame receiving a track message with keys # {} to temporarily taking control of the mouse by polling (using module Input). As soon as all mouse buttons are released, control must be passed back to the Oberon loop. A frame should invalidate the track message if it took action on a mouse event; otherwise the enclosing frame might think that the message could not be handled. In some cases a child frame takes no action on an event even though a mouse buttton is pressed and the mouse is located inside the frame. This is an indication that the child frame cannot or is unwilling to process the event, and the parent (and forwarder of the message in the display space) should take a default action. Note that during a tracking operation, no background tasks can be serviced.
+The InputMsg informs the frames of the display space of the current mouse position
+and character typed. It is repeatedly broadcast into the display space by the
+Oberon.Loop for each input event. An InputMsg id of Oberon.consume indicates a
+key was pressed. The ASCII keycode is contained in the ch field of the message
+(check the description of module Input for special keycodes). The fields fnt, col and
+voff give information about the requested font, color (index), and verticall offset
+(in pixels). These values are copied from hidden variables in the Oberon module,
+which are set with the procedures SetFont, SetColor, and SetOffset. Note that the
+TextGadgets ignore these fields when typing. Instead the font, color and vertical
+offset of the character immediately before the caret is used (thus the fields have
+fallen out of use). A frame should only process the consume message if it has the
+caret set. Afterwards the message should be invalidated by setting the message res
+field to 0 or a positive value. This prevents the character being consumed by other
+frames in the display space and also terminates the message broadcast.
+ An InputMsg id of track indicates a mouse event. The display space normally only
+ forwards this message to the frame located at position X, Y on the display. Field X, Y
+ indicates the absolute mouse position (cursor hotspot) and keys the mouse button
+ state (which mouse buttons are pressed). The mouse buttons are numbered 0, 1, 2
+ for right, middle, and left respectively. It is typical for a frame receiving a track
+ message with keys # {} to temporarily taking control of the mouse by polling (using
+ module Input). As soon as all mouse buttons are released, control must be passed
+ back to the Oberon loop. A frame should invalidate the track message if it took
+ action on a mouse event; otherwise the enclosing frame might think that the message
+ could not be handled. In some cases a child frame takes no action on an event even
+ though a mouse buttton is pressed and the mouse is located inside the frame. This is
+ an indication that the child frame cannot or is unwilling to process the event, and
+ the parent (and forwarder of the message in the display space) should take a default
+ action. Note that during a tracking operation, no background tasks can be serviced.
 
 4. The ControlMsg
-The control message manages display space wide events like removing the (one andonly) caret, pressing Neutralise (for removing the caret and the selections), and setting thestar marker with the Setup key. The id field of the control message is set to defocus,neutralize, and mark respectively. Note that the mark variant need not be handled byown frames; it is already processed by the Viewers. Messages of this type must neverbe invalidated during their travels through the display space.
+The control message manages display space wide events like removing the (one and
+only) caret, pressing Neutralise (for removing the caret and the selections), and setting the
+star marker with the Setup key. The id field of the control message is set to defocus,
+neutralize, and mark respectively. Note that the mark variant need not be handled by
+own frames; it is already processed by the Viewers. Messages of this type must never
+be invalidated during their travels through the display space.
 
 5. The CaretMsg
-The CaretMsg controls the removing (id = reset), retrieving (id = get) and setting(id = set) of the caret on a frame to frame basis. All text editor-like frames shouldrespond to this message. The car field of the message defines the editor frame involvedfor reset and set, and returns the editor frame that has the caret for get. The text fieldspecifies which text is meant (or which text is returned for get). In the reset and setcases this field is mostly redundant but is checked for correctness ANYWAY. The posfield must be valid position in the text. The CaretMsg is always broadcast.
+The CaretMsg controls the removing (id = reset), retrieving (id = get) and setting
+(id = set) of the caret on a frame to frame basis. All text editor-like frames should
+respond to this message. The car field of the message defines the editor frame involved
+for reset and set, and returns the editor frame that has the caret for get. The text field
+specifies which text is meant (or which text is returned for get). In the reset and set
+cases this field is mostly redundant but is checked for correctness ANYWAY. The pos
+field must be valid position in the text. The CaretMsg is always broadcast.
 
 6. The SelectMsg
-In a similar way as the CaretMsg, the SelectMsg controls the removing (id = reset),retrieving (id = get) and setting (id = set) of the selection. In this case, the sel fieldindicates the destination frame or returned frame, in a similar manner as the carfield of the CaretMsg. The SelectMsg is extended with fields for specifying/retrievingthe selection time, starting and ending position. The SelectMsg is always broadcast.
+In a similar way as the CaretMsg, the SelectMsg controls the removing (id = reset),
+retrieving (id = get) and setting (id = set) of the selection. In this case, the sel field
+indicates the destination frame or returned frame, in a similar manner as the car
+field of the CaretMsg. The SelectMsg is extended with fields for specifying/retrieving
+the selection time, starting and ending position. The SelectMsg is always broadcast.
 
 7. Background tasks
-The handle procedure variable of installed background tasks are periodically calledby the Oberon loop when the Oberon system is idle (no mouse or keyboard events).The task handlers have to be programmed in an inverted manner and should returnas quickly as possible to the loop, otherwise the user will notice delays (typicallywhen elapsed time is greater than 100-200ms). As tasks are activated periodically,a badly written task can cause a cascade of traps, one for each invocation. By default,the loop removes such a task that does not return from the task list (the safe flagprevents the loop from such an action). The garbage collector is realized as a task.A task can request to be invoked only at a specified time by setting the time field inthe task descriptor. The time is measured according to Oberon.Time() at tick frequencyspecified by Input.TimeUnit. After each handler invocation, the task is expected toadvance the time field to the next earliest event, overwise it will never be invoked infuture. It is highly recommended to use this feature by specifying for tasks that areonly invoked every few ms. This will save network traffic when using Oberon in anX-Window environment.
+The handle procedure variable of installed background tasks are periodically called
+by the Oberon loop when the Oberon system is idle (no mouse or keyboard events).
+The task handlers have to be programmed in an inverted manner and should return
+as quickly as possible to the loop, otherwise the user will notice delays (typically
+when elapsed time is greater than 100-200ms). As tasks are activated periodically,
+a badly written task can cause a cascade of traps, one for each invocation. By default,
+the loop removes such a task that does not return from the task list (the safe flag
+prevents the loop from such an action). The garbage collector is realized as a task.
+A task can request to be invoked only at a specified time by setting the time field in
+the task descriptor. The time is measured according to Oberon.Time() at tick frequency
+specified by Input.TimeUnit. After each handler invocation, the task is expected to
+advance the time field to the next earliest event, overwise it will never be invoked in
+future. It is highly recommended to use this feature by specifying for tasks that are
+only invoked every few ms. This will save network traffic when using Oberon in an
+X-Window environment.
 
 8. The Oberon Loop
-The Oberon loop is called when the Oberon system starts, and never returns untilthe Oberon system is left. After a trap occurs, the run-time stack is reset, and theOberon loop is started afresh. The Oberon loop polls the mouse and keyboard forevents that it broadcasts to the display space using messages. When no events arehappening, background tasks are activated periodically in a round-robin fashion.
+The Oberon loop is called when the Oberon system starts, and never returns until
+the Oberon system is left. After a trap occurs, the run-time stack is reset, and the
+Oberon loop is started afresh. The Oberon loop polls the mouse and keyboard for
+events that it broadcasts to the display space using messages. When no events are
+happening, background tasks are activated periodically in a round-robin fashion.
 *)
