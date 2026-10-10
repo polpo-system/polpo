@@ -1,6 +1,6 @@
 MODULE portia;  (** polpo's package manager; reads the package tree arden *)
 
-(* portia.List [category]   the packages, of a category: linux, system, devel, apps, lib
+(* portia.List [category]   the packages, of a category: linux, system, devel, apps, games, lib
    portia.Info name         a package: description, dependencies, provides, conflicts
    portia.Files name        the files of a package on this architecture
    portia.Owner file        the package a file belongs to (sources, objects, data)
@@ -71,7 +71,7 @@ TYPE
 
   Package = POINTER TO PackageDesc;
   PackageDesc = RECORD
-    name, category, version, desc: Name;  (* category: linux, system, devel, apps, lib *)
+    name, category, version, desc: Name;  (* category: linux, system, devel, apps, games, lib *)
     deps, provides, conflicts, sources, files, modules, build: Item;  (* modules: names of sources *)
     remote: Name;  (* the base of the links of a remote package, else "" *)
     sums: Item;  (* of a remote package: repository path, sum in r *)
@@ -615,7 +615,7 @@ BEGIN
 END ListItems;
 
 (** portia.List [category] -- the packages of the tree (of one category: linux, system,
-  devel, apps, lib); i: installed here, u: a newer version in the tree, s: the sources of a
+  devel, apps, games, lib); i: installed here, u: a newer version in the tree, s: the sources of a
   remote package downloaded, not installed; r: a remote package *)
 PROCEDURE List*;
 VAR p: Package; n: LONGINT; v: ARRAY 32 OF CHAR; cat: Name; all: BOOLEAN;

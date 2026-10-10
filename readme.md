@@ -88,7 +88,7 @@ when nothing changed it downloads nothing more. A tree that is a git checkout is
 The tree describes core, console, xxs, the compilers, the desktop, the
 display variants and more, each with its modules per architecture, data files and
 dependencies, sorted into categories: `linux` (packages producing Linux executables, like
-core with `loksh`), `system`, `devel`, `apps`, `lib`. portia reads it:
+core with `loksh`), `system`, `devel`, `apps`, `games`, `lib`. portia reads it:
 
 ```
 bin/x86/loksh portia.List                    # the packages; i: installed
