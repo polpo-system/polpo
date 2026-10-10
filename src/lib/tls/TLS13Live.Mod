@@ -493,6 +493,18 @@ BEGIN
   Init(s)
 END Disconnect;
 
+(** s is the server end of the connection fd, after a handshake made by TLS13Server: s writes
+  with the server application secret and reads with the client one. The names of the fields
+  are those of the client: "client" is what s writes, "server" what it reads. *)
+PROCEDURE Accepted*(VAR s: State; fd: Internet.Socket; VAR serverSecret, clientSecret: TLSBytes.Buffer);
+BEGIN
+  Init(s); s.fd := fd; s.connected := TRUE;
+  TLSBytes.Copy(serverSecret, s.clientAppSecret); TLSBytes.Copy(clientSecret, s.serverAppSecret);
+  TLS13Keys.TrafficKey(s.clientAppSecret, s.clientAppKey); TLS13Keys.TrafficIV(s.clientAppSecret, s.clientAppIV);
+  TLS13Keys.TrafficKey(s.serverAppSecret, s.serverAppKey); TLS13Keys.TrafficIV(s.serverAppSecret, s.serverAppIV);
+  s.handshakeDone := TRUE
+END Accepted;
+
 (** plain to the server, in records of at most 2^14 bytes *)
 PROCEDURE WriteAppBuffer*(VAR s: State; VAR plain: TLSBytes.Buffer): BOOLEAN;
 VAR rec, part: TLSBytes.Buffer; pos, n: LONGINT;

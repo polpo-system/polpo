@@ -6,8 +6,13 @@ MODULE TLSECDSA;
    Verification uses only public values. ECDH uses a Montgomery ladder whose steps do not depend
    on the bits of the scalar (a swap by arithmetic, not a branch), but the field arithmetic is
    not constant time; the scalar is an ephemeral key used once, which timing attacks (they need
-   many runs with one key) cannot exploit. *)
-IMPORT TLSBytes, TLSNum;
+   many runs with one key) cannot exploit.
+   Sign (P-256 with SHA-256, for the CertificateVerify of a server) takes k from the key and the
+   hash (RFC 6979), so that no weak random number can reveal the key; k G is computed by the same
+   ladder. The key of a server is used for many signatures, and the arithmetic (the final
+   subtraction of MontMul) is not constant time: good for experimental servers, not hardened
+   against an attacker who measures many handshakes. *)
+IMPORT TLSBytes, TLSNum, TLSSHA256;
 
 CONST
   P256* = 1; P384* = 2; P521* = 3;  (** curves *)
@@ -329,6 +334,86 @@ BEGIN
   Affine(curves[curve], r, shared, y);
   RETURN TRUE
 END ECDH;
+
+(* ----- signatures ----- *)
+
+(* mac := HMAC-SHA-256 with key of v, then the byte sep (none if sep < 0), then x and h *)
+PROCEDURE Mac(VAR key, v: TLSBytes.Buffer; sep: LONGINT; VAR x, h, mac: TLSBytes.Buffer);
+VAR m: TLSBytes.Buffer; d: TLSSHA256.Digest;
+BEGIN
+  TLSBytes.Copy(v, m);
+  IF sep >= 0 THEN TLSBytes.AppendByte(m, sep); TLSBytes.Append(m, x); TLSBytes.Append(m, h) END;
+  TLSSHA256.HMAC(key, m, d); TLSSHA256.DigestToBuffer(d, mac);
+  TLSBytes.SetLen(m, 0)
+END Mac;
+
+(** r and s (32 bytes each) of the ECDSA signature of hash (32 bytes, SHA-256) with the private
+  key priv (32 bytes) on P-256, k by RFC 6979; FALSE if priv is not a key of the curve *)
+PROCEDURE Sign*(curve: LONGINT; VAR priv, hash, r, s: TLSBytes.Buffer): BOOLEAN;
+VAR
+  d, e, k, t, u, rn, sn, kinv: Num; g, p: Point;
+  x, y, h1, key, v, none: TLSBytes.Buffer; i: LONGINT; done: BOOLEAN;
+BEGIN
+  TLSBytes.Init(r); TLSBytes.Init(s);
+  IF (curve # P256) OR (hash.len # 32) THEN RETURN FALSE END;
+  IF ~PrivateScalar(curves[curve], priv, d) THEN RETURN FALSE END;
+  (* e = the hash as a number mod n, also bits2octets of RFC 6979 *)
+  TLSNum.FromBytes(hash.data, 0, 32, 0, t); TLSNum.ModReduce(t, curves[curve].n, e);
+  TLSNum.ToBytes(e, 32, h1);
+  (* RFC 6979 3.2 b to f *)
+  TLSBytes.Init(v); TLSBytes.Init(key); i := 0;
+  WHILE i < 32 DO TLSBytes.AppendByte(v, 1); TLSBytes.AppendByte(key, 0); INC(i) END;
+  Mac(key, v, 0, priv, h1, key); Mac(key, v, -1, priv, h1, v);
+  Mac(key, v, 1, priv, h1, key); Mac(key, v, -1, priv, h1, v);
+  g.x := curves[curve].gx; g.y := curves[curve].gy; TLSNum.MontOne(curves[curve].p, g.z); g.inf := FALSE;
+  done := FALSE;
+  REPEAT
+    Mac(key, v, -1, priv, h1, v);  (* h: the candidate k *)
+    TLSNum.FromBytes(v.data, 0, 32, curves[curve].n.m.len, k);
+    IF ~TLSNum.IsZero(k) & (TLSNum.Compare(k, curves[curve].n.m) < 0) THEN
+      Ladder(curves[curve], k, g, p);
+      IF ~p.inf THEN
+        Affine(curves[curve], p, x, y);
+        TLSNum.FromBytes(x.data, 0, 32, 0, t); TLSNum.ModReduce(t, curves[curve].n, rn);
+        IF ~TLSNum.IsZero(rn) THEN
+          (* s = (e + r d) / k mod n, in Montgomery form *)
+          TLSNum.ToMont(k, curves[curve].n, t); TLSNum.MontInvPrime(t, curves[curve].n, kinv);
+          TLSNum.ToMont(rn, curves[curve].n, t); TLSNum.ToMont(d, curves[curve].n, u);
+          TLSNum.MontMul(t, u, curves[curve].n, t);
+          TLSNum.ToMont(e, curves[curve].n, u); TLSNum.ModAdd(t, u, curves[curve].n, t);
+          TLSNum.MontMul(t, kinv, curves[curve].n, t); TLSNum.FromMont(t, curves[curve].n, sn);
+          done := ~TLSNum.IsZero(sn)
+        END
+      END
+    END;
+    IF ~done THEN TLSBytes.Init(none); Mac(key, v, 0, none, none, key); Mac(key, v, -1, none, none, v) END
+  UNTIL done;
+  TLSNum.ToBytes(rn, 32, r); TLSNum.ToBytes(sn, 32, s);
+  TLSNum.SetZero(d, d.len); TLSNum.SetZero(k, k.len); TLSNum.SetZero(kinv, kinv.len); TLSNum.SetZero(u, u.len);
+  i := 0; WHILE i < 32 DO key.data[i] := 0X; v.data[i] := 0X; INC(i) END;
+  RETURN TRUE
+END Sign;
+
+(* the DER INTEGER of the unsigned big endian v *)
+PROCEDURE DerInteger(VAR v, der: TLSBytes.Buffer);
+VAR i: LONGINT;
+BEGIN
+  i := 0; WHILE (i < v.len - 1) & (v.data[i] = 0X) DO INC(i) END;
+  TLSBytes.AppendByte(der, 2);
+  IF ORD(v.data[i]) >= 128 THEN
+    TLSBytes.AppendByte(der, v.len - i + 1); TLSBytes.AppendByte(der, 0)
+  ELSE TLSBytes.AppendByte(der, v.len - i)
+  END;
+  WHILE i < v.len DO TLSBytes.AppendByte(der, ORD(v.data[i])); INC(i) END
+END DerInteger;
+
+(** der := SEQUENCE { INTEGER r, INTEGER s }, the signature as TLS sends it (r, s < 2^256) *)
+PROCEDURE SignatureDER*(VAR r, s, der: TLSBytes.Buffer);
+VAR body: TLSBytes.Buffer;
+BEGIN
+  TLSBytes.Init(body); DerInteger(r, body); DerInteger(s, body);
+  TLSBytes.Init(der); TLSBytes.AppendByte(der, 30H); TLSBytes.AppendByte(der, body.len); TLSBytes.Append(der, body)
+END SignatureDER;
 
 BEGIN
   InitCurve(curves[P256], 32,

@@ -1,10 +1,6 @@
 MODULE TLSPEM;
 IMPORT Base64 := TLSBase64, TLSBytes;
 
-CONST
-  BeginCert = "-----BEGIN CERTIFICATE-----";
-  EndCert = "-----END CERTIFICATE-----";
-
 PROCEDURE MatchAt(VAR s: ARRAY OF CHAR; pos: LONGINT; pat: ARRAY OF CHAR): BOOLEAN;
 VAR i: LONGINT;
 BEGIN
@@ -40,18 +36,30 @@ BEGIN
   RETURN (ch = 0AX) OR (ch = 0DX) OR (ch = " ") OR (ch = 09X)
 END IsWhite;
 
-(* Extracts and decodes the next PEM certificate in text, starting at FROM.
-   On success FROM is advanced past the END CERTIFICATE line. *)
-PROCEDURE NextCertificateDER*(VAR pem: ARRAY OF CHAR; VAR from: LONGINT; VAR der: TLSBytes.Buffer): BOOLEAN;
+(* line := a label b "-----" *)
+PROCEDURE Line(a, b: ARRAY OF CHAR; VAR line: ARRAY OF CHAR);
+VAR i, j: LONGINT;
+BEGIN
+  COPY(a, line); i := StrLen(line); j := 0;
+  WHILE (j < LEN(b)) & (b[j] # 0X) & (i < LEN(line) - 6) DO line[i] := b[j]; INC(i); INC(j) END;
+  j := 0; WHILE j < 5 DO line[i] := "-"; INC(i); INC(j) END;
+  line[i] := 0X
+END Line;
+
+(** the next PEM block with the label (as "CERTIFICATE", "EC PRIVATE KEY") in pem, from FROM on,
+  decoded into der; FROM is advanced past its END line *)
+PROCEDURE NextBlockDER*(VAR pem: ARRAY OF CHAR; label: ARRAY OF CHAR; VAR from: LONGINT; VAR der: TLSBytes.Buffer): BOOLEAN;
 VAR
   p, q, i, j: LONGINT;
   b64: ARRAY TLSBytes.MaxLen OF CHAR;
+  begin, end: ARRAY 64 OF CHAR;
 BEGIN
   TLSBytes.Init(der);
-  p := Find(pem, BeginCert, from);
+  Line("-----BEGIN ", label, begin); Line("-----END ", label, end);
+  p := Find(pem, begin, from);
   IF p < 0 THEN RETURN FALSE END;
-  p := p + StrLen(BeginCert);
-  q := Find(pem, EndCert, p);
+  p := p + StrLen(begin);
+  q := Find(pem, end, p);
   IF q < 0 THEN RETURN FALSE END;
 
   i := p; j := 0;
@@ -63,8 +71,15 @@ BEGIN
     INC(i)
   END;
   b64[j] := 0X;
-  from := q + StrLen(EndCert);
+  from := q + StrLen(end);
   RETURN Base64.DecodeToBuffer(b64, der)
+END NextBlockDER;
+
+(* Extracts and decodes the next PEM certificate in text, starting at FROM.
+   On success FROM is advanced past the END CERTIFICATE line. *)
+PROCEDURE NextCertificateDER*(VAR pem: ARRAY OF CHAR; VAR from: LONGINT; VAR der: TLSBytes.Buffer): BOOLEAN;
+BEGIN
+  RETURN NextBlockDER(pem, "CERTIFICATE", from, der)
 END NextCertificateDER;
 
 PROCEDURE FirstCertificateDER*(VAR pem: ARRAY OF CHAR; VAR der: TLSBytes.Buffer): BOOLEAN;
