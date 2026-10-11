@@ -99,6 +99,15 @@ ABrowser.ShowDef ^ on ARM, RBrowser.ShowDef ^ on ARMv7, RISC-V and MIPS. It open
 the module, its exported types, variables and procedures, in a viewer. XBrowser.ShowDef Texts names
 the module directly. On the console the same is browser.ShowDef Texts (see programming.md).
 
+## Browsing Gemini and Spartan
+
+Pishmish.Open gemini://geminiprotocol.net/ ~ opens a viewer with the page, rendered: headings,
+links, lists, quotes and preformatted text, in a Unicode font. A middle click on a link follows it in
+the same viewer, and the menu of the viewer has Pishmish.Back and Pishmish.Reload. When a page asks
+for input, it shows a line Pishmish.Send ~: write the answer after the command and click it. When a
+server wants a certificate, it lists your identities as Pishmish.Ident lines; DCS.NewIdent makes a
+new one. tools/Pishmish.Tool has more commands, and DCS.Get shows an answer as it arrived.
+
 ## Stopping and pausing a command
 
 A command runs until it ends, and meanwhile the desktop waits; the games, for example, take it over

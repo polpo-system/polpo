@@ -221,6 +221,11 @@ bin/x86/loksh dcs.Get gemini://bbs.geminispace.org/ /ident ada    # logged in wi
 bin/x86/loksh dcs.Idents
 ```
 
+`Pishmish` is the browser: `Pishmish.Open gemini://geminiprotocol.net/ ~` (or a spartan://
+URL) opens a viewer with the page rendered, in a Unicode font, and a middle click on a link follows
+it in the same viewer; Back and Reload are in its menu. Input prompts, certificate requests (with
+your identities to choose from) and files are shown with commands to click (`tools/Pishmish.Tool`).
+
 Identities are the pairs `<fingerprint>.crt` and `.key` in `~/.config/dcs/idents`, the layout of
 the Pascal dcs and pishmish, with ECDSA P-256 or RSA keys. The core of these clients is the
 library `src/lib/gemini` (`Gemini0`: requests, links, identities; `Gemtext0`: gemtext line by
