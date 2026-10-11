@@ -1145,11 +1145,31 @@ BEGIN
   END;
 END Init;
 
+(* the release in the file VERSION of polpo ("0.1.0 2026-10-11", written by make release), "" if none *)
+PROCEDURE Release(VAR s: ARRAY OF CHAR);
+VAR f: Files.File; R: Files.Rider; ch: CHAR; i: LONGINT;
+BEGIN
+  s[0] := 0X; f := Files.Old("VERSION");
+  IF f # NIL THEN
+    Files.Set(R, f, 0); i := 0; Files.Read(R, ch);
+    WHILE ~R.eof & (ch >= " ") & (i < LEN(s) - 1) DO s[i] := ch; INC(i); Files.Read(R, ch) END;
+    s[i] := 0X
+  END
+END Release;
+
 PROCEDURE Greetings;
+VAR rel: ARRAY 64 OF CHAR; i: LONGINT;
 BEGIN
   Oberon.GetClock(time0, date0); Texts.WriteString(W, "System.Time");
   Texts.WriteDate(W, time0, date0);  Texts.WriteLn(W);
-  Texts.WriteString(W, Kernel.version);  Texts.WriteString(W, Linux0.ARCH); Texts.WriteString(W, Kernel.DATE); Texts.WriteLn(W);
+  Texts.WriteString(W, "POLPO Oberon");
+  Release(rel);
+  IF rel[0] # 0X THEN  (* the version, then its date *)
+    Texts.Write(W, " "); i := 0;
+    WHILE (rel[i] # 0X) & (rel[i] # " ") DO Texts.Write(W, rel[i]); INC(i) END;
+    IF rel[i] = " " THEN Texts.WriteString(W, ","); WHILE rel[i] # 0X DO Texts.Write(W, rel[i]); INC(i) END END
+  END;
+  Texts.WriteString(W, " (Linux "); Texts.WriteString(W, Linux0.ARCH); Texts.Write(W, ")"); Texts.WriteLn(W)
 END Greetings;
 
 BEGIN

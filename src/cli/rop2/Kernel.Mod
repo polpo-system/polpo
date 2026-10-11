@@ -64,7 +64,7 @@ the same. This module is of little importance to most Oberon programmers. *)
 IMPORT Linux0, SYSTEM;
 
 CONST
-  version*="ETH Oberon / Linux ";
+  version*="POLPO Oberon Linux ";
   DATE*=" 2017-05-03";
 
   TRACE= "Kernel.Log";

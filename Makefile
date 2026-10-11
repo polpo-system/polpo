@@ -166,4 +166,14 @@ armv7-sixel:
 armv7-x11:
 		$(X86) portia.Build /armv7 /y display-x11
 
-.PHONY: fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
+.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
+
+# make release V=0.2.0: VERSION gets the version and today's date (UTC), shown when the desktop
+# starts; it is committed and tagged v0.2.0. Push with: git push origin main v0.2.0 (and codeberg)
+release:
+	@test -n "$(V)" || { echo "usage: make release V=0.2.0"; exit 1; }
+	@git diff --cached --quiet || { echo "make release: commit or unstage the staged changes first"; exit 1; }
+	printf '%s %s\n' "$(V)" "$$(date -u +%F)" > VERSION
+	git add VERSION
+	git commit -m "releasing $(V)"
+	git tag -a v$(V) -m "polpo $(V)"

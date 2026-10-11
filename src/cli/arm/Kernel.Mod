@@ -61,7 +61,7 @@ Compiler BUG FOR i=0  TO x  BY 1 DO is not being executed ??
 IMPORT Linux0, SYSTEM;
 
 CONST
-  version* = "ETH Oberon / Linux ";  
+  version* = "POLPO Oberon Linux ";  
   DATE*=" 2015-12-11";
   TRACE= "Kernel.Log";
   RegSize*=Linux0.RegSize;
