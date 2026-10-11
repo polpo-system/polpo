@@ -3,6 +3,8 @@
 
 This is an attempt to contunie development of ETH Linux Oberon in some way.
 
+![](polpo.png)
+
 ### Goals
 
 * Create minimal set of CLI modules, working compiler, and loader of Obj files - done.
@@ -311,7 +313,7 @@ But wait, it can also draw itself in other ways! Just replace the Display module
 
 ### xterm Oberon
 
-![](polpo.png)
+![](polpo_sixel.png)
 
 Oberon can draw itself not only in X11, but in a bitmap graphics capable Unix terminal, such as xterm.
 For that you need to compile other version of Display and Input modules.
