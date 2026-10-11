@@ -1,6 +1,6 @@
 # A Gentle Introduction to polpo
 
-(Last updated: 10 October 2026.)
+(Last updated: 12 October 2026.)
 
 ## Contents
 
@@ -9,8 +9,10 @@
     The console: loksh
     Modules and commands
     Compiling your first module
+    Changing a module
     Looking at an interface
     Texts
+    Commands from the Unix shell, and their parameters
     The desktop
     Packages
     The other ports
@@ -49,16 +51,21 @@ understood completely by one person: the compiler, the file system, the windows,
 all of it.
 
 Over the years ETH made several versions of the system. The one polpo continues is ETH Oberon (also
-called Oberon System 3), and in particular the version that ran on top of Linux (Linux Oberon, or
-OLR). polpo is a distribution of it: it runs on Linux on x86, ARM, ARMv7, RISC-V and MIPS, and on
-each of them it is one program called `loksh`. Everything else (the compilers, the desktop, the
+called Oberon System 3), and in particular the version that ran on top of Linux (ETH Linux Oberon,
+then it becameOLR by Peter Matthias).
+
+polpo is a revival effort of it: it runs on Linux on x86, ARM, ARMv7, RISC-V and MIPS, and on
+each of them it is one program called `loksh`: Linux Oberon Kommand Shell. 
+
+Everything else (the compilers, the desktop, the
 tools) is Oberon modules that loksh loads when they are needed.
 
 There are a few ideas that make Oberon different from the systems you know, and it helps to have
 them in mind from the start:
 
     there are no programs, only modules; a module offers commands, which you call by name,
-    as Module.Command;
+    as Module.Command; there is no `main()`, that is one entry point, like in other programming
+    languages.
 
     a module is loaded once and stays loaded; its variables keep their values between commands;
 
@@ -75,48 +82,45 @@ header: the compiler writes the interface of the module into a symbol file.)
 ## The console: loksh
 
 When you have a copy of polpo (a git clone of it is enough: the compiled objects and the loksh
-binaries are in the repository), go into its directory and type:
-
-    bin/x86/loksh hello.world
-
-On ARM, RISC-V or MIPS there is bin/arm/loksh, bin/riscv/loksh and so on; everything I show here
-works the same on all of them. You will see
-
-    hello not found
-
-because the module hello has not been compiled yet. We shall do that in a moment. Try instead
-
-    bin/x86/loksh fs.Pwd
-    bin/x86/loksh net.Lookup localhost
-
-The first prints the current directory, the second asks for the addresses of localhost and prints
-something like
-
-    localhost: 127.0.0.1 ::1
-
-In each case loksh started, loaded the module (fs, or net), called the command (Pwd, or Lookup)
-with the rest of the line as its parameters, and stopped. If you start loksh without a command,
-it reads commands one per line, as a shell does:
+binaries are in the repository), go into its directory and start loksh:
 
     $ bin/x86/loksh
+    >
+
+On ARM, RISC-V or MIPS there is bin/arm/loksh, bin/riscv/loksh and so on; everything I show here
+works the same on all of them. The > is the prompt of loksh's shell: it reads commands one per
+line and runs them. Try
+
     > fs.Pwd
     /home/you/polpo
-    > fs.Ls
-    ...
 
-Ctrl+D ends it. In this shell all commands run in the same loksh, so a module loaded by the first
-command is still there for the second, with its variables as the first command left them. (Note:
-that is the normal way of things in Oberon. The system is never restarted between commands; a
-module is loaded on its first use, its body runs once, and it stays until someone unloads it.)
+fs is a module, Pwd one of its commands, and fs.Pwd prints the current directory. You do not have
+to type all of it. Type fs. and press Tab, and loksh shows the commands of fs; type the first
+letters of a name and press Tab, and loksh completes it, or shows the names that begin so. The
+arrows up and down bring back the commands typed before, and Ctrl+D ends the shell.
 
-Question: what does bin/x86/loksh fs print? (Try it. A module name alone lists the commands of the
-module.)
+All commands of this shell run in the same loksh, so a module loaded by the first command is still
+there for the second, with its variables as the first command left them. (Note: that is the
+normal way of things in Oberon. The system is never restarted between commands; a module is
+loaded on its first use, its body runs once, and it stays until someone unloads it.)
+
+Question: what does fs alone, typed at the prompt, print? (Try it. A module name alone lists the
+commands of the module.)
 
 ## Modules and commands
 
-Here is the module hello. You find it as hello.Mod in the polpo directory; it is there for you to
-play with.
+In the polpo directory there is a small module for you to play with, hello.Mod. Let us look at it
+without leaving the shell. Type tex and press Tab: loksh completes it to texts., and a second Tab
+shows the commands of the module texts:
 
+    > texts.
+    DeleteLines Replace Show ShowPlain
+
+The first two change files, as sed does on Unix; Show prints a file, as cat does. Type S and press
+Tab: there are two commands beginning with S, Show and ShowPlain, so loksh shows both and waits.
+Type how and a blank, then h and Tab, and loksh completes the file name:
+
+    > texts.Show hello.Mod
     MODULE hello;
     IMPORT out;
 
@@ -141,6 +145,156 @@ between (* and *), and they may be nested.
 the desktop have capitalised names, as Texts, Oberon and Display, the names ETH gave them. This is
 only a convention, but it tells you at once which world a module belongs to.)
 
+## Compiling your first module
+
+First let us see what is in memory now:
+
+    > system.ShowModules
+    system  846     0
+    shell   31880   0
+    texts   7595    3
+    ...
+    Kernel  18382   14
+    Linux0  1651    8
+    TOTAL   139937  21
+
+These are the modules loaded so far, each with its size in bytes and the number of loaded modules
+that import it: the kernel, the files, the module loader, the shell and the few modules they need,
+and texts, which we just used. The compiler is a module too. Compile hello:
+
+    > compiler.Compile hello.Mod
+    hello.Mod compiling obj/x86/hello new symbol file   33
+
+It wrote two files: obj/x86/hello.Obj, the code, and obj/x86/hello.Sym, the symbol file with the
+interface of the module, its exported names. Look into memory again:
+
+    > system.ShowModules
+    compiler  6159  0
+    OPV     18942   1
+    OPC     51892   2
+    ...
+    TOTAL   494734  32
+
+The compiler is there now, with the modules it is made of, OPM, OPS, OPT and the others, and it
+stays there: the next compilation starts at once. Now run the command:
+
+    > hello.world
+    hey hey!
+
+and system.ShowModules lists hello too. It was loaded when we called hello.world, together with
+the modules it imports, if they were not loaded yet.
+
+(Note: there is no linker step. Only loksh itself, the small core of the system, is linked; every
+other module is loaded from its .Obj file when it is first needed.)
+
+Where do the objects go? The compiler writes into obj/x86/ of the current directory if there is
+one, and otherwise into the polpo directory. loksh looks for a module first in obj/x86/ of the
+current directory and then in polpo's. So a project of your own can keep its objects to itself:
+make a directory, make obj/x86 in it, compile there, and run loksh there.
+
+## Changing a module
+
+Now let us give hello a second command. Open the file in xxs, the small editor of the console:
+
+    > xxs.Open hello.Mod
+
+Move with the arrows to the line PROCEDURE world*;, hold Shift and press the down arrow four times:
+the four lines of the procedure are selected. Ctrl+C copies them. (Note: in xxs, Ctrl+C copies, as
+in other editors; at the prompt of the shell it stops a command.) Press the down arrow once more,
+without Shift, which ends the selection, and Ctrl+V pastes the copy. Now there are two procedures
+world. Change the second one: call it there, in the PROCEDURE line and after END, and let it write
+something else:
+
+    PROCEDURE there*;
+    BEGIN
+      out.String("hello there!"); out.Ln;
+    END there;
+
+Ctrl+O writes the file (Enter confirms the name), Ctrl+X leaves xxs, and you are back at the prompt.
+Compile it as before:
+
+    > compiler.Compile hello.Mod
+    hello.Mod compiling obj/x86/hello
+            there is new
+            pos      0  err 155      generation of new symbol file not allowed
+
+The compiler refuses. there is a new exported name, so the interface of hello changed, and the
+compiler does not write a new symbol file unless we allow it. Why so careful? Let us look at the
+interface the symbol file holds now:
+
+    > browser.ShowDef hello
+    DEFINITION hello;
+
+        IMPORT
+            out, Linux0;
+
+        PROCEDURE world*;
+
+    END hello.
+
+Other modules that import hello were compiled against this interface, and each of them recorded
+it. A new interface means that they must be compiled again, so the compiler wants you to say that
+you meant to change it. The option /s says so. Press the up arrow twice, and the compile command
+comes back from the history; move left with the arrow to the file name and put /s before it (the
+options come before the file name):
+
+    > compiler.Compile /s hello.Mod
+    hello.Mod compiling obj/x86/hello extended symbol file   59
+
+The new symbol file extends the old one. Now type hello. and press Tab. Only world is offered!
+The hello in memory is still the old one, loaded when we called hello.world; compiling writes new
+files, but it does not replace a module that is loaded. hello.world would also still run the old
+code. Unload it:
+
+    > system.Free hello
+
+system.ShowModules does not list hello any more. Type hello. and press Tab again: now it offers
+there and world, because hello is loaded anew from the new file when it is needed, and
+
+    > hello.there
+    hello there!
+
+(Remarks: this is the way of Oberon. A module is loaded once and stays, so after changing it you
+free it, and the next command loads the new version. system.Free refuses to free a module that
+other loaded modules import, saying that its reference count is not zero; free those first.)
+
+Question: system.ShowModules lists xxs now. Why, and why does a second xxs.Open start faster than
+the first?
+
+## Looking at an interface
+
+browser.ShowDef, which we used above, shows what any module offers, without its source:
+browser.ShowDef Texts, browser.ShowDef Files, browser.ShowDef out. This is how you learn your way
+around the system. Since everything is a module, everything can be looked at this way.
+
+## Texts
+
+Many files in polpo are not plain text but Oberon texts: they keep fonts and colours, and they can
+even contain pictures and other objects. Tool texts (tools/*.Tool), the configuration
+Oberon.Text and many documents are written so. texts.Show prints them with their fonts as styles
+of the terminal, texts.ShowPlain as plain text, and xxs edits them and keeps their fonts:
+
+    > texts.ShowPlain tools/System.Tool
+    > xxs.Open tools/System.Tool
+
+Sources (.Mod files) may be plain text or Oberon texts; the compiler reads both. (Note: texts.md
+is about one text in particular, Oberon.Text, the configuration of the system.)
+
+## Commands from the Unix shell, and their parameters
+
+You do not have to start the shell of loksh to run one command. From the Unix shell,
+
+    $ bin/x86/loksh hello.there
+    $ bin/x86/loksh net.Lookup localhost
+    localhost: 127.0.0.1 ::1
+
+starts loksh, runs the command with the rest of the line as its parameters, and stops. And
+
+    $ bin/x86/loksh < commands.txt
+
+runs the commands of a file, one per line, in one loksh. That is how polpo is built: make runs
+loksh with the file tools/build.Tool.
+
 How does a command get its parameters, if a procedure without parameters is a command? It reads
 them itself, from the text after the command name. A console command does it like this:
 
@@ -151,85 +305,28 @@ them itself, from the text after the command name. A console command does it lik
       IF texts.Arg(A, name) THEN out.String("hello, "); out.String(name); out.Ln END
     END Hello;
 
-texts.Arg gives the parameters one after the other and returns FALSE when there are no more. In
-the desktop, where the "rest of the line" is the text after the command in a viewer, the same
-command works unchanged. programming.md tells the details.
+texts.Arg gives the parameters one after the other and returns FALSE when there are no more.
+(hello would need IMPORT texts, out; for this.) In the desktop, where the "rest of the line" is
+the text after the command in a viewer, the same command works unchanged. programming.md tells the
+details.
 
-## Compiling your first module
-
-The compiler is a module too. To compile hello:
-
-    bin/x86/loksh compiler.Compile /s hello.Mod
-
-and the compiler answers
-
-    hello.Mod compiling obj/x86/hello new symbol file   33
-
-It wrote two files: obj/x86/hello.Obj, the code, and obj/x86/hello.Sym, the symbol file with the
-interface of the module. The /s allows the compiler to write a new symbol file; you need it the
-first time and whenever the exports of the module change. Now
-
-    bin/x86/loksh hello.world
-
-prints hey hey!.
-
-(Note: there is no linker step. loksh loads hello.Obj when the command is called, and with it the
-modules hello imports, if they are not loaded yet. Only loksh itself, the small core of the system,
-is linked.)
-
-Where do the objects go? The compiler writes into obj/x86/ of the current directory if there is
-one, and otherwise into the polpo directory. loksh looks for a module first in obj/x86/ of the
-current directory and then in polpo's. So a project of your own can keep its objects to itself:
-make a directory, make obj/x86 in it, compile there, and run loksh there.
-
-Question: change the text in hello.Mod, compile it again without /s, and call hello.world. What
-happens if you add a second exported procedure and compile without /s?
-
-When the interface of a module changes, the modules that import it must be compiled again, because
-each of them recorded the interface it was compiled against. loksh refuses to load a module that
-imports an old version of another one; it tells you which.
-
-## Looking at an interface
-
-To see what a module offers without reading its source, ask the browser:
-
-    bin/x86/loksh browser.ShowDef hello
-
-    DEFINITION hello;
-
-        IMPORT
-            out, Linux0;
-
-        PROCEDURE world*;
-
-    END hello.
-
-This is how you learn your way around the system: browser.ShowDef Texts, browser.ShowDef Files,
-browser.ShowDef out. Since everything is a module, everything can be looked at this way.
-
-## Texts
-
-Many files in polpo are not plain text but Oberon texts: they keep fonts and colours, and they can
-even contain pictures and other objects. Tool texts (tools/*.Tool), the configuration
-Oberon.Text and many documents are written so. On the console you read them with
-
-    bin/x86/loksh texts.ShowPlain tools/System.Tool
-
-and edit them with xxs, a small editor in the style of nano that keeps their fonts:
-
-    bin/x86/loksh xxs.Open tools/System.Tool
-
-Sources (.Mod files) may be plain text or Oberon texts; the compiler reads both. (Note: texts.md
-is about one text in particular, Oberon.Text, the configuration of the system.)
+When the interface of a module changes, as it did with there, the modules that import it must be
+compiled again. loksh refuses to load a module that imports an old version of another one, and
+tells you which.
 
 ## The desktop
 
-So far we stayed in the terminal. The Oberon system proper is its desktop:
+Back at the prompt of loksh, start the desktop:
 
-    bin/x86/loksh System.Init
+    > System.Init
 
-opens a window (under X11) with the Oberon desktop in it. It also runs inside an xterm with sixel
-graphics, without X11; the readme tells how.
+A window opens (under X11) with the Oberon desktop, and now the whole Oberon system is loaded:
+display, fonts, texts, viewers, the editor and the rest. The shell waits while the desktop runs.
+If the window does not fit your screen, give its size when you start loksh:
+
+    OWIDTH=1600 OHEIGHT=1000 bin/x86/loksh System.Init
+
+(The desktop also runs inside an xterm with sixel graphics, without X11; the readme tells how.)
 
 The screen is divided into two columns of viewers. On the left, the user track, texts are opened;
 on the right, the system track holds the Log (the messages of the system) and System.Tool, a text
@@ -239,19 +336,64 @@ full of commands. The mouse has three buttons, and each has its own work:
     the middle button runs the command under the mouse;
     the right button selects text.
 
-Now click with the left button at the end of the Log, type Edit.Open hello.Mod, point at
-Edit.Open and click the middle button. A viewer opens in the user track with the source of hello.
-This is all there is to running a command in Oberon: any word of the form Module.Command in any text
-can be clicked, and what follows it on the line is its parameters. System.Tool is simply a text
-with useful commands written in it, ready to be clicked. Try typing hello.world into the Log and
-clicking it. Where did hey hey! go?
+On Unix we read manuals with man. In Oberon the place of manuals is taken by tool texts: texts
+with a short explanation and the commands ready to be clicked. They are the files ending in
+.Tool, in the directory tools/. Let us open the one of Pishmish, the Gemini browser. Click with
+the left button at the end of the Log, type
 
-(Note: the answer is the terminal you started loksh in. out writes to the terminal. A desktop
-module writes into a text instead, usually the Log, with the module Texts.)
+    Edit.Open Pishmish.Tool
 
-The rest is learned by doing: storing a text is Edit.Store in its menu bar, selecting from here to
-there is the right button held down while you move, a viewer is closed with System.Close. desktop.md
-describes the mouse, the keys, the fonts and the useful commands in full.
+press Enter, then point at Edit.Open and click the middle button. A viewer with Pishmish.Tool opens
+on the left. (Note: why Enter? The Log keeps growing: the next message of the system is added at
+its end, and would otherwise run into the line you typed.)
+
+Each line of Pishmish.Tool that begins with Pishmish. is a command. Click the middle button on the
+first one, Pishmish.Open gemini://geminiprotocol.net/. A Pishmish viewer opens with the page of
+the Gemini project. If it is small, click System.Grow in its top line, the menu of the viewer, and
+it takes the height of the track. The links of the page are blue; a middle click on one follows
+it, in the same viewer. Click a link or two, then click Pishmish.Back in the menu of the viewer to
+go back. (Note: in tool texts you will meet an upward arrow, as in Pishmish.Open followed by the
+arrow. It is the character ^, which Oberon's fonts draw as an arrow, and it stands for the
+selection: select a URL with the right button anywhere, then click that command.)
+
+Now let us write a program in the desktop itself. Type in the Log
+
+    Edit.Open Hello2.Mod
+
+and click it as before. Since there is no such file yet, an empty viewer opens. Click into it with
+the left button and type:
+
+    MODULE Hello2;
+    IMPORT Out;
+
+    PROCEDURE World*;
+    BEGIN
+      Out.String("hello world"); Out.Ln
+    END World;
+
+    END Hello2.
+
+This time we import Out, with a capital O. That is the module of the desktop, and it writes into
+the Log; out, the console module we used before, writes to the terminal. Click Edit.Store in the
+menu of the viewer, and the text is stored in the file Hello2.Mod. Now type in the Log, each
+command followed by Enter,
+
+    Compiler.Compile Hello2.Mod
+    Hello2.World
+
+and click them with the middle button, one after the other. The compiler reports in the Log, and
+Hello2.World writes hello world below it. This is all there is to running a command in Oberon: any
+word of the form Module.Command in any text can be clicked, and what follows it on the line is its
+parameters.
+
+(Note: Compiler.Compile * compiles the text of the viewer marked with the star, without storing
+it first: press F1 with the mouse over the viewer to put the star there. Edit.Store saves the text
+as an Oberon text, with its fonts; Edit.StorePlain saves it as plain text. The compiler reads
+both.)
+
+The rest is learned by doing: selecting from here to there is the right button held down while you
+move, a viewer is closed with System.Close in its menu. desktop.md describes the mouse, the keys,
+the fonts and the useful commands in full.
 
 ## Packages
 
