@@ -391,9 +391,27 @@ it first: press F1 with the mouse over the viewer to put the star there. Edit.St
 as an Oberon text, with its fonts; Edit.StorePlain saves it as plain text. The compiler reads
 both.)
 
-The rest is learned by doing: selecting from here to there is the right button held down while you
-move, a viewer is closed with System.Close in its menu. desktop.md describes the mouse, the keys,
-the fonts and the useful commands in full.
+How do you select text? Press the right button where the selection is to begin, move the mouse
+to its end with the button held, and let go. That is enough for what you see on the screen. For a
+longer piece, begin the same way: press and release the right button at the start. Then scroll
+with the scroll bar, the narrow strip at the left of the viewer (a left click there makes the line
+at the mouse the first one shown; a right click goes back a page). The selection stays where it
+is, even when it is out of view. When you see the end, hold Shift and click the right button
+there: the selection now reaches from where it began to the mouse. The keyboard does it too: set
+the caret with the left button, then Shift with the arrows, or with Page Down, selects as the
+caret moves, and Ctrl+A selects the whole text.
+
+What can you do with a selection? While you still hold the right button, a click of the left
+button deletes it, and a click of the middle button copies it to the caret. Ctrl+C copies it to
+the clipboard of X11, so that other programs can paste it, and Ctrl+V pastes at the caret.
+
+(Note: this is so in the texts opened with Edit.Open, and in tool texts. System.Text, the text you
+see at the start, is opened with Script.Open, which shows styles and pictures; its viewers select
+with the right button only.)
+
+The rest is learned by doing: a viewer is closed with System.Close in its menu, and System.Copy
+gives a second viewer of the same text. desktop.md describes the mouse, the keys, the fonts and the
+useful commands in full.
 
 ## Packages
 

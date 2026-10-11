@@ -39,7 +39,8 @@ held, an interclick, changes what happens:
 | right | selects: press, move from here to there, release | with the left: deletes the selection; with the middle: copies it to the caret |
 
 Shift and a right click extend the selection to the mouse, or select from the caret to the mouse,
-as in xterm. A selection is also given to the clipboard of X11.
+as in xterm. The selection stays when the text is scrolled, so a long piece is selected by a right
+click at its start, scrolling with the scroll bar, and Shift with a right click at its end. A selection is also given to the clipboard of X11.
 
 In the menu bar, dragging with the left button moves the top edge of the viewer, so that it gets
 larger or smaller; with the middle button added, the viewer moves to wherever the mouse is
