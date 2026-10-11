@@ -208,6 +208,24 @@ bin/x86/loksh fetch.Get https://example.com/ page.html # TLS 1.3
 bin/x86/loksh gemini.Get gemini://norayr.am/gd.gif     # Gemini; gemini.Show prints the page
 ```
 
+`dcs`, the digital command system, is the Gemini and Spartan client with everything: it prints
+the URL, the status, the meta and the body as it arrived, sends input, saves, pins certificates,
+and logs in with identities (client certificates), as the Pascal dcs (github.com/norayr/dcs)
+does; `DCS` does the same in the desktop, each answer in a viewer (`tools/DCS.Tool`):
+
+```
+bin/x86/loksh dcs.Get gemini://geminiprotocol.net/
+bin/x86/loksh dcs.Get gemini://example.org/search '"two words"'   # input, the query
+bin/x86/loksh dcs.NewIdent ada ada@example.org                    # a new identity (P-256)
+bin/x86/loksh dcs.Get gemini://bbs.geminispace.org/ /ident ada    # logged in with it
+bin/x86/loksh dcs.Idents
+```
+
+Identities are the pairs `<fingerprint>.crt` and `.key` in `~/.config/dcs/idents`, the layout of
+the Pascal dcs and pishmish, with ECDSA P-256 or RSA keys. The core of these clients is the
+library `src/lib/gemini` (`Gemini0`: requests, links, identities; `Gemtext0`: gemtext line by
+line), which gemini, spartan, dcs and DCS share.
+
 HTTPS is TLS 1.3 written in Oberon (`src/lib/tls`, the modules of github.com/norayr/tls; only
 32 bit integers, so it runs on every port): X25519 (or P-256 when the server asks for it with a
 HelloRetryRequest), AES-128-GCM, SHA-256/384/512, randomness from `/dev/urandom`, roots from
@@ -224,8 +242,11 @@ SHA-256 of its key is kept in `$HOME/.gemini_hosts`, and a different key later i
 tests are in `src/lib/tls/test` (`TLS_TEST_CERTS=src/lib/tls/test/certs loksh TLSTestChain.Run`
 and so on).
 
-The same TLS has a server side, `TLS13Server`: a certificate chain with an ECDSA P-256 key,
-X25519 or P-256, no session tickets and no client certificates. Two servers use it, in packages
+The same TLS has a server side, `TLS13Server`: a certificate chain with an ECDSA P-256 or RSA
+key (`TLSIdentity`), X25519 or P-256, the certificate chosen by the host name the client asks for,
+no session tickets. As a client it presents an identity when a server asks for a certificate.
+`TLSCertGen` makes self-signed certificates with a new P-256 key, so openssl is not needed for an
+identity or a server certificate. Two servers use it, in packages
 of their own (github.com/polpo-system/agena and cobweb): `agena` for Gemini and `cobweb` for the
 web.
 
