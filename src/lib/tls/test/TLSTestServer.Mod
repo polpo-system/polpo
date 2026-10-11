@@ -1,10 +1,11 @@
 MODULE TLSTestServer;  (* the private keys of a server: a P-256 key as SEC 1 and as PKCS #8 DER gives the
   same scalar, whose public point is the one in the key; a P-384 key and broken DER are refused *)
 
-IMPORT TLSBytes, TLSECDSA, TLS13Server, Out := out;
+IMPORT TLSBytes, TLSIdentity, Out := out;
 
 VAR
   fails, checks: LONGINT;
+  id: TLSIdentity.IdentityDesc;
 
 PROCEDURE Hex(c: CHAR): LONGINT;
 BEGIN
@@ -32,8 +33,12 @@ BEGIN
   RETURN i = a.len
 END Equal;
 
+PROCEDURE Key(VAR der: TLSBytes.Buffer): BOOLEAN;
+BEGIN RETURN TLSIdentity.ParseKey(der, id)
+END Key;
+
 PROCEDURE Run*;
-VAR der, key, want, pub, point: TLSBytes.Buffer;
+VAR der, pub, point: TLSBytes.Buffer;
 BEGIN
   fails := 0; checks := 0;
   TLSBytes.Init(der);
@@ -41,20 +46,20 @@ BEGIN
   Add(der, "89d068860ced38a00a06082a8648ce3d030107a14403420004d9e95c4736396b");
   Add(der, "3d6bf1d1d9ccab028d5c00aecf2ef19724ecf58a3966169e05455cd9a10ecf93");
   Add(der, "7d196aa376873a7c48dda642db244b06ccbaf1d66c538b3100");
-  TLSBytes.Slice(der, 7, 32, want); TLSBytes.Slice(der, der.len - 65, 65, point);
-  Check("SEC 1", TLS13Server.ParseKey(der, key) & Equal(key, want));
-  Check("public point", TLSECDSA.ECDHPublic(TLSECDSA.P256, key, pub) & Equal(pub, point));
+  TLSBytes.Slice(der, der.len - 65, 65, point);
+  Check("SEC 1", Key(der) & (id.kind = TLSIdentity.EC));
+  Check("public point", TLSIdentity.PublicKey(id, pub) & Equal(pub, point));
   der.data[50] := 1X;  (* the curve OID changed *)
-  Check("SEC 1 wrong curve", ~TLS13Server.ParseKey(der, key));
+  Check("SEC 1 wrong curve", ~Key(der));
   TLSBytes.Init(der);
   Add(der, "308187020100301306072a8648ce3d020106082a8648ce3d030107046d306b02");
   Add(der, "01010420d7876596fcbd9e05f262102ceb9ea33f0361aa2bdb1dafc11189d068");
   Add(der, "860ced38a14403420004d9e95c4736396b3d6bf1d1d9ccab028d5c00aecf2ef1");
   Add(der, "9724ecf58a3966169e05455cd9a10ecf937d196aa376873a7c48dda642db244b");
   Add(der, "06ccbaf1d66c538b3100");
-  Check("PKCS 8", TLS13Server.ParseKey(der, key) & Equal(key, want));
+  Check("PKCS 8", Key(der) & TLSIdentity.PublicKey(id, pub) & Equal(pub, point));
   der.len := der.len - 20;
-  Check("PKCS 8 cut", ~TLS13Server.ParseKey(der, key));
+  Check("PKCS 8 cut", ~Key(der));
   TLSBytes.Init(der);
   Add(der, "3081a4020101043070155d9f776af6a2bb317a94a476066dfc7616c557274401");
   Add(der, "715d58345a341a8f0f703df279452bb6da24029bcd1e4181a00706052b810400");
@@ -62,7 +67,7 @@ BEGIN
   Add(der, "9e1b216ea4df842b35704a22dd79f2fe8417e037ce0a0f1fd9fc26e6d5028c16");
   Add(der, "7eab428da11ad7d86fd94457054c48d9fd3b973740828a69f7b7d68baa60733d");
   Add(der, "d539efec6ed761");
-  Check("P-384", ~TLS13Server.ParseKey(der, key));
+  Check("P-384", ~Key(der));
   Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 

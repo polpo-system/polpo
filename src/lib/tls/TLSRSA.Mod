@@ -1,6 +1,8 @@
 MODULE TLSRSA;
 (* RSA signature verification (RFC 8017) with TLSNum: PKCS#1 v1.5 (certificates) and PSS
-   (TLS 1.3 CertificateVerify), with SHA-256, SHA-384 and SHA-512.
+   (TLS 1.3 CertificateVerify), with SHA-256, SHA-384 and SHA-512; and PSS signatures with a
+   private key (a client or server certificate), by the Chinese remainder theorem, each checked
+   with the public key before it is given out. The arithmetic is not constant time.
    PKCS#1 v1.5 is checked by building the whole expected encoding and comparing it byte for byte
    (no parsing of the padding). Moduli below 2048 bits are refused. *)
 IMPORT TLSBytes, TLSNum, TLSSHA256, TLSSHA512, TLSASN1, TLSX509;
@@ -8,6 +10,13 @@ IMPORT TLSBytes, TLSNum, TLSSHA256, TLSSHA512, TLSASN1, TLSX509;
 CONST
   SHA256* = 1; SHA384* = 2; SHA512* = 3;  (** hash algorithms *)
   MinBits* = 2048;
+
+TYPE
+  PrivateKey* = POINTER TO PrivateKeyDesc;  (** RSAPrivateKey of PKCS #1 *)
+  PrivateKeyDesc* = RECORD
+    n*, e*: TLSBytes.Buffer;   (** the public key, big endian without leading zeros *)
+    d, p, q, dp, dq, qinv: TLSBytes.Buffer
+  END;
 
 (** out := the hash alg of msg; FALSE for an unknown alg *)
 PROCEDURE Hash*(alg: LONGINT; VAR msg, out: TLSBytes.Buffer): BOOLEAN;
@@ -176,5 +185,76 @@ PROCEDURE VerifyPSS*(VAR n, e: TLSBytes.Buffer; alg: LONGINT; VAR hash, sig: TLS
 BEGIN
   RETURN VerifyPSSSalt(n, e, alg, hash, sig, HashLen(alg))
 END VerifyPSS;
+
+(** k := the RSAPrivateKey (PKCS #1) in der: SEQUENCE { 0, n, e, d, p, q, dp, dq, qinv } *)
+PROCEDURE ParsePrivateKey*(VAR der: TLSBytes.Buffer; VAR k: PrivateKey): BOOLEAN;
+VAR pos, lim: LONGINT; t: TLSASN1.TLV;
+BEGIN
+  NEW(k); pos := 0;
+  IF ~TLSASN1.EnterSequence(der, pos, der.len, pos, lim) THEN k := NIL; RETURN FALSE END;
+  IF ~TLSASN1.ExpectTag(der, pos, lim, TLSASN1.Integer, t) OR (t.len # 1) OR (der.data[t.val] # 0X) THEN k := NIL; RETURN FALSE END;
+  IF IntegerBytes(der, pos, lim, k.n) & IntegerBytes(der, pos, lim, k.e) & IntegerBytes(der, pos, lim, k.d) &
+     IntegerBytes(der, pos, lim, k.p) & IntegerBytes(der, pos, lim, k.q) & IntegerBytes(der, pos, lim, k.dp) &
+     IntegerBytes(der, pos, lim, k.dq) & IntegerBytes(der, pos, lim, k.qinv) &
+     (k.n.len * 8 >= MinBits) & (k.n.len * 8 <= TLSNum.MaxLimbs * TLSNum.Bits - 32) & ODD(ORD(k.p.data[k.p.len - 1])) & ODD(ORD(k.q.data[k.q.len - 1])) THEN
+    RETURN TRUE
+  END;
+  k := NIL; RETURN FALSE
+END ParsePrivateKey;
+
+(* out := c^d mod n by the CRT: c^dp mod p, c^dq mod q, combined (k bytes) *)
+PROCEDURE PrivateOp(VAR k: PrivateKeyDesc; VAR c, out: TLSBytes.Buffer);
+VAR nn, pn, qn, cn, t, m1, m2, h, u: TLSNum.Num; modN, modP, modQ: TLSNum.Modulus;
+BEGIN
+  TLSNum.FromBytes(k.n.data, 0, k.n.len, 0, nn); TLSNum.InitModulus(nn, modN);
+  TLSNum.FromBytes(k.p.data, 0, k.p.len, 0, pn); TLSNum.InitModulus(pn, modP);
+  TLSNum.FromBytes(k.q.data, 0, k.q.len, 0, qn); TLSNum.InitModulus(qn, modQ);
+  TLSNum.FromBytes(c.data, 0, c.len, nn.len, cn);
+  (* m1 = c^dp mod p, m2 = c^dq mod q *)
+  TLSNum.ModReduce(cn, modP, t); TLSNum.ToMont(t, modP, t); TLSNum.MontPow(t, k.dp.data, 0, k.dp.len, modP, t); TLSNum.FromMont(t, modP, m1);
+  TLSNum.ModReduce(cn, modQ, t); TLSNum.ToMont(t, modQ, t); TLSNum.MontPow(t, k.dq.data, 0, k.dq.len, modQ, t); TLSNum.FromMont(t, modQ, m2);
+  (* h = qinv (m1 - m2) mod p *)
+  TLSNum.ModReduce(m2, modP, t); TLSNum.ModSub(m1, t, modP, h);
+  TLSNum.FromBytes(k.qinv.data, 0, k.qinv.len, pn.len, u); TLSNum.ModReduce(u, modP, u);
+  TLSNum.ToMont(h, modP, h); TLSNum.ToMont(u, modP, u); TLSNum.MontMul(h, u, modP, h); TLSNum.FromMont(h, modP, h);
+  (* s = m2 + h q mod n *)
+  h.len := nn.len; qn.len := nn.len; m2.len := nn.len;
+  TLSNum.ToMont(h, modN, h); TLSNum.ToMont(qn, modN, t); TLSNum.MontMul(h, t, modN, h); TLSNum.FromMont(h, modN, h);
+  TLSNum.ModAdd(m2, h, modN, t);
+  TLSNum.ToBytes(t, k.n.len, out);
+  TLSNum.SetZero(m1, m1.len); TLSNum.SetZero(m2, m2.len); TLSNum.SetZero(h, h.len); TLSNum.SetZero(u, u.len)
+END PrivateOp;
+
+(** sig := the PSS signature of hash (alg; MGF1 with alg) with the key k and the salt (random
+  bytes, as many as the hash has for TLS 1.3); FALSE if it does not verify with the public key *)
+PROCEDURE SignPSS*(k: PrivateKey; alg: LONGINT; VAR hash, salt, sig: TLSBytes.Buffer): BOOLEAN;
+VAR em, m, h, db, mask: TLSBytes.Buffer; bits, emBits, emLen, hLen, dbLen, top, i, zeroBits: LONGINT;
+BEGIN
+  TLSBytes.Init(sig);
+  hLen := HashLen(alg);
+  IF (k = NIL) OR (hLen = 0) OR (hash.len # hLen) THEN RETURN FALSE END;
+  top := ORD(k.n.data[0]); bits := (k.n.len - 1) * 8;
+  WHILE top > 0 DO INC(bits); top := top DIV 2 END;
+  emBits := bits - 1; emLen := (emBits + 7) DIV 8;
+  IF emLen < hLen + salt.len + 2 THEN RETURN FALSE END;
+  (* H = Hash(8 zeros, hash, salt) *)
+  TLSBytes.Init(m); i := 0; WHILE i < 8 DO TLSBytes.AppendByte(m, 0); INC(i) END;
+  TLSBytes.Append(m, hash); TLSBytes.Append(m, salt);
+  IF ~Hash(alg, m, h) THEN RETURN FALSE END;
+  (* DB = zeros, 01, salt, masked with MGF1(H) *)
+  dbLen := emLen - hLen - 1;
+  TLSBytes.Init(db); i := 0; WHILE i < dbLen - salt.len - 1 DO TLSBytes.AppendByte(db, 0); INC(i) END;
+  TLSBytes.AppendByte(db, 1); TLSBytes.Append(db, salt);
+  MGF1(alg, h, dbLen, mask);
+  TLSBytes.Init(em);
+  IF emLen < k.n.len THEN TLSBytes.AppendByte(em, 0) END;  (* em has the k bytes of the modulus *)
+  i := 0; WHILE i < dbLen DO TLSBytes.AppendByte(em, TLSBytes.XorByte(ORD(db.data[i]), ORD(mask.data[i]))); INC(i) END;
+  zeroBits := 8 * emLen - emBits; i := em.len - dbLen;
+  em.data[i] := CHR(ORD(em.data[i]) MOD ASH(1, 8 - zeroBits));
+  TLSBytes.Append(em, h); TLSBytes.AppendByte(em, 0BCH);
+  PrivateOp(k^, em, sig);
+  IF ~VerifyPSSSalt(k.n, k.e, alg, hash, sig, salt.len) THEN TLSBytes.Init(sig); RETURN FALSE END;
+  RETURN TRUE
+END SignPSS;
 
 END TLSRSA.

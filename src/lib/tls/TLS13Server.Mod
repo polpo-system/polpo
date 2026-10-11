@@ -4,14 +4,15 @@ MODULE TLS13Server;
   that the caller accepted, and gives a TLS13Live.State, which is then read and written as a
   client connection is (ReadAppMax, WriteAppString, Disconnect).
   One cipher suite, TLS_AES_128_GCM_SHA256; the key exchange X25519 or P-256, with a
-  HelloRetryRequest when the client offered a key share of neither; the CertificateVerify
-  signature ecdsa_secp256r1_sha256. No PSK, so no session tickets and no early data; no client
+  HelloRetryRequest when the client offered a key share of neither; a certificate with an ECDSA
+  P-256 key (CertificateVerify ecdsa_secp256r1_sha256) or an RSA key (rsa_pss_rsae_sha256), see
+  TLSIdentity. No PSK, so no session tickets and no early data; no client
   certificates. Several servers on one port (virtual hosts): AcceptBy, with a procedure that
   gives the certificate for the host name the client asks for (SNI). A client that does not wait (a missing ClientHello) blocks Accept: the caller
   sets a timeout on the socket first. *)
 IMPORT Out := out, Internet, Linux0, SYSTEM,
-  TLSBytes, TLS13Random, TLSX25519, TLSECDSA, TLSSHA256, TLSASN1, TLSPEM, TLSCABundle, TLSX509,
-  TLSSig, TLS13Keys, TLS13Records, TLS13Finished, TLS13Application, TLS13Live;
+  TLSBytes, TLS13Random, TLSX25519, TLSECDSA, TLSIdentity, TLS13Keys, TLS13Records, TLS13Finished,
+  TLS13Application, TLS13Live;
 
 CONST
   MaxChain* = 8;              (** certificates in a chain *)
@@ -20,19 +21,14 @@ CONST
   CertificateVerify = 15; Finished = 20; MessageHash = 254;
   ExtServerName = 0; ExtSupportedGroups = 10; ExtSignatureAlgorithms = 13;
   ExtSupportedVersions = 43; ExtKeyShare = 51;
-  X25519 = 1DH; P256 = 17H; EcdsaP256Sha256 = 403H; AES128GCM = 1301H;
+  X25519 = 1DH; P256 = 17H; EcdsaP256Sha256 = 403H; RsaPssRsaeSha256 = 804H; AES128GCM = 1301H;
   (* alerts *)
   UnexpectedMessage = 10; BadRecordMac = 20; RecordOverflow = 22; HandshakeFailure = 40; IllegalParameter = 47;
   DecodeError = 50; DecryptError = 51; ProtocolVersion = 70; InternalError = 80;
   MissingExtension = 109; UnrecognizedName = 112;
 
 TYPE
-  Identity* = POINTER TO IdentityDesc;  (** a certificate chain and its key *)
-  IdentityDesc* = RECORD
-    n: LONGINT;
-    certs: ARRAY MaxChain OF TLSBytes.Buffer;  (* the leaf first *)
-    key: TLSBytes.Buffer                       (* the private scalar, 32 bytes *)
-  END;
+  Identity* = TLSIdentity.Identity;  (** a certificate chain and its key (TLSIdentity.Load) *)
 
   Chooser* = PROCEDURE (VAR name: ARRAY OF CHAR): Identity;
     (** the certificate for the host name a client asks for (SNI, in lower case; "" when it
@@ -42,12 +38,10 @@ TYPE
     sidLen, shareLen, group: LONGINT;          (* group: of the key share taken, 0: none *)
     sid: ARRAY 32 OF CHAR;
     share: ARRAY 65 OF CHAR;
-    tls13, aes, nullComp, ecdsa, x25519, p256: BOOLEAN;
+    tls13, aes, nullComp, ecdsa, rsapss, x25519, p256: BOOLEAN;
     host: ARRAY 256 OF CHAR
   END;
 
-  Bundle = POINTER TO TLSCABundle.Bundle;
-  Cert = POINTER TO TLSX509.CertInfo;
 
 VAR
   verbose*: BOOLEAN;                (** progress messages *)
@@ -73,78 +67,13 @@ END Wipe;
 
 (* ----- the certificate and the key ----- *)
 
-PROCEDURE IsOID(VAR der: TLSBytes.Buffer; VAR t: TLSASN1.TLV; b0, b1, b2, b3, b4, b5, b6, b7, len: LONGINT): BOOLEAN;
-VAR b: ARRAY 8 OF LONGINT; i: LONGINT;
-BEGIN
-  IF (t.tag # TLSASN1.ObjectIdentifier) OR (t.len # len) THEN RETURN FALSE END;
-  b[0] := b0; b[1] := b1; b[2] := b2; b[3] := b3; b[4] := b4; b[5] := b5; b[6] := b6; b[7] := b7;
-  i := 0; WHILE (i < len) & (ORD(der.data[t.val + i]) = b[i]) DO INC(i) END;
-  RETURN i = len
-END IsOID;
-
-PROCEDURE IsP256(VAR der: TLSBytes.Buffer; VAR t: TLSASN1.TLV): BOOLEAN;
-BEGIN RETURN IsOID(der, t, 2AH, 86H, 48H, 0CEH, 3DH, 3, 1, 7, 8)  (* prime256v1 *)
-END IsP256;
-
-(** key := the private scalar (32 bytes) of a P-256 key in DER, either an ECPrivateKey of SEC 1
-  ("EC PRIVATE KEY" in PEM) or one inside a PKCS #8 PrivateKeyInfo ("PRIVATE KEY") *)
-PROCEDURE ParseKey*(VAR der, key: TLSBytes.Buffer): BOOLEAN;
-VAR pos, lim, apos, alim, p, n: LONGINT; t: TLSASN1.TLV; inner: TLSBytes.Buffer;
-BEGIN
-  TLSBytes.Init(key); pos := 0;
-  IF ~TLSASN1.EnterSequence(der, pos, der.len, pos, lim) THEN RETURN FALSE END;
-  IF ~TLSASN1.ExpectTag(der, pos, lim, TLSASN1.Integer, t) OR (t.len # 1) THEN RETURN FALSE END;
-  IF der.data[t.val] = 1X THEN  (* ECPrivateKey: 1, the key, [0] the curve, [1] the public key *)
-    IF ~TLSASN1.ExpectTag(der, pos, lim, TLSASN1.OctetString, t) OR (t.len > 32) OR (t.len < 1) THEN RETURN FALSE END;
-    n := 32 - t.len; WHILE n > 0 DO TLSBytes.AppendByte(key, 0); DEC(n) END;
-    p := 0; WHILE p < t.len DO TLSBytes.AppendByte(key, ORD(der.data[t.val + p])); INC(p) END;
-    IF TLSASN1.EnterExplicit(der, pos, lim, TLSASN1.Ctx0, apos, alim) THEN
-      IF ~TLSASN1.ReadTLV(der, apos, alim, t) OR ~IsP256(der, t) THEN TLSBytes.Init(key); RETURN FALSE END
-    END;
-    RETURN TRUE
-  ELSIF der.data[t.val] = 0X THEN  (* PrivateKeyInfo: 0, the algorithm, the key in an OCTET STRING *)
-    IF ~TLSASN1.EnterSequence(der, pos, lim, apos, alim) THEN RETURN FALSE END;
-    pos := alim;
-    IF ~TLSASN1.ReadTLV(der, apos, alim, t) OR ~IsOID(der, t, 2AH, 86H, 48H, 0CEH, 3DH, 2, 1, 0, 7) THEN  (* id-ecPublicKey *)
-      COPY("the key is not an EC key (only ECDSA P-256 keys are supported)", lastError); RETURN FALSE
-    END;
-    IF ~TLSASN1.ReadTLV(der, apos, alim, t) OR ~IsP256(der, t) THEN COPY("the key is not on the curve P-256", lastError); RETURN FALSE END;
-    IF ~TLSASN1.ExpectTag(der, pos, lim, TLSASN1.OctetString, t) OR ~TLSASN1.CopyValue(der, t, inner) THEN RETURN FALSE END;
-    RETURN ParseKey(inner, key)
-  END;
-  RETURN FALSE
-END ParseKey;
-
 (** id := the certificates of the PEM file certFile (the leaf first, then the chain to a root,
-  not needed) and the P-256 key of the PEM file keyFile; FALSE if they cannot be read or do not
-  belong together (lastError says why) *)
+  not needed) and the private key (ECDSA P-256 or RSA) of the PEM file keyFile; FALSE if they
+  cannot be read or do not belong together (lastError says why) *)
 PROCEDURE Load*(certFile, keyFile: ARRAY OF CHAR; VAR id: Identity): BOOLEAN;
-VAR b: Bundle; der, pub, point: TLSBytes.Buffer; from, curve: LONGINT; leaf: Cert; ok: BOOLEAN;
 BEGIN
-  lastError := ""; id := NIL;
-  NEW(b); NEW(id); id.n := 0;
-  IF ~TLSCABundle.Load(certFile, b^) THEN COPY("the certificate file cannot be read", lastError); id := NIL; RETURN FALSE END;
-  from := 0;
-  WHILE (id.n < MaxChain) & TLSPEM.NextCertificateDER(b.text, from, id.certs[id.n]) DO INC(id.n) END;
-  IF id.n = 0 THEN COPY("no certificate in the certificate file", lastError); id := NIL; RETURN FALSE END;
-  IF ~TLSCABundle.Load(keyFile, b^) THEN COPY("the key file cannot be read", lastError); id := NIL; RETURN FALSE END;
-  from := 0;
-  IF TLSPEM.NextBlockDER(b.text, "EC PRIVATE KEY", from, der) THEN ok := ParseKey(der, id.key)
-  ELSE from := 0; ok := TLSPEM.NextBlockDER(b.text, "PRIVATE KEY", from, der) & ParseKey(der, id.key)
-  END;
-  Wipe(der); TLSCABundle.Init(b^);
-  IF ~ok THEN
-    IF lastError = "" THEN COPY("no P-256 key in the key file (EC PRIVATE KEY or PRIVATE KEY)", lastError) END;
-    id := NIL; RETURN FALSE
-  END;
-  NEW(leaf);
-  IF ~TLSX509.ParseCertificate(id.certs[0], leaf^) OR ~TLSSig.ECPublicKey(leaf.spki, curve, point) OR (curve # TLSECDSA.P256) THEN
-    COPY("the certificate has no P-256 key", lastError); id := NIL; RETURN FALSE
-  END;
-  IF ~TLSECDSA.ECDHPublic(TLSECDSA.P256, id.key, pub) OR (pub.len # point.len) OR ~TLSBytes.EqualConstTime(pub, point) THEN
-    COPY("the key does not belong to the certificate", lastError); id := NIL; RETURN FALSE
-  END;
-  RETURN TRUE
+  IF TLSIdentity.Load(certFile, keyFile, id) THEN lastError := ""; RETURN TRUE END;
+  COPY(TLSIdentity.lastError, lastError); RETURN FALSE
 END Load;
 
 (* ----- records ----- *)
@@ -243,7 +172,7 @@ PROCEDURE ParseHello(VAR m: TLSBytes.Buffer; VAR h: Hello): BOOLEAN;
 VAR p, end, n, type, len, e, k, g, l, i: LONGINT; seen: SET;
 BEGIN
   h.sidLen := 0; h.shareLen := 0; h.group := 0; h.host := "";
-  h.tls13 := FALSE; h.aes := FALSE; h.nullComp := FALSE; h.ecdsa := FALSE; h.x25519 := FALSE; h.p256 := FALSE;
+  h.tls13 := FALSE; h.aes := FALSE; h.nullComp := FALSE; h.ecdsa := FALSE; h.rsapss := FALSE; h.x25519 := FALSE; h.p256 := FALSE;
   IF (m.len < 4 + 35) OR (ORD(m.data[0]) # ClientHello) THEN RETURN FALSE END;
   end := m.len; p := 4 + 2 + 32;                  (* legacy_version, random *)
   n := ORD(m.data[p]); INC(p);                    (* legacy_session_id *)
@@ -281,7 +210,7 @@ BEGIN
       h.tls13 := Has16(m, p + 1, e, 304H)
     ELSIF (type = ExtSupportedGroups) OR (type = ExtSignatureAlgorithms) THEN
       IF (len < 2) OR (2 + TLSBytes.GetBE16(m, p) # len) THEN RETURN FALSE END;
-      IF type = ExtSignatureAlgorithms THEN h.ecdsa := Has16(m, p + 2, e, EcdsaP256Sha256)
+      IF type = ExtSignatureAlgorithms THEN h.ecdsa := Has16(m, p + 2, e, EcdsaP256Sha256); h.rsapss := Has16(m, p + 2, e, RsaPssRsaeSha256)
       ELSE h.x25519 := Has16(m, p + 2, e, X25519); h.p256 := Has16(m, p + 2, e, P256)
       END
     ELSIF type = ExtKeyShare THEN
@@ -344,7 +273,7 @@ BEGIN
   IF ~h.tls13 THEN Fail(ProtocolVersion, "the client does not offer TLS 1.3")
   ELSIF ~h.aes THEN Fail(HandshakeFailure, "the client does not offer TLS_AES_128_GCM_SHA256")
   ELSIF ~h.nullComp THEN Fail(IllegalParameter, "no null compression in the ClientHello")
-  ELSIF ~h.ecdsa THEN Fail(HandshakeFailure, "the client does not accept ecdsa_secp256r1_sha256 signatures")
+  ELSIF ~h.ecdsa & ~h.rsapss THEN Fail(HandshakeFailure, "the client accepts neither ecdsa_secp256r1_sha256 nor rsa_pss_rsae_sha256")
   ELSIF (h.group = 0) & ~(first & (h.x25519 OR h.p256)) THEN Fail(HandshakeFailure, "no key exchange in common (X25519, P-256)")
   ELSE RETURN TRUE
   END;
@@ -353,7 +282,7 @@ END CheckHello;
 
 (* ----- the handshake ----- *)
 
-PROCEDURE AppendCertificate(VAR id: IdentityDesc; VAR msg: TLSBytes.Buffer);
+PROCEDURE AppendCertificate(id: Identity; VAR msg: TLSBytes.Buffer);
 VAR list: TLSBytes.Buffer; i: LONGINT;
 BEGIN
   TLSBytes.Init(list); i := 0;
@@ -366,19 +295,17 @@ BEGIN
 END AppendCertificate;
 
 (* the CertificateVerify for the transcript th, with the key of id *)
-PROCEDURE AppendCertificateVerify(VAR id: IdentityDesc; VAR th, msg: TLSBytes.Buffer): BOOLEAN;
-VAR hash, content, r, s, sig: TLSBytes.Buffer; d: TLSSHA256.Digest; i: LONGINT;
+PROCEDURE AppendCertificateVerify(id: Identity; VAR th, msg: TLSBytes.Buffer): BOOLEAN;
+VAR hash, content, sig: TLSBytes.Buffer; i: LONGINT;
 BEGIN
   TLS13Keys.HashMessages(th, hash);
   TLSBytes.Init(content);
   i := 0; WHILE i < 64 DO TLSBytes.AppendByte(content, 20H); INC(i) END;
   TLSBytes.AppendString(content, "TLS 1.3, server CertificateVerify");
   TLSBytes.AppendByte(content, 0); TLSBytes.Append(content, hash);
-  TLSSHA256.DigestBuffer(content, d); TLSSHA256.DigestToBuffer(d, hash);
-  IF ~TLSECDSA.Sign(TLSECDSA.P256, id.key, hash, r, s) THEN Fail(InternalError, "signing failed"); RETURN FALSE END;
-  TLSECDSA.SignatureDER(r, s, sig);
+  IF ~TLSIdentity.Sign(id, content, sig) THEN Fail(InternalError, "signing failed"); RETURN FALSE END;
   TLSBytes.AppendByte(msg, CertificateVerify); TLSBytes.PutBE24(msg, 4 + sig.len);
-  TLSBytes.PutBE16(msg, EcdsaP256Sha256); TLSBytes.PutBE16(msg, sig.len); TLSBytes.Append(msg, sig);
+  TLSBytes.PutBE16(msg, TLSIdentity.Scheme(id)); TLSBytes.PutBE16(msg, sig.len); TLSBytes.Append(msg, sig);
   RETURN TRUE
 END AppendCertificateVerify;
 
@@ -466,6 +393,9 @@ BEGIN
   IF ~CheckHello(h, TRUE) THEN RETURN FALSE END;
   id := choose(serverName);
   IF id = NIL THEN Fail(UnrecognizedName, "no certificate for the host name the client asks for"); RETURN FALSE END;
+  IF (TLSIdentity.Scheme(id) = EcdsaP256Sha256) & ~h.ecdsa OR (TLSIdentity.Scheme(id) = RsaPssRsaeSha256) & ~h.rsapss THEN
+    Fail(HandshakeFailure, "the client does not accept the signatures of the certificate"); RETURN FALSE
+  END;
   TLSBytes.Copy(msg, th);
   IF h.group = 0 THEN  (* a HelloRetryRequest for a group we have (RFC 8446 4.1.4) *)
     IF h.x25519 THEN group := X25519 ELSE group := P256 END;
@@ -504,9 +434,9 @@ BEGIN
   (* EncryptedExtensions (none), Certificate, CertificateVerify, Finished *)
   TLSBytes.Init(flight);
   TLSBytes.AppendByte(flight, EncryptedExtensions); TLSBytes.PutBE24(flight, 2); TLSBytes.PutBE16(flight, 0);
-  AppendCertificate(id^, flight);
+  AppendCertificate(id, flight);
   TLSBytes.Append(th, flight); pos := flight.len;
-  IF ~AppendCertificateVerify(id^, th, flight) THEN RETURN FALSE END;
+  IF ~AppendCertificateVerify(id, th, flight) THEN RETURN FALSE END;
   TLSBytes.Slice(flight, pos, flight.len - pos, part); TLSBytes.Append(th, part);
   TLS13Keys.HashMessages(th, hash);
   TLS13Finished.BuildFinishedMessage(sFinKey, hash, msg);

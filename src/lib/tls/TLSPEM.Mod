@@ -89,4 +89,37 @@ BEGIN
   RETURN NextCertificateDER(pem, from, der)
 END FirstCertificateDER;
 
+(** appends to text the PEM block with the label of the bytes der: "-----BEGIN label-----", the
+  Base64 of der in lines of 64 characters, "-----END label-----", each line ending with LF *)
+PROCEDURE Append*(label: ARRAY OF CHAR; VAR der: TLSBytes.Buffer; VAR text: ARRAY OF CHAR);
+VAR line, alphabet: ARRAY 72 OF CHAR; i, j, n, v, col: LONGINT;
+
+  PROCEDURE Put(c: CHAR);
+  BEGIN IF j < LEN(text) - 1 THEN text[j] := c; INC(j) END
+  END Put;
+
+  PROCEDURE PutLine(VAR s: ARRAY OF CHAR);
+  VAR k: LONGINT;
+  BEGIN k := 0; WHILE s[k] # 0X DO Put(s[k]); INC(k) END; Put(0AX)
+  END PutLine;
+
+BEGIN
+  alphabet := "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  j := StrLen(text);
+  Line("-----BEGIN ", label, line); PutLine(line);
+  i := 0; col := 0; n := der.len;
+  WHILE i < n DO
+    v := LONG(ORD(der.data[i])) * 65536;
+    IF i + 1 < n THEN v := v + LONG(ORD(der.data[i + 1])) * 256 END;
+    IF i + 2 < n THEN v := v + LONG(ORD(der.data[i + 2])) END;
+    Put(alphabet[v DIV 262144]); Put(alphabet[v DIV 4096 MOD 64]);
+    IF i + 1 < n THEN Put(alphabet[v DIV 64 MOD 64]) ELSE Put("=") END;
+    IF i + 2 < n THEN Put(alphabet[v MOD 64]) ELSE Put("=") END;
+    INC(i, 3); INC(col, 4);
+    IF (col = 64) OR (i >= n) THEN Put(0AX); col := 0 END
+  END;
+  Line("-----END ", label, line); PutLine(line);
+  text[j] := 0X
+END Append;
+
 END TLSPEM.
