@@ -6,7 +6,8 @@ MODULE TLS13Server;
   One cipher suite, TLS_AES_128_GCM_SHA256; the key exchange X25519 or P-256, with a
   HelloRetryRequest when the client offered a key share of neither; the CertificateVerify
   signature ecdsa_secp256r1_sha256. No PSK, so no session tickets and no early data; no client
-  certificates. A client that does not wait (a missing ClientHello) blocks Accept: the caller
+  certificates. Several servers on one port (virtual hosts): AcceptBy, with a procedure that
+  gives the certificate for the host name the client asks for (SNI). A client that does not wait (a missing ClientHello) blocks Accept: the caller
   sets a timeout on the socket first. *)
 IMPORT Out := out, Internet, Linux0, SYSTEM,
   TLSBytes, TLS13Random, TLSX25519, TLSECDSA, TLSSHA256, TLSASN1, TLSPEM, TLSCABundle, TLSX509,
@@ -23,7 +24,7 @@ CONST
   (* alerts *)
   UnexpectedMessage = 10; BadRecordMac = 20; RecordOverflow = 22; HandshakeFailure = 40; IllegalParameter = 47;
   DecodeError = 50; DecryptError = 51; ProtocolVersion = 70; InternalError = 80;
-  MissingExtension = 109;
+  MissingExtension = 109; UnrecognizedName = 112;
 
 TYPE
   Identity* = POINTER TO IdentityDesc;  (** a certificate chain and its key *)
@@ -32,6 +33,10 @@ TYPE
     certs: ARRAY MaxChain OF TLSBytes.Buffer;  (* the leaf first *)
     key: TLSBytes.Buffer                       (* the private scalar, 32 bytes *)
   END;
+
+  Chooser* = PROCEDURE (VAR name: ARRAY OF CHAR): Identity;
+    (** the certificate for the host name a client asks for (SNI, in lower case; "" when it
+      names none), NIL to refuse it (alert unrecognized_name) *)
 
   Hello = RECORD  (* what a ClientHello offers *)
     sidLen, shareLen, group: LONGINT;          (* group: of the key share taken, 0: none *)
@@ -51,6 +56,7 @@ VAR
   alertDesc: LONGINT;               (* the alert for the failure, 0: none *)
   encrypted: BOOLEAN;               (* alerts go with the handshake key of the server: *)
   hsKey, hsIV: TLSBytes.Buffer; hsSeq: LONGINT;
+  single: Identity;                 (* the identity of Accept *)
 
 PROCEDURE Fail(desc: LONGINT; why: ARRAY OF CHAR);
 BEGIN
@@ -443,17 +449,23 @@ BEGIN
   END
 END HexBytes;
 
-PROCEDURE Handshake(fd: Internet.Socket; VAR id: IdentityDesc; VAR s: TLS13Live.State): BOOLEAN;
+PROCEDURE Handshake(fd: Internet.Socket; choose: Chooser; VAR s: TLS13Live.State): BOOLEAN;
 VAR
   h: Hello; msg, th, random, pub, shared, hash, none, flight, part, rec, hrrRandom: TLSBytes.Buffer;
   cHsKey, cHsIV, sHsKey, sHsIV, cFinKey, sFinKey, hsSecret, master, cSecret, sSecret: TLSBytes.Buffer;
-  group, pos, n, i: LONGINT; ccsSent: BOOLEAN; sid: ARRAY 32 OF CHAR; sidLen: LONGINT;
+  group, pos, n, i: LONGINT; ccsSent: BOOLEAN; sid: ARRAY 32 OF CHAR; sidLen: LONGINT; id: Identity;
 BEGIN
   TLSBytes.Init(none); ccsSent := FALSE;
   IF ~ReadPlainMessage(fd, msg) THEN RETURN FALSE END;
   IF ~ParseHello(msg, h) THEN Fail(DecodeError, "a malformed ClientHello"); RETURN FALSE END;
+  i := 0;
+  WHILE h.host[i] # 0X DO
+    IF (h.host[i] >= "A") & (h.host[i] <= "Z") THEN h.host[i] := CHR(ORD(h.host[i]) + 32) END; INC(i)
+  END;
   COPY(h.host, serverName);
   IF ~CheckHello(h, TRUE) THEN RETURN FALSE END;
+  id := choose(serverName);
+  IF id = NIL THEN Fail(UnrecognizedName, "no certificate for the host name the client asks for"); RETURN FALSE END;
   TLSBytes.Copy(msg, th);
   IF h.group = 0 THEN  (* a HelloRetryRequest for a group we have (RFC 8446 4.1.4) *)
     IF h.x25519 THEN group := X25519 ELSE group := P256 END;
@@ -492,9 +504,9 @@ BEGIN
   (* EncryptedExtensions (none), Certificate, CertificateVerify, Finished *)
   TLSBytes.Init(flight);
   TLSBytes.AppendByte(flight, EncryptedExtensions); TLSBytes.PutBE24(flight, 2); TLSBytes.PutBE16(flight, 0);
-  AppendCertificate(id, flight);
+  AppendCertificate(id^, flight);
   TLSBytes.Append(th, flight); pos := flight.len;
-  IF ~AppendCertificateVerify(id, th, flight) THEN RETURN FALSE END;
+  IF ~AppendCertificateVerify(id^, th, flight) THEN RETURN FALSE END;
   TLSBytes.Slice(flight, pos, flight.len - pos, part); TLSBytes.Append(th, part);
   TLS13Keys.HashMessages(th, hash);
   TLS13Finished.BuildFinishedMessage(sFinKey, hash, msg);
@@ -520,24 +532,35 @@ BEGIN
 END Handshake;
 
 (** the handshake of TLS 1.3 on fd, a connection the caller accepted, as the server with the
-  certificate and key id; then s is the connection (TLS13Live: ReadAppMax, WriteAppString,
-  Disconnect, which also closes fd). FALSE if the handshake failed: an alert is sent, fd is
-  closed, and lastError says why. serverName is the host name the client asked for. *)
-PROCEDURE Accept*(fd: Internet.Socket; id: Identity; VAR s: TLS13Live.State): BOOLEAN;
+  certificate and key that choose gives for the host name the client asks for; then s is the
+  connection (TLS13Live: ReadAppMax, WriteAppString, Disconnect, which also closes fd). FALSE if
+  the handshake failed: an alert is sent, fd is closed, and lastError says why. serverName is
+  the host name the client asked for, in lower case. *)
+PROCEDURE AcceptBy*(fd: Internet.Socket; choose: Chooser; VAR s: TLS13Live.State): BOOLEAN;
 BEGIN
   lastError := ""; serverName := ""; alertDesc := 0; encrypted := FALSE; hsSeq := 0;
   TLS13Live.Init(s);
-  IF id = NIL THEN Fail(InternalError, "no certificate (Load)")
-  ELSIF Handshake(fd, id^, s) THEN RETURN TRUE
-  END;
+  IF Handshake(fd, choose, s) THEN RETURN TRUE END;
   IF alertDesc > 0 THEN SendAlert(fd, alertDesc) END;
   Wipe(hsKey); Wipe(hsIV); encrypted := FALSE;
   Internet.Disconnect(fd);
   TLS13Live.Init(s);
   RETURN FALSE
+END AcceptBy;
+
+PROCEDURE Single(VAR name: ARRAY OF CHAR): Identity;
+BEGIN RETURN single
+END Single;
+
+(** AcceptBy with the certificate and key id for any host name *)
+PROCEDURE Accept*(fd: Internet.Socket; id: Identity; VAR s: TLS13Live.State): BOOLEAN;
+BEGIN
+  IF id = NIL THEN lastError := ""; Fail(InternalError, "no certificate (Load)"); Internet.Disconnect(fd); RETURN FALSE END;
+  single := id;
+  RETURN AcceptBy(fd, Single, s)
 END Accept;
 
 BEGIN
   verbose := FALSE; lastError := ""; serverName := ""; alertDesc := 0; encrypted := FALSE;
-  TLSBytes.Init(hsKey); TLSBytes.Init(hsIV); hsSeq := 0
+  TLSBytes.Init(hsKey); TLSBytes.Init(hsIV); hsSeq := 0; single := NIL
 END TLS13Server.
