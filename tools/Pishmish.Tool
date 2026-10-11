@@ -17,9 +17,9 @@ In a Pishmish viewer:
   Pishmish.Ident none      without an identity
   Pishmish.Save name       the file of the page, to name
 
-Identities (client certificates) are in ~/.config/dcs/idents, shared with
-dcs, DCS and the Pascal dcs and pishmish; who is a prefix of the
-fingerprint, the name or the mail, or a part of them.
+Identities (client certificates) are in ~/.config/dcs/idents, the same
+ones dcs and DCS use; who is a prefix of the fingerprint, the name or
+the mail, or a part of them.
 
 DCS.Idents ~
 DCS.NewIdent name mail@example.org ~      a new identity

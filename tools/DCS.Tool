@@ -14,9 +14,9 @@ DCS.Get gemini://geminiprotocol.net/ /fingerprint ~      the SHA-256 of the cert
 DCS.Get gemini://geminiprotocol.net/ /pin sha256 ~       require that certificate
 DCS.Get gemini://geminiprotocol.net/ /tofu ~             trust on first use
 
-Identities (client certificates) are in ~/.config/dcs/idents, as the
-Pascal dcs and pishmish keep them; /ident takes a prefix of the
-fingerprint, the name, the mail, or a part of them.
+Identities (client certificates) are in ~/.config/dcs/idents; /ident
+takes a prefix of the fingerprint, the name, the mail, or a part of
+them.
 
 DCS.Idents ~
 DCS.NewIdent name mail@example.org ~      a new P-256 key, self-signed

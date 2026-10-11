@@ -12,8 +12,8 @@ MODULE Gemini0;  (** the core of Gemini and Spartan clients: requests, answers, 
    at all (None); or it must have the certificate whose SHA-256 is pin (Pin). A server with a
    chain to a trusted root is accepted in every mode except Pin.
    Identities (client certificates, as servers ask for them with status 60) are pairs <sha256 of
-   the certificate>.crt and .key in $XDG_CONFIG_HOME/dcs/idents (default ~/.config/dcs/idents),
-   the layout of the Pascal dcs and pishmish; the key is ECDSA P-256 or RSA. *)
+   the certificate>.crt and .key in $XDG_CONFIG_HOME/dcs/idents (default ~/.config/dcs/idents);
+   the key is ECDSA P-256 or RSA. *)
 
 IMPORT SYSTEM, Linux0, Kernel, Internet, TLSBytes, TLSASN1, TLSPEM, TLSCABundle, TLSX509,
   TLSX509Validity, TLSSHA256, TLSIdentity, TLSCertGen, TLS13Live;
@@ -323,7 +323,7 @@ BEGIN
   IF i > 0 THEN j := 0; WHILE name[i] # 0X DO name[j] := name[i]; INC(i); INC(j) END; name[j] := 0X END
 END Sanitize;
 
-(** a file name for url (as the Pascal dcs makes it): the last segment of the path without the
+(** a file name for url (as dcs makes it): the last segment of the path without the
   query, characters not safe in a name as "-"; the host if the path gives none *)
 PROCEDURE NameForURL*(VAR url, name: ARRAY OF CHAR);
 VAR host, port, path, last: ARRAY MaxURL OF CHAR; i, j: LONGINT;

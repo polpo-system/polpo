@@ -7,9 +7,11 @@ This is an attempt to contunie development of ETH Linux Oberon in some way.
 
 * Create minimal set of CLI modules, working compiler, and loader of Obj files - done.
 * Create a minimal Oberon OS that runs over Linux - only minimal set of modules. - done.
-* Add package manager to add packages over the network.
-* Create a ports tree of package recipies.
-* Also integrate ARM and other existing compilers.
+* Add package manager to add packages over the network - done (portia).
+* Create a ports tree of package recipies - done (arden).
+* Also integrate ARM and other existing compilers - done (ARM, ARMv7, RISC-V, MIPS).
+* Add TLS, so that polpo gets online - done (TLS 1.3 in Oberon, client and server).
+* Implement a Gemini browser - done (dcs, DCS, Pishmish).
 * Add support for aarch64 and x86_64.
 * Build also bootable on X86 machine version of Oberon on Linux
 * Build also bootable on some ARM devices version of Oberon on Linux
@@ -29,6 +31,10 @@ in packages with repositories of their own (the servers agena and cobweb, games,
 formats, ...), which portia downloads, checks and compiles: `bin/x86/loksh portia.Install
 agena` (see portia below). After `make`, `bin/x86/loksh portia.Upgrade` compiles installed
 packages again whose imports changed.
+
+The desktop shows the release when it starts (`POLPO Oberon 0.1.0, 2026-10-11`), from the file
+`VERSION`. `make release V=0.2.0` writes it with the version and the date of the day, commits it and
+tags the commit `v0.2.0`; then push the commit and the tag (`git push origin main v0.2.0`).
 
 New to Oberon? Start with [a gentle introduction to polpo](gentle-introduction.md).
 
@@ -210,8 +216,8 @@ bin/x86/loksh gemini.Get gemini://norayr.am/gd.gif     # Gemini; gemini.Show pri
 
 `dcs`, the digital command system, is the Gemini and Spartan client with everything: it prints
 the URL, the status, the meta and the body as it arrived, sends input, saves, pins certificates,
-and logs in with identities (client certificates), as the Pascal dcs (github.com/norayr/dcs)
-does; `DCS` does the same in the desktop, each answer in a viewer (`tools/DCS.Tool`):
+and logs in with identities (client certificates); `DCS` does the same in the desktop, each
+answer in a viewer (`tools/DCS.Tool`):
 
 ```
 bin/x86/loksh dcs.Get gemini://geminiprotocol.net/
@@ -226,8 +232,8 @@ URL) opens a viewer with the page rendered, in a Unicode font, and a middle clic
 it in the same viewer; Back and Reload are in its menu. Input prompts, certificate requests (with
 your identities to choose from) and files are shown with commands to click (`tools/Pishmish.Tool`).
 
-Identities are the pairs `<fingerprint>.crt` and `.key` in `~/.config/dcs/idents`, the layout of
-the Pascal dcs and pishmish, with ECDSA P-256 or RSA keys. The core of these clients is the
+An identity is a client certificate and its key, ECDSA P-256 or RSA, kept as the pair of files
+`<fingerprint>.crt` and `.key` in `~/.config/dcs/idents`. The core of these clients is the
 library `src/lib/gemini` (`Gemini0`: requests, links, identities; `Gemtext0`: gemtext line by
 line), which gemini, spartan, dcs and DCS share.
 

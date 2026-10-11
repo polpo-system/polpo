@@ -1,6 +1,6 @@
 MODULE dcs;  (** dcs, the digital command system: a command line Gemini and Spartan client *)
 
-(* The polpo version of dcs (github.com/norayr/dcs), on Gemini0: it prints the answer rather than
+(* dcs, on Gemini0: it prints the answer rather than
    rendering gemtext: the URL, the status with its name, the meta, then the body as it arrived;
    only what a terminal cannot show is escaped (CR as \r, other control characters as \xHH).
    dcs.Get url [input] [options]   one request; input: the query (Gemini) or the data (Spartan)
@@ -249,7 +249,7 @@ BEGIN
   out.String("                             self-signed certificate (100 years)"); out.Ln; out.Ln;
   Gemini0.IdentsDir(dir);
   out.String("  Identities are the pairs <fingerprint>.crt and .key in"); out.Ln;
-  out.String("    "); out.String(dir); out.String(" (as the Pascal dcs and pishmish keep them)"); out.Ln; out.Ln;
+  out.String("    "); out.String(dir); out.Ln; out.Ln;
   out.String("  Examples:"); out.Ln;
   out.String("    loksh dcs.Get gemini://geminiprotocol.net/"); out.Ln;
   out.String("    loksh dcs.Get gemini://geminiprotocol.net/ /save"); out.Ln;
