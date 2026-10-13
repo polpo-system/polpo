@@ -19,6 +19,7 @@ of characters, each character being a pattern and and metric data.
 
   CONST substitute* = -1; font* = 0; metric* = 1; (** Font types. *)
     TraceMissing = TRUE;  TraceAlias = FALSE;
+    MaxRef = 32767;  (* polpo: the largest glyph index + 1 a font file may have *)
     
   TYPE 
     Char* = POINTER TO CharDesc;
@@ -107,7 +108,11 @@ of characters, each character being a pattern and and metric data.
   VAR m: LONGINT; h1: SHORTINT; h2: LONGINT; ch: CHAR;
   BEGIN
     SYSTEM.GET(SYSTEM.VAL(LONGINT, L) + 4, m); (* L.ind *)
-    SYSTEM.GET(m + LONG(ref) * SIZE(LONGINT), h2); (* pat adr*)
+    IF (ref < 0) OR (ref >= L(Font).maxRef) THEN  (* polpo: outside the index: the null character *)
+      h2 := m + LONG(L(Font).maxRef) * SIZE(LONGINT) + 3
+    ELSE
+      SYSTEM.GET(m + LONG(ref) * SIZE(LONGINT), h2) (* pat adr*)
+    END;
     theChar.pat := h2; 
     SYSTEM.GET(h2-3, h1); theChar.dx := h1; 
     SYSTEM.GET(h2-2, h1); theChar.x := h1;
@@ -126,26 +131,32 @@ of characters, each character being a pattern and and metric data.
     END
   END GetChar;
 
-  PROCEDURE Internalize (F: Font; VAR R: Files.Rider; type: SHORTINT);
+  (* polpo: a font file is refused (and the font substituted) unless its runs ascend within
+     0..MaxRef and its boxes fit the bytes of the index *)
+  PROCEDURE Internalize (F: Font; VAR R: Files.Rider; type: SHORTINT): BOOLEAN;
   VAR ch: CHAR;
       NofRuns, NofBoxes, i, k, l, m, maxEnd: INTEGER;
-      idxSz, NofBytes, RasterBase, A, a: LONGINT;
+      idxSz, NofBytes, RasterBase, A, a, n: LONGINT;
       run: Runs;
       box: Boxes;
-  BEGIN F.type := type;
+  BEGIN
     Files.Read(R, ch); (*family*)
     Files.Read(R, ch); (*variant*)
     ReadInt(R, F.height);
     ReadInt(R, F.minX); ReadInt(R, F.maxX);
     ReadInt(R, F.minY); ReadInt(R, F.maxY);
     ReadInt(R, NofRuns);
+    IF R.eof OR (NofRuns < 0) OR (NofRuns > MaxRef) THEN RETURN FALSE END;
     NEW(run, NofRuns);
-    NofBoxes := 0; k := 0;
+    n := 0; k := 0; m := 0;
     WHILE k # NofRuns DO
       ReadInt(R, run[k].beg); ReadInt(R, run[k].end);
-      NofBoxes := NofBoxes + run[k].end - run[k].beg;
+      IF (run[k].beg < m) OR (run[k].end < run[k].beg) OR (run[k].end > MaxRef) THEN RETURN FALSE END;
+      m := run[k].end; n := n + run[k].end - run[k].beg;
       INC(k)
     END;
+    IF n > MaxRef THEN RETURN FALSE END;
+    NofBoxes := SHORT(n);
     (* index covers 0..maxEnd-1; minimum 256 for backward compatibility *)
     maxEnd := 256; k := 0;
     WHILE k # NofRuns DO
@@ -160,8 +171,11 @@ of characters, each character being a pattern and and metric data.
       ReadInt(R, box[l].dx);
       ReadInt(R, box[l].x); ReadInt(R, box[l].y);
       ReadInt(R, box[l].w); ReadInt(R, box[l].h);
+      IF (box[l].w < 0) OR (box[l].w > 255) OR (box[l].h < 0) OR (box[l].h > 255) THEN RETURN FALSE END;
       INC(l)
     END;
+    IF R.eof THEN RETURN FALSE END;
+    F.type := type;
     IF type = font THEN
       NofBytes := idxSz + 29; l := 0;
       WHILE l # NofBoxes DO
@@ -206,15 +220,41 @@ of characters, each character being a pattern and and metric data.
         INC(k)
       END;
       WHILE m < maxEnd DO Put4(A, RasterBase + idxSz + 3); INC(m) END
-    END
+    END;
+    RETURN TRUE
   END Internalize;
 
+  (* polpo: a font with only the null character, when there is no other *)
+  PROCEDURE Empty (F: Font);
+  VAR A, a, RasterBase: LONGINT; m: INTEGER;
+  BEGIN
+    F.height := 12; F.minX := 0; F.maxX := 12; F.minY := -3; F.maxY := 9; F.maxRef := 256;
+    SYSTEM.NEW(F.ind, 256 * 4 + 29);
+    RasterBase := SYSTEM.VAL(LONGINT, F.ind);
+    A := RasterBase; a := A + 256 * 4;
+    Put1(a, 12); Put1(a, 0); Put1(a, -3); Put1(a, 12); Put1(a, 12); (*null char*)
+    Put2(a, 0FFFH);
+    m := 0; WHILE m < 10 DO Put2(a, 0801H); INC(m) END;
+    Put2(a, 0FFFH);
+    m := 0; WHILE m < 256 DO Put4(A, RasterBase + 256 * 4 + 3); INC(m) END
+  END Empty;
+
+  PROCEDURE^ OpenFont(name: ARRAY OF CHAR; VAR f: Files.File);
+
   PROCEDURE Substitute (F: Font);
-  BEGIN F.type := substitute;
-    F.height := Default.height;
-    F.minX := Default.minX; F.maxX := Default.maxX;
-    F.minY := Default.minY; F.maxY := Default.maxY;
-    F.ind := Default.ind; F.maxRef := Default.maxRef;
+  VAR f: Files.File; R: Files.Rider; id: CHAR; t: SHORTINT;
+  BEGIN
+    IF (Default # NIL) & (Default.ind # NIL) THEN
+      F.height := Default.height;
+      F.minX := Default.minX; F.maxX := Default.maxX;
+      F.minY := Default.minY; F.maxY := Default.maxY;
+      F.ind := Default.ind; F.maxRef := Default.maxRef
+    ELSE  (* polpo: no default font yet (the desktop is not loaded): Oberon10, else an empty font *)
+      OpenFont("Oberon10.Scn.Fnt", f); id := 0X; t := substitute;
+      IF f # NIL THEN Files.Set(R, f, 0); Files.Read(R, id); Files.Read(R, t) END;
+      IF (id # FontId) OR (t # font) OR ~Internalize(F, R, font) THEN Empty(F) END
+    END;
+    F.type := substitute;
     IF TraceMissing THEN
       Kernel.WriteString("Missing: ");  Kernel.WriteString(F.name);  Kernel.WriteLn
     END
@@ -365,7 +405,7 @@ of characters, each character being a pattern and and metric data.
       IF f # NIL THEN
         Files.Set(R, f, 0); Files.Read(R, id);
         IF id = FontId THEN Files.Read(R, L.type);
-          IF (L.type = metric) OR (L.type = font) THEN Internalize(L, R, L.type) ELSE Substitute(L) END
+          IF ((L.type = metric) OR (L.type = font)) & Internalize(L, R, L.type) THEN (* loaded *) ELSE Substitute(L) END
         ELSE Substitute(L) END
       ELSE COPY(L.name, name); i := 0;
         WHILE name[i] # 0X DO INC(i) END;
@@ -374,7 +414,7 @@ of characters, each character being a pattern and and metric data.
           IF f # NIL THEN
             Files.Set(R, f, 0); Files.Read(R, id);
             IF id = FontId THEN Files.Read(R, L.type);
-              IF (L.type = metric) OR (L.type = font) THEN Internalize(L, R, metric) ELSE Substitute(L) END
+              IF ((L.type = metric) OR (L.type = font)) & Internalize(L, R, metric) THEN (* loaded *) ELSE Substitute(L) END
             ELSE Substitute(L) END
           ELSE Substitute(L) END
         ELSE Substitute(L) END
