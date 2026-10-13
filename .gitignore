@@ -22,6 +22,10 @@
 /share/TTL1.Graph
 /share/Elektra.Graph
 /fonts/Elektra.Scn.Fnt
+/tools/MFScheme.Tool
+/tools/Scheme.Tool
+/share/Scheme.Examples
+/share/Scheme.Init
 
 # portia: the package tree (portia.Sync), the record of this installation
 /arden/
