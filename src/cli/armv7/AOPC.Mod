@@ -537,8 +537,9 @@ END PowerOf2;
   BEGIN
     IF y.mode # OPL.Cond THEN
       x.Tjmp := 0; (* x.Fjmp remains unchanged *)
-      IF y.mode = OPT.Con THEN
-        IF y.offset = true THEN x.offset := OPL.AL (* always *) ELSE x.offset := OPL.NV (* never *) END
+      IF y.mode = OPT.Con THEN  (* polpo: NV is no condition from ARMv6 on: compare R0 with itself, as RISC-V *)
+        OPL.PutR(OPL.CMP, 0, 0, 0);
+        IF y.offset = true THEN x.offset := OPL.EQ (* always *) ELSE x.offset := OPL.NE (* never *) END
       ELSE OPL.Load(y, -1); x.reg := y.reg; x.offset := OPL.NE; OPL.PutI(OPL.CMPI, 0, x.reg, 0); OPL.ReleaseR(x.reg);
       END
     ELSE
@@ -551,8 +552,9 @@ END PowerOf2;
   BEGIN
     IF y.mode # OPL.Cond THEN
       x.Fjmp := 0; (* x.Tjmp remains unchanged *)
-      IF y.mode = OPT.Con THEN
-        IF y.offset = true THEN x.offset := OPL.AL (* always *) ELSE x.offset := OPL.NV (* never *) END
+      IF y.mode = OPT.Con THEN  (* polpo: NV is no condition from ARMv6 on: compare R0 with itself, as RISC-V *)
+        OPL.PutR(OPL.CMP, 0, 0, 0);
+        IF y.offset = true THEN x.offset := OPL.EQ (* always *) ELSE x.offset := OPL.NE (* never *) END
       ELSE OPL.Load(y, -1); x.reg := y.reg; x.offset := OPL.NE; OPL.PutI(OPL.CMPI, 0, x.reg, 0); OPL.ReleaseR(x.reg);
       END
     ELSE
