@@ -14,6 +14,14 @@
 /tools/IFS.Tool
 /tools/Iris.Tool
 /tools/BrantschenGames.Tool
+/tools/Draw.Tool
+/tools/DrawGuide.Text
+/share/TTL0.Lib
+/share/TTL1.Lib
+/share/TTL0.Graph
+/share/TTL1.Graph
+/share/Elektra.Graph
+/fonts/Elektra.Scn.Fnt
 
 # portia: the package tree (portia.Sync), the record of this installation
 /arden/
