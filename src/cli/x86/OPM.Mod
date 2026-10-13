@@ -147,6 +147,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
     extension*: ARRAY 8 OF CHAR;  (** object file extension *)
     slim*: BOOLEAN;  (** polpo: write a slim binary (OFportable, the omi package) instead of native code *)
     symPath*: ARRAY 256 OF CHAR;  (** polpo: where to look for a .Sym not in outputPath ("": nowhere) *)
+    toMemory*: BOOLEAN;  (** polpo: the object stays in memory (memFile), nothing is registered: loading a slim binary *)
+    memFile*: Files.File;  (** polpo: the object made with toMemory *)
 
   CONST
     OFtag = 0BBX;  (* object file tag *)
@@ -461,7 +463,7 @@ MODULE OPM;  (** shared x86 compiler manager *)
   BEGIN
     MakeFileName(outputPath, outputPrefix, modName, ObjFName, extension);
     MakeFileName(outputPath, outputPrefix, modName, SymFName, ".Sym"); SymFile := NIL;
-    ObjFile:=Files.New(ObjFName);
+    IF toMemory THEN ObjFile := Files.New(""); memFile := NIL ELSE ObjFile:=Files.New(ObjFName) END;
     IF ObjFile = NIL THEN  err(153);  RETURN  END;
     Files.Set(ObjF, ObjFile, 0); Files.Write(ObjF, OFtag);
     ModFile:=Files.New(""); Files.Set(ModF, ModFile, 0);
@@ -522,8 +524,11 @@ MODULE OPM;  (** shared x86 compiler manager *)
   BEGIN
     refsize:=Files.Length(RefFile); ObjW(8DX); Commit(RefFile);
     Files.Set(ObjF, ObjFile, refpatch); ObjWBytes(refsize, 4);
-    Files.Register(ObjFile);
-    IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
+    IF toMemory THEN memFile := ObjFile; SymFile := NIL
+    ELSE
+      Files.Register(ObjFile);
+      IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
+    END
   END EndObj;
 
   PROCEDURE CloseObj*;
@@ -532,8 +537,11 @@ MODULE OPM;  (** shared x86 compiler manager *)
     refsize:=Files.Length(RefFile);
     Files.Set(ref, RefFile, 0); Files.Read(ref, ch); WHILE ~ref.eof DO ObjW(ch); Files.Read(ref, ch) END;
     Files.Set(ObjF, ObjFile, refpatch); ObjWBytes(refsize, 4);
-    Files.Register(ObjFile);
-    IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
+    IF toMemory THEN memFile := ObjFile; SymFile := NIL
+    ELSE
+      Files.Register(ObjFile);
+      IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
+    END
   END CloseObj;
 
 BEGIN
@@ -545,5 +553,5 @@ BEGIN
   SYSTEM.MOVE(SYSTEM.ADR(LRealPat), SYSTEM.ADR(MaxLReal), 8);  (*i386: 1.7976931348623157D308*)
   Texts.OpenWriter(W); Log := Oberon.Log;
   outputPath := ""; outputPrefix := "";  (* extension is initialized in Compiler *)
-  first := TRUE; slim := FALSE; symPath := ""
+  first := TRUE; slim := FALSE; symPath := ""; toMemory := FALSE; memFile := NIL
 END OPM.
