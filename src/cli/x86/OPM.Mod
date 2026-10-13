@@ -145,6 +145,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
     errName*: ARRAY 32 OF CHAR;
     first: BOOLEAN;
     extension*: ARRAY 8 OF CHAR;  (** object file extension *)
+    slim*: BOOLEAN;  (** polpo: write a slim binary (OFportable, the omi package) instead of native code *)
+    symPath*: ARRAY 256 OF CHAR;  (** polpo: where to look for a .Sym not in outputPath ("": nowhere) *)
 
   CONST
     OFtag = 0BBX;  (* object file tag *)
@@ -437,6 +439,7 @@ MODULE OPM;  (** shared x86 compiler manager *)
     MakeFileName(outputPath, empty, name, fileName, ".Sym");
     F := Files.Old(fileName);
     IF F = NIL THEN MakeFileName(outputPath, empty, name, fileName, extension); F := Files.Old(fileName) END;
+    IF (F = NIL) & (symPath # "") THEN MakeFileName(symPath, empty, name, fileName, ".Sym"); F := Files.Old(fileName) END;
     done := FALSE;
     IF F # NIL THEN done := TRUE; Files.Set(R, F, 0);
       Files.Read(R, ch);
@@ -464,7 +467,9 @@ MODULE OPM;  (** shared x86 compiler manager *)
     ModFile:=Files.New(""); Files.Set(ModF, ModFile, 0);
     newSymFile:=Files.New(""); Files.Set(newSymF, newSymFile, 0);
     RefFile := Files.New(""); Files.Set(RefF, RefFile, 0);
-    IF NewFileFormat THEN
+    IF slim THEN
+      Files.Write(ObjF, OFportable)
+    ELSIF NewFileFormat THEN
       Files.Write(ObjF, OFnew)
     ELSE
       Files.Write(ObjF, OFnative);
@@ -494,9 +499,23 @@ MODULE OPM;  (** shared x86 compiler manager *)
       Files.Set(sR, newSymFile, 0); Files.Read(sR, ch); WHILE ~sR.eof DO Files.Write(R, ch); Files.Read(sR, ch) END;
       Files.WriteNum(ObjF, 0)
     END;
-    IF (SymFile = NIL) OR (NewFileFormat) THEN Commit(ModFile); Commit(newSymFile) END;
-    refpatch:=Files.Pos(ObjF); ObjWInt(0); ObjWInt(0)
+    IF slim THEN  (* polpo: as on the mac, the slim binary starts with the symbol part too, then new streams *)
+      Files.Set(ObjF, ObjFile, 2); Files.WriteNum(ObjF, Files.Length(newSymFile)+Files.Length(ModFile));
+      Commit(ModFile); Commit(newSymFile);
+      ModFile:=Files.New(""); Files.Set(ModF, ModFile, 0); newSymFile:=Files.New(""); Files.Set(newSymF, newSymFile, 0)
+    ELSE
+      IF (SymFile = NIL) OR (NewFileFormat) THEN Commit(ModFile); Commit(newSymFile) END;
+      refpatch:=Files.Pos(ObjF); ObjWInt(0); ObjWInt(0)
+    END
   END EndSym;
+
+  (** polpo: end a slim binary: the imports and the stream of the encoder after the numbers it wrote with ObjWNum *)
+  PROCEDURE EndSlim*;
+  BEGIN
+    Files.Write(ModF, 0X); Commit(ModFile); Files.Write(newSymF, 0X); Commit(newSymFile);
+    Files.Register(ObjFile);
+    IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END
+  END EndSlim;
 
   PROCEDURE EndObj*;
     VAR refsize: LONGINT;
@@ -526,5 +545,5 @@ BEGIN
   SYSTEM.MOVE(SYSTEM.ADR(LRealPat), SYSTEM.ADR(MaxLReal), 8);  (*i386: 1.7976931348623157D308*)
   Texts.OpenWriter(W); Log := Oberon.Log;
   outputPath := ""; outputPrefix := "";  (* extension is initialized in Compiler *)
-  first := TRUE
+  first := TRUE; slim := FALSE; symPath := ""
 END OPM.
