@@ -526,6 +526,7 @@ Intel i386 :
         Gen1 (SHORT (x.adr), loc, node); FixLinkWith (x.offs, loc)
       END
     ELSIF loc>=0 THEN FixLinkWith (x.offs, loc) (* Fjmp *)
+    ELSE loc := x.offs  (* polpo: never, forward: the true jumps of the operands go there all the same *)
     END;
     FixLink (x.inx) (* Fjmp *)
   END Jcc;
@@ -549,6 +550,7 @@ Intel i386 :
         FixLinkWith (x.inx, loc) (* Fjmp *)
       END;
     ELSIF loc>=0 THEN FixLinkWith (x.inx, loc) (* Fjmp *)
+    ELSE loc := x.inx  (* polpo: always, forward: the false jumps of the operands (b in b & TRUE) go there *)
     END;
     FixLink (x.offs) (* Tjmp *)
   END Jncc;
@@ -1136,11 +1138,17 @@ Intel i386 :
     END
   END SetRange;
 
+  (* polpo: the inverted condition; always and never (a constant operand of & or OR) too *)
+  PROCEDURE InvCC (cc: LONGINT): INTEGER;
+  BEGIN
+    IF cc = always THEN RETURN never ELSIF cc = never THEN RETURN always ELSE RETURN InvCCtab [(cc - EQ) DIV 32] END
+  END InvCC;
+
   PROCEDURE Not* (VAR z, x: Item); (* z := NOT (x) *)
     VAR temp: LONGINT;
   BEGIN
     IF x.mode = Coc THEN
-      z := x; z.adr := InvCCtab [(z.adr - EQ) DIV 32];
+      z := x; z.adr := InvCC (z.adr);  (* polpo: ~(b & FALSE) trapped here *)
       temp := z.offs; z.offs := z.inx; z.inx := temp; (* permute Fjmp and Tjmp *)
     ELSE
       load (x);
@@ -1352,15 +1360,17 @@ Intel i386 :
   PROCEDURE CondAnd* (VAR x: Item); (* prepares conditional and *)
     VAR jcc: INTEGER;
   BEGIN
-    IF x.mode = Coc THEN jcc := InvCCtab [(x.adr - EQ) DIV 32]
+    IF x.mode = Coc THEN jcc := InvCC (x.adr)
     ELSE (* form = Bool, mode # Con *)
       ASSERT ( (x.typ.form = Bool) & (x.mode # Con) );
       load (x); GenFlags (cmp, x, True);
       SetCC (x, NE);
       jcc := jne
     END;
-    Gen1 (jcc, x.inx, NIL); (* ... Fjmp *)
-    x.inx := -2-(pc-1);
+    IF jcc # never THEN  (* polpo: TRUE on the left of &, no jump *)
+      Gen1 (jcc, x.inx, NIL); (* ... Fjmp *)
+      x.inx := -2-(pc-1)
+    END;
     FixLink (x.offs) (* Tjmp here *)
   END CondAnd;
 
@@ -1391,8 +1401,10 @@ Intel i386 :
       SetCC (x, EQ);
       jcc := je
     END;
-    Gen1 (jcc, x.offs, NIL); (* ... Tjmp *)
-    x.offs := -2-(pc-1);
+    IF jcc # never THEN  (* polpo: FALSE on the left of OR, no jump *)
+      Gen1 (jcc, x.offs, NIL); (* ... Tjmp *)
+      x.offs := -2-(pc-1)
+    END;
     FixLink (x.inx) (* Fjmp here *)
   END CondOr;
 

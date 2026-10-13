@@ -26,7 +26,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARM: a constant relation (1 = 1, SYSTEM.VAL(LONGINT, c) = n) as a value or in & and OR gave
    the condition NV, not an instruction on ARMv6 and later: SIGILL (2026-10-06);
    ARMv7: a call inside a designator of a later parameter, P(3, a[F(x)]), overwrote the registers
-   of the parameters before it, which were stored early (the Scheme of Ceres Oberon, 2026-10-13). *)
+   of the parameters before it, which were stored early (the Scheme of Ceres Oberon, 2026-10-13);
+   x86: a constant FALSE right of & (TRUE right of OR) under ~ trapped in the compiler, and with
+   the constant TRUE (FALSE) the jumps of the left operand were lost in IF and WHILE (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -178,6 +180,15 @@ BEGIN
   RETURN Five(3, cells.r[Id(1)], cells.r[Id(cellx + 1)], cells.r[Id(cellx)], 2) = 31432
 END CallInIndex;
 
+(* the constant operands are kept by the parser (side effects of the other one) *)
+PROCEDURE ConstCond(b, d: BOOLEAN): BOOLEAN;
+VAR r: BOOLEAN; n: INTEGER;
+BEGIN r := b & ~(b & FALSE) & ~(d OR TRUE) = FALSE;
+  n := 0; IF d & ~(b & FALSE) THEN n := 1 END;
+  IF b & TRUE THEN INC(n, 2) END;
+  RETURN r & (n = 2) & (b OR ~(b OR TRUE)) & ~(d & ~(d & FALSE))
+END ConstCond;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -222,6 +233,7 @@ BEGIN
   Check("RETURN ~F() & (G() < 0), the result of G in the result register", ~NotAnd() & ~OrRel());
   Check("16 RETURN of a REAL function result", (RF1(3.0) = 9.0) & (RF16(2.0) = 4.0) & (RF8(RF9(1.5)) = 5.0625));
   Check("calls inside the index of a later parameter", CallInIndex());
+  Check("constant FALSE and TRUE as operands of & and OR, under ~", ConstCond(TRUE, FALSE));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
