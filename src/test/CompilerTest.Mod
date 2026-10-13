@@ -24,7 +24,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARM: RETURN f(x) of a REAL kept a VFP register; after 15 of them in a module it did not compile
    (out of registers, err 216; RealMath of OOC, 2026-10-06);
    ARM: a constant relation (1 = 1, SYSTEM.VAL(LONGINT, c) = n) as a value or in & and OR gave
-   the condition NV, not an instruction on ARMv6 and later: SIGILL (2026-10-06). *)
+   the condition NV, not an instruction on ARMv6 and later: SIGILL (2026-10-06);
+   ARMv7: a call inside a designator of a later parameter, P(3, a[F(x)]), overwrote the registers
+   of the parameters before it, which were stored early (the Scheme of Ceres Oberon, 2026-10-13). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -37,6 +39,7 @@ TYPE
   Work = POINTER TO RECORD cur, issuer: Info END;
 
 VAR
+  cells: POINTER TO RECORD r: ARRAY 10 OF LONGINT END; cellx: LONGINT;
   fails, checks: LONGINT;
   g: ARRAY 3 OF Small;
   flag: BOOLEAN;
@@ -161,6 +164,20 @@ BEGIN
   RETURN buf[63] = "z"
 END EndOfMap;
 
+(* five parameters, the later ones with calls inside an index: ARMv7 stored the first ones in their
+   registers before those calls and the calls overwrote them *)
+PROCEDURE Five(t: SHORTINT; a, b, c, d: LONGINT): LONGINT;
+BEGIN RETURN t * 10000 + a * 1000 + b * 100 + c * 10 + d
+END Five;
+
+PROCEDURE CallInIndex(): BOOLEAN;
+VAR i: INTEGER;
+BEGIN
+  NEW(cells); i := 0; WHILE i < 10 DO cells.r[i] := i; INC(i) END;
+  cellx := 3;
+  RETURN Five(3, cells.r[Id(1)], cells.r[Id(cellx + 1)], cells.r[Id(cellx)], 2) = 31432
+END CallInIndex;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -204,6 +221,7 @@ BEGIN
   Check("constant relations as values", ConstRel());
   Check("RETURN ~F() & (G() < 0), the result of G in the result register", ~NotAnd() & ~OrRel());
   Check("16 RETURN of a REAL function result", (RF1(3.0) = 9.0) & (RF16(2.0) = 4.0) & (RF8(RF9(1.5)) = 5.0625));
+  Check("calls inside the index of a later parameter", CallInIndex());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

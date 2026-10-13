@@ -453,8 +453,7 @@ MODULE AOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     IF n# NIL THEN
       c:=n^.class;
       IF c=Ncall THEN fip:=TRUE;
-      ELSIF c=Nmop THEN HasFunction( n^.left);
-      ELSIF c=Ndop THEN
+      ELSE  (* polpo: also calls inside designators, as in a[f(i)] or p(T).f(x)^: they overwrote the registers of the parameters before *)
         HasFunction( n^.left);
         HasFunction( n^.right);
       END;
