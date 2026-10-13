@@ -291,11 +291,17 @@ bin/x86/loksh xxs.Fit notes.txt        # the same as xxs.Open; new files are cre
 
 It edits plain files and Oberon texts: plain files stay plain, Oberon texts keep their
 fonts and colours (shown in the terminal) and new text gets the looks of the character
-before it. The keys are nano's, shown at the bottom: ^O Write Out, ^X Exit, ^K Cut (a
-line; ^K again adds the next), ^U Paste, ^W Where Is, ^C Location, ^G Help, ^A/^E line
-start/end, ^Y/^V page up/down, and the arrows, Home, End, PgUp, PgDn. In the Write Out
-prompt ^T switches between storing as Oberon text and as plain text, so an Oberon text can
-be saved as a plain file. It runs on every port.
+before it. The keys are mostly nano's, shown at the bottom: ^O Write Out, ^X Exit, ^W Where
+Is, ^G Help, ^E line end, ^Y page up, and the arrows, Home, End, PgUp, PgDn; Ctrl with the
+left and right arrows moves by words. It selects and copies as the text viewers of the desktop
+do: Shift with the movement keys selects, ^A selects everything, ^C copies (without a selection
+it shows the location, as in nano), ^K cuts (without a
+selection, the line; ^K again adds the next), ^V and ^U paste, and typing, Backspace or Delete
+replace a selection. ^B starts a block, as in the desktop, and so does Alt+Shift with the
+arrows; a block of width 0 types into all its lines, which indents them, and Backspace and
+Delete unindent. Copies also go to the terminal's clipboard (OSC 52). In the Write Out prompt
+^T switches between storing as Oberon text and as plain text, so an Oberon text can be saved
+as a plain file. It runs on every port.
 
 ### X11 Oberon
 
@@ -381,15 +387,22 @@ described in [texts.md](texts.md).
 
 ### Editing with the keyboard
 
-Text viewers (tools like System.Tool, the log, texts opened with `Edit.Open`) can be
-used like a common editor. The left pane, `System.Text`, is a Script viewer and keeps
-the classic keys.
+The text viewers of polpo (TextFrames: tools like System.Tool, the log, texts opened with
+`Edit.Open`) are improved over those of ETH Oberon, and can be used like a common editor. The
+left pane, `System.Text`, is a Script viewer and keeps the classic keys.
 
 * arrows move the caret, Up and Down keep the column and scroll at the edges;
   Home/End go to the start/end of the line, Ctrl+Home/Ctrl+End of the text;
   Page Up/Page Down move by a viewer height
 * Shift with any of these selects; Backspace or Delete removes a selection made so
 * Ctrl+A selects the whole text
+* Ctrl+B starts a block: a rectangle of columns over several lines, which the arrows then
+  extend (a selection made with Shift becomes a block too); Ctrl+B or Esc ends it, and so does
+  moving after something was typed or copied. What is typed replaces the block on every one of
+  its lines, and a block of width 0, a thin bar over some lines, types into all of them: that
+  is how a group of lines is indented. Backspace and Delete in such a block take away the
+  character before or at the bar on every line, which unindents. Ctrl+C copies a block and
+  Ctrl+V pastes it as a block again
 * Ctrl+C copies the selection, Ctrl+X cuts it, Ctrl+V pastes at the caret. Inside
   Oberon fonts and colours are kept. The copied text is also on the X clipboard, so
   Ctrl+V in other programs pastes it, and Ctrl+V in Oberon pastes what other programs
@@ -398,6 +411,10 @@ the classic keys.
 * Shift+right click extends the selection to the mouse, or selects from the caret to
   the mouse: left click at the start, scroll with the scroll bar, Shift+right click at
   the end, like in xterm. Scrolling keeps the selection and the caret.
+* each line is as high as the largest font on it, so the space between lines follows the fonts
+  that are used: a heading in a big font does not run into the lines around it, and a line in a
+  small font stays close (`System.LineSpacing` in `Oberon.Text` sets the height of a line in
+  percent of its font height)
 * `Edit.Store` keeps a plain file (a `.Mod` source, `Oberon.Text`) plain as long as its
   text has one font and colour; the log then says `(plain)`. `Edit.StorePlain` (in the
   menu, or `Edit.StorePlain name` with the marked viewer) always stores plain ASCII,
