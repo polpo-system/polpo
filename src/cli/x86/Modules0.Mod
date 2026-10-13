@@ -53,6 +53,8 @@ VAR
   resMsgLen: LONGINT;
   objPath*: ARRAY 256 OF CHAR;
   rootPath: ARRAY 256 OF CHAR;  (* object directory in the root, tried after objPath *)
+  slim*: PROCEDURE (name: ARRAY OF CHAR): Files.File;  (** polpo: a native object made in memory from the slim binary
+    of the module (obj/slim/name.Obj, the omi package), NIL if there is none; installed by the module SlimLoad *)
 
   (** The res codes are listed in the table below.
     done = 0;
@@ -733,13 +735,43 @@ BEGIN
   fname[j] := "."; fname[j+1] := "O"; fname[j+2] := "b"; fname[j+3] := "j"; fname[j+4] := 0X
 END ObjName;
 
+(* polpo: is there a slim binary of the module, dir/../slim/name.Obj for dir objPath or rootPath? *)
+PROCEDURE SlimExists(VAR dir, name: ARRAY OF CHAR): BOOLEAN;
+  VAR sdir: ARRAY 256 OF CHAR; fname: ARRAY 320 OF CHAR; i: INTEGER;
+BEGIN
+  i := 0; WHILE dir[i] # 0X DO sdir[i] := dir[i]; INC(i) END;
+  IF (i > 0) & (sdir[i-1] = "/") THEN DEC(i) END;
+  WHILE (i > 0) & (sdir[i-1] # "/") DO DEC(i) END;  (* after the last directory's slash: x86/ goes *)
+  sdir[i] := "s"; sdir[i+1] := "l"; sdir[i+2] := "i"; sdir[i+3] := "m"; sdir[i+4] := "/"; sdir[i+5] := 0X;
+  ObjName(sdir, name, fname);
+  RETURN Root.Exists(fname)  (* there, not on the search path of Files *)
+END SlimExists;
+
+(* polpo: the slim binary of the module beside dir, compiled into memory; SlimLoad installs slim, and is loaded
+   the first time it is needed *)
+PROCEDURE SlimObj(VAR dir, name: ARRAY OF CHAR; VAR f: Files.File);
+  VAR h: Module;
+BEGIN f := NIL;
+  IF SlimExists(dir, name) THEN
+    IF slim = NIL THEN Load("SlimLoad", h); res := done; Clear END;
+    IF slim # NIL THEN f := slim(name); res := done; Clear END
+  END
+END SlimObj;
+
 PROCEDURE Load(name: ARRAY OF CHAR; VAR m: Module);
   VAR f: Files.File; R: Files.Rider; fname: ARRAY 320 OF CHAR; tag: CHAR;
 BEGIN
   m := FindMod(name); res := done; Clear;
   IF m = NIL THEN
-    ObjName(objPath, name, fname); f := Files.Old(fname);
-    IF (f = NIL) & (rootPath # objPath) THEN ObjName(rootPath, name, fname); f := Files.Old(fname) END;
+    (* the nearest first: the native object of objPath, a slim binary there (polpo: compiled into memory, see
+       slim), then the same in the root *)
+    ObjName(objPath, name, fname); f := NIL;
+    IF Root.Exists(fname) THEN f := Files.Old(fname) ELSE SlimObj(objPath, name, f) END;
+    IF f = NIL THEN f := Files.Old(fname) END;  (* Files also looks in the root for a relative name *)
+    IF (f = NIL) & (rootPath # objPath) THEN
+      ObjName(rootPath, name, fname); f := Files.Old(fname);
+      IF f = NIL THEN SlimObj(rootPath, name, f) END
+    END;
     IF f = NIL THEN
       COPY(name, importing); res := fileNotFound; ErrMsg(res);  (* polpo: the module name; the path was cut at 32 characters *)
       RETURN
