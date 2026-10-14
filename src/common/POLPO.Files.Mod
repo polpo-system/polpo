@@ -243,7 +243,7 @@ BEGIN
 END New;
 
 PROCEDURE Old*( name: ARRAY OF CHAR): File;
-VAR f: File; fd, r, share: LONGINT; status: Linux0.Status; res: INTEGER;
+VAR f: File; fd, r, n, share: LONGINT; status: Linux0.Status; res: INTEGER;
 BEGIN
   NEW( f); share:=Linux0.MAPSHARED;
   IF trace THEN Kernel.WriteString("Files.Old "); Kernel.WriteString(name); Kernel.WriteLn END;
@@ -280,9 +280,17 @@ BEGIN
     ELSE
       (* polpo: a file opened read only cannot be mapped shared for writing (EACCES, Old gave NIL for
          /etc/ssl/certs/ca-certificates.crt); mapped privately it reads, and changes stay in memory *)
-      f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, share, f.fd, 0); f.disk:=f.len;
-      IF ((f.addr MOD 1000H)#0) & (share=Linux0.MAPSHARED) THEN  (* read only, found in the search path *)
-        f.addr:=Linux0.Mmap20( 0, f.len, 3, Linux0.MAPPRIVATE, f.fd, 0)
+      IF share=Linux0.MAPSHARED THEN
+        f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, share, f.fd, 0); f.disk:=f.len;
+        IF (f.addr MOD 1000H)#0 THEN share:=Linux0.MAPPRIVATE END  (* read only, found in the search path *)
+      END;
+      IF share=Linux0.MAPPRIVATE THEN  (* the contents in memory of its own, which can grow (past the end of a
+        file mapping there is no memory: bus error) *)
+        f.addr:=Linux0.Mmap20( 0, f.len, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0); f.disk:=-1;
+        IF (f.addr MOD 1000H)=0 THEN
+          r:=0; n:=1;
+          WHILE (r<f.len) & (n>0) DO n:=Linux0.Read0( f.fd, f.addr+r, f.len-r); IF n>0 THEN INC(r, n) END END
+        END
       END
     END;
     IF (f.addr MOD 1000H)#0 THEN
