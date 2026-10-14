@@ -246,6 +246,16 @@ BEGIN
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
 END Close0;
 
+PROCEDURE Fsync0*( fd: LONGINT): LONGINT;  (* polpo: write the file's data to the disk *)
+BEGIN
+  SYSTEM.PUTREG( 2, 4118);        (* fsync *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END Fsync0;
+
 PROCEDURE Read0*( fd, buf, num: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( 2, 4003);        (* Syscall nr to R2 *)

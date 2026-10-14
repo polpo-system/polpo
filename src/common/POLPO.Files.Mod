@@ -322,6 +322,7 @@ BEGIN
           HALT( 108);
         END;
         IF f.len#Linux0.Write0( f.fd, f.addr, f.len) THEN Kernel.WriteString("Files.Register 2"); HALT( 107) END;
+        res:=Linux0.Fsync0( f.fd);  (* polpo: on the disk now; after a power loss the file was empty *)
         f.changed:=FALSE
       ELSE
         IF f.changed THEN  (* polpo: from the start; at the descriptor's position a second Register appended *)
@@ -330,6 +331,7 @@ BEGIN
           f.changed:=FALSE
         END;
         IF 0#Linux0.Ftruncate0( f.fd, f.len) THEN Kernel.WriteString("Files.Register 4"); HALT(102) END;
+        res:=Linux0.Fsync0( f.fd);  (* polpo: on the disk now *)
         IF f.disk >= 0 THEN f.disk:=f.len END
       END;
     END;
@@ -350,7 +352,8 @@ BEGIN
       res:=Linux0.LSeek0( f.fd, 0, Linux0.SEEKSET);
       res:=Linux0.Write0( f.fd, f.addr, f.len);
       IF res#f.len THEN Kernel.WriteString("Files.Close: write failed "); Kernel.WriteString(f.Name); Kernel.WriteHex(-res, 9); Kernel.WriteLn
-      ELSE res:=Linux0.Ftruncate0( f.fd, f.len); f.changed:=FALSE; IF f.disk >= 0 THEN f.disk:=f.len END
+      ELSE res:=Linux0.Ftruncate0( f.fd, f.len); res:=Linux0.Fsync0( f.fd);  (* polpo: on the disk now *)
+        f.changed:=FALSE; IF f.disk >= 0 THEN f.disk:=f.len END
       END
     END
   END

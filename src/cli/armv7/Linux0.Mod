@@ -392,6 +392,14 @@ BEGIN
   SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
 END Close0;
 
+PROCEDURE Fsync0*( fd: LONGINT): LONGINT;  (* polpo: write the file's data to the disk *)
+BEGIN
+  SYSTEM.CODE(LDMIA1);  (*LDMIA   SP, {R0 } *)
+  SYSTEM.PUTREG(7, 118);        (* fsync *)
+  SYSTEM.CODE(SVC);  (* EF000000  SWI  0H *)
+  SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
+END Fsync0;
+
 PROCEDURE Read0*( fd, buf, num: LONGINT): LONGINT;
 BEGIN
   SYSTEM.CODE(LDMIA3);  (*LDMIA   SP, {R0 R1 R2 } *)

@@ -309,6 +309,14 @@ CODE {SYSTEM.i386}
   INT  80H
 END Close0;
 
+PROCEDURE Fsync0*( fd: LONGINT): LONGINT;  (* polpo: write the file's data to the disk *)
+CONST FSYNC= 118;
+CODE {SYSTEM.i386}
+  MOV  EAX, FSYNC
+  MOV  EBX, fd[ EBP]
+  INT  80H
+END Fsync0;
+
 PROCEDURE Read0*( fd, buf, num: LONGINT): LONGINT;
 CONST READ= 3;
 CODE {SYSTEM.i386}

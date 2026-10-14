@@ -235,6 +235,13 @@ BEGIN
   SYSTEM.CODE( JALR);
 END Close0;
 
+PROCEDURE Fsync0*( fd: LONGINT): LONGINT;  (* polpo: write the file's data to the disk *)
+BEGIN
+  SYSTEM.PUTREG( NRR, 82);        (* fsync *)
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Fsync0;
+
 PROCEDURE Read0*( fd, buf, num: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( NRR, 63);        (* Syscall nr to R2 *)

@@ -216,6 +216,14 @@ CODE
   MOV  PC, LR
 END Close0;
 
+PROCEDURE Fsync0*( fd: LONGINT): LONGINT;  (* polpo: write the file's data to the disk *)
+CODE
+  LDR  R0, [SP],4
+  MOV  R7, 118    (* FSYNC= 118 *)
+  SWI  0
+  MOV  PC, LR
+END Fsync0;
+
 PROCEDURE Read0*( fd, buf, num: LONGINT): LONGINT;
 CODE 
   LDR  R2, [SP],4
