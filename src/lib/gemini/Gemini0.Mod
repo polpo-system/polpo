@@ -15,7 +15,7 @@ MODULE Gemini0;  (** the core of Gemini and Spartan clients: requests, answers, 
    the certificate>.crt and .key in $XDG_CONFIG_HOME/dcs/idents (default ~/.config/dcs/idents);
    the key is ECDSA P-256 or RSA. *)
 
-IMPORT SYSTEM, Linux0, Kernel, Internet, TLSBytes, TLSASN1, TLSPEM, TLSCABundle, TLSX509,
+IMPORT SYSTEM, Linux0, Kernel, Files, FATFiles, Internet, TLSBytes, TLSASN1, TLSPEM, TLSCABundle, TLSX509,
   TLSX509Validity, TLSSHA256, TLSIdentity, TLSCertGen, TLS13Live;
 
 CONST
@@ -74,6 +74,7 @@ TYPE
 
 VAR
   lastError*: ARRAY 256 OF CHAR;  (** why the last Request, Fetch or identity procedure failed *)
+  crtNames: Ident;  (* the .crt files Collect found, for LoadIdents *)
   candidates*: ARRAY MaxCandidates OF Ident;  (** FindIdent: the identities the query matched *)
   nCandidates*: LONGINT;
   s: State;
@@ -340,49 +341,41 @@ END NameForURL;
 (* ----- files ----- *)
 
 PROCEDURE Exists*(VAR name: ARRAY OF CHAR): BOOLEAN;
-VAR fd, r: LONGINT;
-BEGIN
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), Linux0.ORDonly, 0);
-  IF fd < 0 THEN RETURN FALSE END;
-  r := Linux0.Close0(fd); RETURN TRUE
+VAR full: Files.FileName; flags: SET;
+BEGIN RETURN Files.Exists(name, full, flags)
 END Exists;
 
-(* writes the bytes a[0..n) to the new file name, with mode; FALSE if it cannot *)
+(* writes the bytes a[0..n) to the new file name, with mode (as for chmod) if it is not 644; FALSE if it cannot *)
 PROCEDURE WriteFile(VAR name: ARRAY OF CHAR; VAR a: ARRAY OF CHAR; n, mode: LONGINT): BOOLEAN;
-VAR fd, r, done: LONGINT;
+VAR f: Files.File; w: Files.Rider; r: LONGINT;
 BEGIN
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), Linux0.OWRonly + Linux0.OCREAT + Linux0.OTRUNC, mode);
-  IF fd < 0 THEN RETURN FALSE END;
-  done := 0; r := 1;
-  WHILE (done < n) & (r > 0) DO r := Linux0.Write0(fd, SYSTEM.ADR(a[done]), n - done); IF r > 0 THEN INC(done, r) END END;
-  r := Linux0.Close0(fd);
-  RETURN done = n
+  f := Files.New(name);
+  IF f = NIL THEN RETURN FALSE END;
+  Files.Set(w, f, 0); Files.WriteBytes(w, a, n); Files.Register(f);
+  IF mode # 1A4H THEN r := Linux0.Fchmodat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), mode) END;
+  RETURN TRUE
 END WriteFile;
 
 (** writes the body of r to the file name, as it arrived; FALSE if it cannot *)
 PROCEDURE Save*(r: Response; VAR name: ARRAY OF CHAR): BOOLEAN;
-VAR fd, n, done: LONGINT; c: Chunk;
+VAR f: Files.File; w: Files.Rider; c: Chunk;
 BEGIN
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), Linux0.OWRonly + Linux0.OCREAT + Linux0.OTRUNC, 1A4H);
-  IF fd < 0 THEN SetError("cannot write ", name); RETURN FALSE END;
-  c := r.body;
-  WHILE c # NIL DO
-    done := 0; n := 1;
-    WHILE (done < c.len) & (n > 0) DO n := Linux0.Write0(fd, SYSTEM.ADR(c.data[done]), c.len - done); IF n > 0 THEN INC(done, n) END END;
-    IF done # c.len THEN n := Linux0.Close0(fd); SetError("cannot write ", name); RETURN FALSE END;
-    c := c.next
-  END;
-  n := Linux0.Close0(fd); RETURN TRUE
+  f := Files.New(name);
+  IF f = NIL THEN SetError("cannot write ", name); RETURN FALSE END;
+  Files.Set(w, f, 0); c := r.body;
+  WHILE c # NIL DO Files.WriteBytes(w, c.data, c.len); c := c.next END;
+  Files.Register(f); RETURN TRUE
 END Save;
 
-(* makes the directory path and those above it *)
+(* makes the directory path and those above it; the new ones for the owner only (0700) *)
 PROCEDURE MakeDirs(VAR path: ARRAY OF CHAR);
-VAR p: ARRAY PathLen OF CHAR; i, r: LONGINT;
+VAR p: ARRAY PathLen OF CHAR; i, r: LONGINT; res: INTEGER;
 BEGIN
   i := 1;
   WHILE path[i - 1] # 0X DO
     IF (path[i] = "/") OR (path[i] = 0X) THEN
-      COPY(path, p); p[i] := 0X; r := Linux0.MkDir0(SYSTEM.ADR(p[0]), 1C0H)  (* 0700 *)
+      COPY(path, p); p[i] := 0X; Files.CreateDirectory(p, res);
+      IF res = 0 THEN r := Linux0.Fchmodat0(Linux0.ATFDCWD, SYSTEM.ADR(p[0]), 1C0H) END  (* only a directory made here *)
     END;
     INC(i)
   END
@@ -653,36 +646,36 @@ BEGIN
   RETURN TRUE
 END ReadDetails;
 
+PROCEDURE Collect(name: ARRAY OF CHAR; time, date, size: LONGINT; attr: SET; VAR continue: BOOLEAN);
+VAR id: Ident; k: LONGINT;
+BEGIN
+  k := Len(name);
+  IF (k > 4) & (name[k - 4] = ".") & (name[k - 3] = "c") & (name[k - 2] = "r") & (name[k - 1] = "t") THEN
+    NEW(id); COPY(name, id.cert); id.next := crtNames; crtNames := id  (* the name for now *)
+  END
+END Collect;
+
 (** the identities in dir (IdentsDir): every <name>.crt with a <name>.key beside it, sorted by name *)
 PROCEDURE LoadIdents*(VAR dir: ARRAY OF CHAR): Ident;
-VAR fd, n, i, k, rec, r: LONGINT; buf: ARRAY 4096 OF CHAR; name: ARRAY NameLen OF CHAR; list, id, p, q: Ident; key: ARRAY PathLen OF CHAR;
+VAR k: LONGINT; res: LONGINT; name: ARRAY NameLen OF CHAR; list, id, p, q, next: Ident; key, pat: ARRAY PathLen OF CHAR;
 BEGIN
-  list := NIL;
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(dir[0]), Linux0.ORDonly, 0);
-  IF fd < 0 THEN RETURN NIL END;
-  n := Linux0.GetDents0(fd, SYSTEM.ADR(buf[0]), LEN(buf));  (* getdents64: length at 16, name at 19 *)
-  WHILE n > 0 DO
-    i := 0;
-    WHILE i < n DO
-      rec := ORD(buf[i + 16]) + 256 * LONG(ORD(buf[i + 17]));
-      k := 0; WHILE (buf[i + 19 + k] # 0X) & (k < NameLen - 1) DO name[k] := buf[i + 19 + k]; INC(k) END; name[k] := 0X;
-      IF (k > 4) & (name[k - 4] = ".") & (name[k - 3] = "c") & (name[k - 2] = "r") & (name[k - 1] = "t") THEN
-        NEW(id); COPY(dir, id.cert); Append(id.cert, "/"); Append(id.cert, name);
-        COPY(id.cert, key); key[Len(key) - 3] := "k"; key[Len(key) - 2] := "e"; key[Len(key) - 1] := "y";
-        IF Exists(key) THEN
-          COPY(key, id.key); name[k - 4] := 0X; COPY(name, id.fingerprint);
-          k := 0; WHILE id.fingerprint[k] # 0X DO id.fingerprint[k] := Lower(id.fingerprint[k]); INC(k) END;
-          IF ReadDetails(id) THEN END;
-          IF (list = NIL) OR (id.fingerprint < list.fingerprint) THEN id.next := list; list := id
-          ELSE p := list; q := list.next; WHILE (q # NIL) & (q.fingerprint < id.fingerprint) DO p := q; q := q.next END; id.next := q; p.next := id
-          END
-        END
-      END;
-      INC(i, rec)
+  list := NIL; crtNames := NIL;
+  COPY(dir, pat); Append(pat, "/"); FATFiles.Enumerate(pat, Collect, res);
+  id := crtNames; crtNames := NIL;
+  WHILE id # NIL DO
+    next := id.next; COPY(id.cert, name); k := Len(name);
+    COPY(dir, id.cert); Append(id.cert, "/"); Append(id.cert, name);
+    COPY(id.cert, key); key[Len(key) - 3] := "k"; key[Len(key) - 2] := "e"; key[Len(key) - 1] := "y";
+    IF Exists(key) THEN
+      COPY(key, id.key); name[k - 4] := 0X; COPY(name, id.fingerprint);
+      k := 0; WHILE id.fingerprint[k] # 0X DO id.fingerprint[k] := Lower(id.fingerprint[k]); INC(k) END;
+      IF ReadDetails(id) THEN END;
+      IF (list = NIL) OR (id.fingerprint < list.fingerprint) THEN id.next := list; list := id
+      ELSE p := list; q := list.next; WHILE (q # NIL) & (q.fingerprint < id.fingerprint) DO p := q; q := q.next END; id.next := q; p.next := id
+      END
     END;
-    n := Linux0.GetDents0(fd, SYSTEM.ADR(buf[0]), LEN(buf))
+    id := next
   END;
-  r := Linux0.Close0(fd);
   RETURN list
 END LoadIdents;
 
