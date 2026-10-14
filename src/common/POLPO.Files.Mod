@@ -301,17 +301,38 @@ END ReleaseRead;
 
 (** Register a file created with New in the directory, replacing the previous file in the 
 directory with the same name. The file is automatically closed. *)
+(* polpo: the directory of name (relative to dirfd) to the disk, so that a new name in it stays *)
+PROCEDURE SyncDir(dirfd: LONGINT; VAR name: ARRAY OF CHAR);
+VAR dir: FileName; i, last, fd, res: LONGINT;
+BEGIN
+  i:=0; last:=-1; WHILE name[i]#0X DO IF name[i]="/" THEN last:=i END; INC(i) END;
+  IF last<0 THEN res:=Linux0.Fsync0( dirfd)
+  ELSE
+    i:=0; WHILE i<last DO dir[i]:=name[i]; INC(i) END; dir[i]:=0X;
+    IF last=0 THEN dir:="/" END;
+    fd:=Linux0.Openat0( dirfd, SYSTEM.ADR(dir[0]), Linux0.ORDonly+Linux0.ODirectory, 0);
+    IF fd>=0 THEN res:=Linux0.Fsync0( fd); res:=Linux0.Close0( fd) END
+  END
+END SyncDir;
+
 PROCEDURE Register*(f: File);
-VAR res: LONGINT;
+VAR res, i: LONGINT; tmp: FileName;
 BEGIN
   IF f# NIL THEN
     IF trace THEN Kernel.WriteString("Files.Register "); Kernel.WriteString(f.Name); Kernel.WriteLn END;
     IF f.Name#"" THEN
       IF f.fd=-1 THEN                                  (* flags were 242H for X86 *)
-        (* polpo: remove the old file first, so that processes that have it open or mapped
-           (object files of a running Oberon) keep the old contents *)
-        res:=Linux0.UnLinkat0( f.dirfd, SYSTEM.ADR(f.Name[0]), 0);
-        f.fd:=Linux0.Openat0( f.dirfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDWR+Linux0.OTRUNC+Linux0.OCREAT, SYSTEM.VAL( LONGINT, { 8, 7, 5, 2}));
+        (* polpo: written as name.new~, synced, then renamed over the old file: a power loss leaves
+           the old file or the new one, never an empty one; processes that have the old file open or
+           mapped (object files of a running Oberon) keep its contents, as with the unlink before *)
+        COPY(f.Name, tmp); i:=0; WHILE tmp[i]#0X DO INC(i) END;
+        IF i+5 < LEN(tmp) THEN tmp[i]:="."; tmp[i+1]:="n"; tmp[i+2]:="e"; tmp[i+3]:="w"; tmp[i+4]:="~"; tmp[i+5]:=0X
+        ELSE tmp:=""  (* too long for a temporary name: written in place *)
+        END;
+        IF tmp="" THEN res:=Linux0.UnLinkat0( f.dirfd, SYSTEM.ADR(f.Name[0]), 0); COPY(f.Name, tmp)
+        ELSE res:=Linux0.UnLinkat0( f.dirfd, SYSTEM.ADR(tmp[0]), 0)  (* left over from a crash *)
+        END;
+        f.fd:=Linux0.Openat0( f.dirfd, SYSTEM.ADR(tmp[0]), Linux0.ORDWR+Linux0.OTRUNC+Linux0.OCREAT, SYSTEM.VAL( LONGINT, { 8, 7, 5, 2}));
         (*   ARM: was 240H; 200H: O_DSYNC, 40H: O_CREAT MIPS: 110H*)
         IF f.fd<=0 THEN
           Kernel.WriteString("Files.Register bug"); Kernel.WriteHex(-f.fd, 9); Kernel.WriteLn;
@@ -323,6 +344,12 @@ BEGIN
         END;
         IF f.len#Linux0.Write0( f.fd, f.addr, f.len) THEN Kernel.WriteString("Files.Register 2"); HALT( 107) END;
         res:=Linux0.Fsync0( f.fd);  (* polpo: on the disk now; after a power loss the file was empty *)
+        IF tmp#f.Name THEN
+          IF 0#Linux0.Renameat0( f.dirfd, SYSTEM.ADR(tmp[0]), f.dirfd, SYSTEM.ADR(f.Name[0]), 0) THEN
+            Kernel.WriteString("Files.Register: rename failed "); Kernel.WriteString(f.Name); Kernel.WriteLn; HALT( 111)
+          END
+        END;
+        SyncDir( f.dirfd, f.Name);
         f.changed:=FALSE
       ELSE
         IF f.changed THEN  (* polpo: from the start; at the descriptor's position a second Register appended *)
