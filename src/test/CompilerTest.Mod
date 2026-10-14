@@ -41,7 +41,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    from beside its address; LEN(a) was right (2026-10-14);
    ARM: p^ of a POINTER TO ARRAY OF ARRAY passed to an open array parameter: loading the first length
    freed the register of p^, the second length was loaded into it and the address read after it
-   came from there (a trap, 2026-10-14). *)
+   came from there (a trap, 2026-10-14);
+   all: the constant MIN(LONGINT) DIV (-1) or MOD (-1) stopped the compiler (division overflow on the
+   host); DIV is err 203 now, MOD gives 0 (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -323,6 +325,7 @@ BEGIN
   Check("rows of a two-dimensional open array", OpenRows(grid, 2));
   Check("LEN(a, n) of an open array", Lens(grid));
   Check("an open array on the heap as an open array argument", HeapArg());
+  Check("constant MOD (-1)", (MIN(LONGINT) MOD (-1) = 0) & (7 DIV (-1) = -7));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

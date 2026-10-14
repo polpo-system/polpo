@@ -718,7 +718,8 @@ MODULE OPB;  (** non-portable *)
         END
     | div:
         IF f IN intSet THEN
-          IF yval^.intval # 0 THEN
+          IF (yval^.intval = -1) & (xval^.intval = MIN(LONGINT)) THEN err(203)  (* polpo: the quotient does not fit, and the host traps *)
+          ELSIF yval^.intval # 0 THEN
             xval^.intval := xval^.intval DIV yval^.intval; SetIntType(x)
           ELSE err(205)
           END
@@ -726,7 +727,8 @@ MODULE OPB;  (** non-portable *)
         END
     | mod:
         IF f IN intSet THEN
-          IF yval^.intval # 0 THEN
+          IF yval^.intval = -1 THEN xval^.intval := 0; SetIntType(x)  (* polpo: MIN(LONGINT) MOD -1 trapped on the host *)
+          ELSIF yval^.intval # 0 THEN
             xval^.intval := xval^.intval MOD yval^.intval; SetIntType(x)
           ELSE err(205)
           END

@@ -1150,7 +1150,9 @@ CONST
            IF f IN intSet THEN  (*DIV*)
              IF (y.mode=OC.Const) & (y.a=0) THEN OBS.Mark(205) 
              ELSE
-               IF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
+               IF (x.mode = OC.Const) & (y.mode = OC.Const) & (y.a = -1) & (x.a = MIN(LONGINT)) THEN
+                 OBS.Mark(203)  (* polpo: the quotient does not fit, and the host traps *)
+               ELSIF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
                  x.a := x.a DIV y.a; SetIntType(x)
                ELSIF (y.mode = OC.Const) & (mant(y.a) = 1) THEN
                  IF log#0 THEN load(x); OBC.PutDP(OBC.MOV,x.r,0,x.r,log*8+4) END; (* MOV x.r, x.r ASR log *)
@@ -1165,7 +1167,9 @@ CONST
            IF f IN intSet THEN  (*MOD*)
              IF (y.mode = OC.Const) & (y.a=0) THEN OBS.Mark(205)
              ELSE
-               IF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
+               IF (x.mode = OC.Const) & (y.mode = OC.Const) & (y.a = -1) THEN
+                 x.a := 0; x.typ := y.typ  (* polpo: MIN(LONGINT) MOD -1 trapped on the host *)
+               ELSIF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
                  x.a := x.a MOD y.a; x.typ := y.typ
                ELSIF (y.mode = OC.Const) & (mant(y.a) = 1) THEN
                  y.a := ASH(-1, log); load(x); OBC.PutDP1(OBC.BIC,x.r,x.r,y.a)   
