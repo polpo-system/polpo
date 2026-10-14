@@ -3,7 +3,7 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
   Peter Matthias
 *)
 
-  IMPORT OPM:=ROPM;
+  IMPORT OPM:=ROPM, DecReal;
   
   CONST
     MaxStrLen* = 256;
@@ -93,18 +93,8 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
   END Identifier;
 
   PROCEDURE Number;
-    VAR i, m, n, d, e: INTEGER; dig: ARRAY 24 OF CHAR; f: LONGREAL; expCh: CHAR; neg: BOOLEAN;
+    VAR i, m, n, d, e, res: INTEGER; dig: ARRAY 24 OF CHAR; expCh: CHAR; neg, sticky: BOOLEAN;
 
-    PROCEDURE Ten(e: INTEGER): LONGREAL;
-      VAR x, p: LONGREAL;
-    BEGIN x := 1; p := 10;
-      WHILE e > 0 DO
-        IF ODD(e) THEN x := x*p END;
-        e := e DIV 2;
-        IF e > 0 THEN p := p*p END (* prevent overflow *)
-      END;
-      RETURN x
-    END Ten;
 
     PROCEDURE Ord(ch: CHAR; hex: BOOLEAN): INTEGER;
     BEGIN (* ("0" <= ch) & (ch <= "9") OR ("A" <= ch) & (ch <= "F") *)
@@ -115,11 +105,11 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
     END Ord;
     
   BEGIN (* ("0" <= ch) & (ch <= "9") *)
-    i := 0; m := 0; n := 0; d := 0;
+    i := 0; m := 0; n := 0; d := 0; sticky := FALSE;
     LOOP (* read mantissa *)
       IF ("0" <= ch) & (ch <= "9") OR (d = 0) & ("A" <= ch) & (ch <= "F") THEN
         IF (m > 0) OR (ch # "0") THEN (* ignore leading zeros *)
-          IF n < LEN(dig) THEN dig[n] := ch; INC(n) END;
+          IF n < LEN(dig) THEN dig[n] := ch; INC(n) ELSIF ch # "0" THEN sticky := TRUE END;
           INC(m)
         END;
         OPM.Get(ch); INC(i)
@@ -155,15 +145,14 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
       ELSE err(203)
       END
     ELSE (* fraction *)
-      f := 0; e := 0; expCh := "E";
-      WHILE n > 0 DO (* 0 <= f < 1 *) DEC(n); f := (Ord(dig[n], FALSE) + f) / 10 END;
+      e := 0; expCh := "E";
       IF (ch = "E") OR (ch = "D") THEN expCh := ch; OPM.Get(ch); neg := FALSE;
         IF ch = "-" THEN neg := TRUE; OPM.Get(ch)
         ELSIF ch = "+" THEN OPM.Get(ch)
         END;
         IF ("0" <= ch) & (ch <= "9") THEN
-          REPEAT n := Ord(ch, FALSE); OPM.Get(ch);
-            IF e <= (MAX(INTEGER) - n) DIV 10 THEN e := e*10 + n
+          REPEAT res := Ord(ch, FALSE); OPM.Get(ch);
+            IF e <= (MAX(INTEGER) - res) DIV 10 THEN e := e*10 + res
             ELSE err(203)
             END
           UNTIL (ch < "0") OR ("9" < ch);
@@ -172,21 +161,13 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
         END
       END;
       DEC(e, i-d-m); (* decimal point shift *)
-      IF expCh = "E" THEN numtyp := real;
-        IF (1-OPM.MaxRExp < e) & (e <= OPM.MaxRExp) THEN
-          IF e < 0 THEN realval := SHORT(f / Ten(-e))
-          ELSE realval := SHORT(f * Ten(e))
-          END
-        ELSE err(203)
-        END
-      ELSE numtyp := longreal;
-        IF (1-OPM.MaxLExp < e) & (e <= OPM.MaxLExp) THEN
-          IF e < 0 THEN lrlval := f / Ten(-e)
-          ELSE lrlval := f * Ten(e)
-          END
-        ELSE err(203)
-        END
-      END
+      d := 0; WHILE d < n DO res := Ord(dig[d], FALSE); INC(d) END;  (* hexadecimal digits: err 2 *)
+      (* polpo: the value is dig[0..n-1] * 10^(e-n), rounded once by DecReal (the sum of digit/10 and the
+         powers of 10 in floating point were a few ulp off, and refused the ends of the range) *)
+      IF expCh = "E" THEN numtyp := real; res := DecReal.Short(dig, n, sticky, LONG(e) - n, realval)
+      ELSE numtyp := longreal; res := DecReal.Long(dig, n, sticky, LONG(e) - n, lrlval)
+      END;
+      IF res # DecReal.ok THEN err(203) END
     END
   END Number;
 

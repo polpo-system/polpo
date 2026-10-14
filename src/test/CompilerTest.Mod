@@ -46,7 +46,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    host); DIV is err 203 now, MOD gives 0 (2026-10-14);
    all: CAP cleared bit 5 of any character, CAP("7") was 17X and CAP("{") "["; only "a".."z"
    change now, folded and at run time (2026-10-14);
-   x86: SHORT(x) of a LONGREAL stayed in full precision in the FPU, LONG(SHORT(x)) was x (2026-10-14). *)
+   x86: SHORT(x) of a LONGREAL stayed in full precision in the FPU, LONG(SHORT(x)) was x (2026-10-14);
+   all: real literals were made with floating point arithmetic: 1.0D23 one unit in the last place off,
+   3.4E38 and 1.7D308 too large, denormal numbers refused or 0; DecReal rounds them once (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -264,6 +266,21 @@ BEGIN x := 0.1D0; r := SHORT(x); y := LONG(SHORT(x));
   RETURN (y = LONG(r)) & (SHORT(x) * 1.0D0 = LONG(r)) & (y # x)
 END ShortReal;
 
+(* real literals, correctly rounded, also at the ends of the range *)
+PROCEDURE Literals(): BOOLEAN;
+VAR x: LONGREAL; r: REAL; lo, hi, b: LONGINT; ok: BOOLEAN;
+BEGIN
+  x := 1.0D23; SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  ok := (hi = 44B52D02H) & (lo = 0C7E14AF6H);
+  x := 4.9406564584124654D-324; SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  ok := ok & (hi = 0) & (lo = 1);
+  x := 1.7976931348623157D308; SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  ok := ok & (hi = 7FEFFFFFH) & (lo = -1);
+  r := 3.4E38; SYSTEM.GET(SYSTEM.ADR(r), b); ok := ok & (b = 7F7FC99EH);
+  r := 1.4E-45; SYSTEM.GET(SYSTEM.ADR(r), b); ok := ok & (b = 1);
+  RETURN ok
+END Literals;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -346,6 +363,7 @@ BEGIN
   Check("constant MOD (-1)", (MIN(LONGINT) MOD (-1) = 0) & (7 DIV (-1) = -7));
   Check("CAP changes only lower-case letters", CapOnly());
   Check("SHORT of a LONGREAL in an expression", ShortReal());
+  Check("real literals", Literals());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

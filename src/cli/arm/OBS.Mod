@@ -1,6 +1,6 @@
 MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *)
 
-  IMPORT Reals, Texts := Texts0, Oberon := Oberon0;
+  IMPORT DecReal, Texts := Texts0, Oberon := Oberon0;
 
   (*symbols:
       |  0          1          2           3            4
@@ -23,7 +23,6 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
 
   CONST KW = 47;  (*size of hash table*)
         maxDig = 32;
-        maxExp = 308;
         maxStrLen = 128;
         
         SetLen = MAX(SET)+1;
@@ -126,14 +125,26 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
   END Identifier;
 
   PROCEDURE Number;
-    VAR i, j, c, e, s: INTEGER;
+    VAR i, j, c, e, s, n, extra, res: INTEGER;
       k: LONGINT;
-      x: LONGREAL;
       lastCh, expch: CHAR;
-      negE, hex: BOOLEAN;
+      negE, hex, sticky: BOOLEAN;
       d: ARRAY maxDig OF INTEGER;
-  BEGIN c := ORD(prev) - 30H; hex := FALSE; i := 0;
-    LOOP d[i] := c; INC(i);
+      dig: ARRAY maxDig OF CHAR;
+
+    PROCEDURE Digit(c: INTEGER; fraction: BOOLEAN);  (* the value is dig[0..n-1] * 10^e, sticky: more digits not 0 *)
+    BEGIN
+      IF (n = 0) & (c = 0) THEN IF fraction THEN DEC(e) END
+      ELSIF n < maxDig THEN dig[n] := CHR(c + 30H); INC(n); IF fraction THEN DEC(e) END
+      ELSE IF c # 0 THEN sticky := TRUE END; IF ~fraction THEN INC(e) END
+      END
+    END Digit;
+
+  BEGIN c := ORD(prev) - 30H; hex := FALSE; i := 0; extra := 0; sticky := FALSE;
+    LOOP
+      IF i < maxDig THEN d[i] := c; INC(i)  (* polpo: more than maxDig digits ran over d *)
+      ELSE INC(extra); IF c # 0 THEN sticky := TRUE END
+      END;
       IF ch < "0" THEN EXIT END ;
       IF ch <= "9" THEN c := ORD(ch) - 30H
       ELSIF ("A" <= ch) & (ch <= "F") THEN c := ORD(ch) - 37H; hex := TRUE
@@ -147,10 +158,13 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
     END ;
     IF lastCh = "." THEN (*decimal point*)
       IF hex THEN Mark(2) END ;
-      x := 0; e := 0;
-      REPEAT x := x * 10 + d[j]; INC(j) UNTIL j = i;  (*integer part*)
+      (* polpo: the digits and the exponent go to DecReal, which rounds once; x * 10 + d and the powers of ten
+         lost the denormal numbers and rounded REAL twice *)
+      e := 0; n := 0;
+      REPEAT Digit(d[j], FALSE); INC(j) UNTIL j = i;  (*integer part*)
+      INC(e, extra);
       WHILE ("0" <= ch) & (ch <= "9") DO
-        x := x * 10 + (ORD(ch) - 30H); DEC(e); GetCh  (*fraction*)
+        Digit(ORD(ch) - 30H, TRUE); GetCh  (*fraction*)
       END ;
       expch := ch;
       IF (ch = "E") OR (ch = "D") THEN  (*scale factor*)
@@ -160,21 +174,18 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
           IF ch = "+" THEN GetCh END
         END ;
         IF ("0" <= ch) & (ch <= "9") THEN
-          REPEAT s := s*10 + ORD(ch)-30H; GetCh
+          REPEAT IF s < 10000 THEN s := s*10 + ORD(ch)-30H ELSE Mark(203) END; GetCh
           UNTIL (ch < "0") OR (ch >"9");
           IF negE THEN DEC(e, s) ELSE INC(e, s) END
         ELSE Mark(2)
         END
       END ;
-      IF e < 0 THEN
-        IF e >= -maxExp THEN x := x / Reals.Ten(-e) ELSE x := 0 END
-      ELSIF e > 0 THEN
-        IF e <= maxExp THEN x := Reals.Ten(e) * x ELSE x := 0; Mark(203) END
-      END ;
-      IF expch = "D" THEN numtyp := 4; lrlval := x
-      ELSE numtyp := 3;
-        IF x <= MAX(REAL) THEN realval := SHORT(x) ELSE x := 0; Mark(203) END
-      END
+      IF expch = "D" THEN numtyp := 4; res := DecReal.Long(dig, n, sticky, e, lrlval)
+      ELSE numtyp := 3; res := DecReal.Short(dig, n, sticky, e, realval)
+      END;
+      IF res # DecReal.ok THEN Mark(203) END
+    ELSIF extra > 0 THEN  (* more than maxDig digits *)
+      Mark(203); IF (lastCh = "H") OR (lastCh = "X") THEN GetCh END; numtyp := 2; intval := 0
     ELSIF lastCh = "H" THEN
       GetCh;
       WHILE (j<i) & (d[j] = 0) DO INC(j) END ;
