@@ -451,7 +451,14 @@ END PowerOf2;
   END AbsVal;
   
   PROCEDURE Cap*(VAR x: OPL.Item; rt: LONGINT);
-  BEGIN x.reg := OPL.PutIMM(OPL.ANDI, rt, x, 5FH)
+    VAR rx, t: LONGINT;
+  BEGIN  (* polpo: only "a".."z" change, ANDI 5FH changed other characters too: SUBLO by 32 if x - "a" < 26 unsigned *)
+    OPL.Load(x, -1); rx := x.reg; t := -1; OPL.GetR(OPL.TempReg, t);
+    OPL.PutI(OPL.SUBI, t, rx, ORD("a")); OPL.PutI(OPL.CMPI, 0, t, 26); OPL.ReleaseR(t);
+    OPL.ReleaseR(rx); OPL.GetR(OPL.TempReg, rt);
+    IF rt # rx THEN OPL.PutR(OPL.MOV, rt, 0, rx) END;
+    OPL.PutI(OPL.SUBI - OPL.AL + 30000000H (* LO *), rt, rt, 32);
+    x.reg := rt
   END Cap;
   
   PROCEDURE Odd*(VAR x: OPL.Item; rt: LONGINT);

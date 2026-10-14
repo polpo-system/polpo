@@ -1326,7 +1326,7 @@ CONST
   END Op;
 
   PROCEDURE StPar1*(VAR x: OBT.Item; fctno: LONGINT);
-    VAR f : INTEGER; y: OBT.Item;  typ : OBT.Struct; L0 : LONGINT; lr : LONGREAL;
+    VAR f : INTEGER; y: OBT.Item;  typ : OBT.Struct; L0, r : LONGINT; lr : LONGREAL;
   BEGIN f := x.typ.form;
     CASE fctno OF
        OBT.FnHalt, OBT.FnSysHalt: 
@@ -1399,7 +1399,12 @@ CONST
           ELSE OBS.Mark(111)
           END
     |  OBT.FnCap: 
-          IF f = OC.Char THEN load(x); OBC.PutDP1(OBC.AND,x.r,x.r,5FH);
+          (* polpo: only "a".."z" change, AND 5FH changed other characters too; a constant is folded *)
+          IF (f = OC.Char) & (x.mode = OC.Const) THEN
+            IF (x.a >= ORD("a")) & (x.a <= ORD("z")) THEN DEC(x.a, 32) END
+          ELSIF f = OC.Char THEN load(x); OBC.GetReg(r);
+            OBC.PutDP1(OBC.SUB,r,x.r,ORD("a")); OBC.PutDP1(OBC.CMP,0,r,26); OBC.FreeReg(r);
+            OBC.PutDP1(OBC.SUB,x.r,x.r,32); OBC.SetCondition(OBC.pc-1,OBC.CC)
           ELSE OBS.Mark(111); x.typ := OBT.chartyp
           END
     |  OBT.FnOrd:  

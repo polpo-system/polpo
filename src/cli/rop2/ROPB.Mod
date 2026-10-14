@@ -387,7 +387,9 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
       | cap:
           IF f = Char THEN
             IF z^.class = Nconst THEN
-              z^.conval^.intval := ORD(CAP(CHR(z^.conval^.intval))); z^.obj := NIL
+              (* polpo: only lower-case letters change (the compiler's own CAP clears bit 5 of any character) *)
+              IF (z^.conval^.intval >= ORD("a")) & (z^.conval^.intval <= ORD("z")) THEN DEC(z^.conval^.intval, 32) END;
+              z^.obj := NIL
             ELSE z := NewOp(op, typ, z)
             END
           ELSE err(111); z^.typ := OPT.chartyp

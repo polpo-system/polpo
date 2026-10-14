@@ -375,7 +375,12 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
   END AbsVal;
   
   PROCEDURE Cap*(VAR x: OPL.Item; rt: LONGINT);
-  BEGIN x.reg := OPL.PutIMM(OPL.ANDI, rt, x, 5FH)
+    VAR rx: LONGINT;
+  BEGIN  (* polpo: only "a".."z" change, ANDI 5FH changed other characters too: x - 32 * ORD(x - "a" < 26 unsigned) *)
+    OPL.Load(x, -1); rx := x.reg; OPL.ReleaseR(rx); OPL.GetR(OPL.TempReg, rt);
+    OPL.PutI(OPL.ADDI, OPL.T0, rx, -ORD("a")); OPL.PutI(OPL.SLTIU, OPL.T0, OPL.T0, 26);
+    OPL.PutI(OPL.SLLI, OPL.T0, OPL.T0, 5); OPL.PutR(OPL.SUB, rt, rx, OPL.T0);
+    x.reg := rt
   END Cap;
   
   PROCEDURE Odd*(VAR x: OPL.Item; rt: LONGINT);

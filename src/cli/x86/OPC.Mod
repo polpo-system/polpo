@@ -1183,11 +1183,15 @@ Intel i386 :
   END AbsVal;
 
   PROCEDURE Cap* (VAR z, x: Item); (* z := CAP (x) *)
-    VAR c: Item;
-  BEGIN
-    MakeCon (c, OPT.chartyp, 5FH);
+    VAR c, t, b: Item;
+  BEGIN  (* polpo: only "a".."z" change, AND 5FH changed other characters too: z := x - 32 * ORD(x - "a" < 26 unsigned) *)
     load (x);
-    Gen3 (and, z, x, c)
+    t.typ := x.typ; t.node := x.node; b.typ := x.typ; b.node := x.node;
+    MakeCon (c, OPT.chartyp, ORD("a")); Gen3 (sub, t, x, c);
+    MakeCon (c, OPT.chartyp, 26); GenFlags (cmp, t, c);
+    GenSetC (setb, b);
+    MakeCon (c, OPT.chartyp, 5); Gen3 (sal, b, b, c);
+    Gen3 (sub, z, x, b)
   END Cap;
 
   PROCEDURE Odd* (VAR z, x: Item); (* z := ODD (x) *)
