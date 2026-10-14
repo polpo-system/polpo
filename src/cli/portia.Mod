@@ -1010,6 +1010,7 @@ BEGIN
     (* the files of the parent go (the X11 display of a test needs a descriptor below 32), but
        3, Kernel.Log, opened first by Kernel; Files opens names relative to its directory *)
     r := 4; WHILE r < 1024 DO pid := Linux0.Close0(r); INC(r) END;
+    F.Reset;  (* the descriptors of Files are gone: it must not use or close their numbers *)
     r := Linux0.ChDir0(SYSTEM.ADR(dir)); F.SetSYS(dir); F.SetWRK(dir);
     null := "/dev/null"; r := Linux0.Close0(0); r := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(null), Linux0.ORDonly, 0);
     r := Linux0.Close0(1);
