@@ -47,14 +47,13 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
    dest in the polpo root (share/, tools/: where Files.Old finds plain names) and removed with
    the objects; the copies in src/pkg/<name>/ go with /src. *)
 
-IMPORT Kernel, Linux0, SYSTEM, F := Files, FATFiles, Root, Texts := texts, Oberon := Oberon0, TOML, Versions, Checksums, termios, out;
+IMPORT Kernel, Linux0, SYSTEM, F := Files, Root, Texts := texts, Oberon := Oberon0, TOML, Versions, Checksums, termios, out;
 
 CONST
   NameLen = 256;
   SYS = "SYSTEM";
   EndMark = "portia: end of the tests";  (* the tests ran to their end *)
   PkgDir = "src/pkg/"; PkgDirLen = 8;  (* the sources of remote packages, src/pkg/<name>/ *)
-  ATREMOVEDIR = 200H;
   TreeRepo = "polpo-system/arden"; TreeBranch = "master";  (* where portia.Sync gets the tree *)
 
 TYPE
@@ -89,10 +88,9 @@ VAR
   base: Item;  (* the base system of this architecture, portia.base.<arch> *)
   converted: BOOLEAN;  (* LoadDb made portia.world.<arch> from portia.<arch> *)
   assumeYes: BOOLEAN;  (* /y: do not ask *)
-  delObj, delSrc: BOOLEAN;
+  delObj, delSrc: BOOLEAN;  (* Remove: the objects (default), the downloaded sources (/src), both (/all) *)
   doTest: BOOLEAN;  (* /t: Install and Build test the packages *)
   withDeps: BOOLEAN;  (* /deps: Remove also removes the installed packages that need the named ones *)
-  entries: Item;  (* of Collect: the entries of a directory, s with "/" at the end for directories *)  (* Remove: the objects (default), the downloaded sources (/src), both (/all) *)
   changedMods: Item;  (* modules whose interface changed in this run *)
 
 (* ----- strings and lists ----- *)
@@ -854,11 +852,11 @@ END Run;
 
 (* make the directories of the file path full *)
 PROCEDURE MakeDirs(VAR full: ARRAY OF CHAR);
-VAR i, r: LONGINT; dir: Name;
+VAR i: LONGINT; res: INTEGER; dir: Name;
 BEGIN
   dir[0] := full[0]; i := 1;
   WHILE (full[i] # 0X) & (i < NameLen - 1) DO
-    IF full[i] = "/" THEN dir[i] := 0X; r := Linux0.MkDir0(SYSTEM.ADR(dir), 1EDH) END;  (* 755 *)
+    IF full[i] = "/" THEN dir[i] := 0X; F.CreateDirectory(dir, res) END;
     dir[i] := full[i]; INC(i)
   END
 END MakeDirs;
@@ -941,7 +939,7 @@ END FetchPackage;
 (* delete the file rel (relative to the root); then its directories that became empty, up to
    src/pkg/ when rel is in there *)
 PROCEDURE DeleteFile(VAR rel: ARRAY OF CHAR);
-VAR full: Name; res: INTEGER; i, r: LONGINT;
+VAR full: Name; res: INTEGER; i: LONGINT;
 BEGIN
   Root.Join(rel, full);
   IF Root.Exists(full) THEN F.Delete(full, res) END;
@@ -952,8 +950,8 @@ BEGIN
       IF i <= 0 THEN EXIT END;
       full[i] := 0X;
       IF Len(full) < Len(Root.path) + PkgDirLen THEN EXIT END;  (* src/pkg/ itself stays *)
-      r := Linux0.UnLinkat0(Linux0.ATFDCWD, SYSTEM.ADR(full), ATREMOVEDIR);
-      IF r # 0 THEN EXIT END  (* not empty *)
+      F.RemoveDirectory(full, FALSE, res);
+      IF res # 0 THEN EXIT END  (* not empty *)
     END
   END
 END DeleteFile;
@@ -981,27 +979,10 @@ END DeleteData;
 
 (* ----- tests ----- *)
 
-PROCEDURE CollectEntry(name: ARRAY OF CHAR; time, date, size: LONGINT; attr: SET; VAR continue: BOOLEAN);
-BEGIN
-  Add(entries, name);
-  IF FATFiles.SubDir IN attr THEN Add(entries, "/") END;  (* a directory: "/" follows its name *)
-  continue := TRUE
-END CollectEntry;
-
 (* delete the directory dir (a full path, without "/" at the end) and everything in it *)
 PROCEDURE DeleteTree(VAR dir: ARRAY OF CHAR);
-VAR list, it: Item; path: Name; res: LONGINT; r: INTEGER;
-BEGIN
-  entries := NIL; COPY(dir, path); Append(path, "/"); FATFiles.Enumerate(path, CollectEntry, res);
-  list := entries; entries := NIL; it := list;
-  WHILE it # NIL DO
-    COPY(dir, path); Append(path, "/"); Append(path, it.s);
-    IF (it.next # NIL) & (it.next.s = "/") THEN DeleteTree(path); it := it.next
-    ELSE F.Delete(path, r)
-    END;
-    it := it.next
-  END;
-  res := Linux0.UnLinkat0(Linux0.ATFDCWD, SYSTEM.ADR(dir), ATREMOVEDIR)
+VAR res: INTEGER;
+BEGIN F.RemoveDirectory(dir, TRUE, res)
 END DeleteTree;
 
 (* the line with $compile replaced by the compiler of the architecture ("compiler.Compile /s") *)
