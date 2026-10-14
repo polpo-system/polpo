@@ -453,6 +453,13 @@ BEGIN
   SYSTEM.CODE( JALR);
 END Mkdirat0;
 
+PROCEDURE Fchmodat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: the permissions of name relative to dirfd *)
+BEGIN
+  SYSTEM.PUTREG( NRR, 53);        (* fchmodat *)
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Fchmodat0;
+
 (* RISC-V has no mkdir: mkdirat in the current directory (polpo: the path and the mode move to
    A1, A2, so not with registers here) *)
 PROCEDURE MkDir0*( name, mode: LONGINT): LONGINT;

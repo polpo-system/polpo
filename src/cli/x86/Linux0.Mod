@@ -542,6 +542,16 @@ CODE {SYSTEM.i386}
   INT  80H
 END Mkdirat0;
 
+PROCEDURE Fchmodat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: the permissions of name relative to dirfd *)
+CONST FCHMODAT= 306;
+CODE {SYSTEM.i386}
+  MOV  EAX, FCHMODAT
+  MOV  EBX, dirfd[ EBP]
+  MOV  ECX, name[ EBP]
+  MOV  EDX, mode[ EBP]
+  INT  80H
+END Fchmodat0;
+
 PROCEDURE ChDir0*( name: LONGINT): LONGINT;
 CONST CHDIR= 12;
 CODE {SYSTEM.i386}

@@ -462,6 +462,17 @@ CODE
   MOV  PC, LR
 END Mkdirat0;
 
+PROCEDURE Fchmodat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: the permissions of name relative to dirfd *)
+CODE
+  LDR  R2, [SP],4
+  LDR  R1, [SP],4
+  LDR  R0, [SP],4
+  MOV  R7, 140H    (* FCHMODAT= 14DH *)
+  ADD  R7, R7, 0DH
+  SWI  0
+  MOV  PC, LR
+END Fchmodat0;
+
 PROCEDURE ChDir0*( name: LONGINT): LONGINT;
 CODE
   LDR  R0, [SP],4

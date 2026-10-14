@@ -472,6 +472,16 @@ BEGIN
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
 END Mkdirat0;
 
+PROCEDURE Fchmodat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: the permissions of name relative to dirfd *)
+BEGIN
+  SYSTEM.PUTREG( 2, 4299);        (* fchmodat *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END Fchmodat0;
+
 PROCEDURE ChDir0*( name: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( 2, 4012);        (* chdir: Syscall nr to R2 *)
