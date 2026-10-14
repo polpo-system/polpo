@@ -30,7 +30,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    x86: a constant FALSE right of & (TRUE right of OR) under ~ trapped in the compiler, and with
    the constant TRUE (FALSE) the jumps of the left operand were lost in IF and WHILE (2026-10-14);
    ARMv7: in P(F(1), G(2), H(3)) the first parameter was H's result: the register of F's result was
-   freed when G returned and H did not save it (2026-10-14). *)
+   freed when G returned and H did not save it (2026-10-14);
+   ARM, ROP2: in Sum(n: Node), Sum(n.left) inside WITH n: Pair was refused (err 113): the parameter
+   of the call was checked against the narrowed type of n (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -41,6 +43,9 @@ TYPE
   Big = RECORD len: LONGINT; data: ARRAY 32768 OF CHAR END;
   Info = RECORD a, b, c, d, e, f, g, h: Big; bits: LONGINT END;  (* as TLSX509.CertInfo *)
   Work = POINTER TO RECORD cur, issuer: Info END;
+  WNode = POINTER TO WNodeDesc; WNodeDesc = RECORD END;
+  WPair = POINTER TO WPairDesc; WPairDesc = RECORD (WNodeDesc) left, right: WNode END;
+  WLeaf = POINTER TO WLeafDesc; WLeafDesc = RECORD (WNodeDesc) value: LONGINT END;
 
 VAR
   cells: POINTER TO RECORD r: ARRAY 10 OF LONGINT END; cellx: LONGINT;
@@ -192,6 +197,24 @@ PROCEDURE AllCalls(): BOOLEAN;
 BEGIN RETURN (Five(1, Id(2), Id(3), Id(4), Id(5)) = 12345) & (Three(Sq(1.0), Sq(2.0), Sq(3.0)) = 149.0)
 END AllCalls;
 
+(* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
+PROCEDURE WSum(n: WNode): LONGINT;
+VAR s: LONGINT;
+BEGIN
+  IF n IS WPair THEN WITH n: WPair DO s := WSum(n.left) + WSum(n.right) END
+  ELSE s := n(WLeaf).value
+  END;
+  RETURN s
+END WSum;
+
+PROCEDURE WithSelf(): BOOLEAN;
+VAR p, q: WPair; a, b, c: WLeaf;
+BEGIN
+  NEW(a); a.value := 1; NEW(b); b.value := 20; NEW(c); c.value := 300;
+  NEW(q); q.left := b; q.right := c; NEW(p); p.left := a; p.right := q;
+  RETURN WSum(p) = 321
+END WithSelf;
+
 (* the constant operands are kept by the parser (side effects of the other one) *)
 PROCEDURE ConstCond(b, d: BOOLEAN): BOOLEAN;
 VAR r: BOOLEAN; n: INTEGER;
@@ -247,6 +270,7 @@ BEGIN
   Check("calls inside the index of a later parameter", CallInIndex());
   Check("constant FALSE and TRUE as operands of & and OR, under ~", ConstCond(TRUE, FALSE));
   Check("every parameter a call", AllCalls());
+  Check("a call of the procedure itself inside a WITH on its parameter", WithSelf());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

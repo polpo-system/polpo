@@ -20,8 +20,15 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       
     (*structure forms*)
       intSet = {OC.SInt .. OC.LInt}; labeltyps = {OC.Char .. OC.LInt};
+
+  TYPE
+    Narrowed = POINTER TO NarrowedDesc;  (* polpo: a variable narrowed by an enclosing WITH, with its declared type *)
+    NarrowedDesc = RECORD
+      obj: OBT.Object; typ: OBT.Struct; next: Narrowed
+    END;
       
   VAR W: Texts.Writer;
+      narrowed: Narrowed;
       sym : INTEGER;
       newSF*: BOOLEAN;  (** write a new symbol file if the interface changed *)
       dsize: LONGINT;
@@ -380,7 +387,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
   END selector;
 
   PROCEDURE ActualParameters(VAR x: OBT.Item; fpar: OBT.Object);
-    VAR apar: OBT.Item; R: SET; psize : LONGINT;
+    VAR apar: OBT.Item; R: SET; psize : LONGINT; typ: OBT.Struct; n: Narrowed;
   BEGIN
     IF OBT.IsParam(fpar) THEN
       (* Calculate size of Parameter-Block including both links and return address and align it *)
@@ -390,7 +397,12 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       R := OBC.UsedRegisters();
       LOOP
         Expression(apar);
-        IF OBT.IsParam(fpar) THEN OBH.Param(apar, fpar, psize); fpar := fpar.next
+        IF OBT.IsParam(fpar) THEN
+          (* polpo: a parameter of the procedure itself narrowed by a WITH around the call is passed as
+             its declared type, the outermost entry *)
+          typ := fpar.typ; n := narrowed;
+          WHILE n # NIL DO IF n.obj = fpar THEN fpar.typ := n.typ END; n := n.next END;
+          OBH.Param(apar, fpar, psize); fpar.typ := typ; fpar := fpar.next
         ELSE OBS.Mark(64)
         END ;
         OBC.FreeRegs(R);
@@ -701,7 +713,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
   END CaseLabelList;
 
   PROCEDURE StatSeq;
-    VAR fpar: OBT.Object; xtyp: OBT.Struct;
+    VAR fpar: OBT.Object; xtyp: OBT.Struct; n: Narrowed;
         x, x0, y, z: OBT.Item; ExitIndex: INTEGER;
         L0, L1 : LONGINT;
         tempVar : BOOLEAN;
@@ -834,7 +846,8 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
           IF sym = OC.ident THEN qualident(y);
             IF y.mode = OC.Typ THEN
               IF x.obj # NIL THEN
-                xtyp := x.typ; OBE.TypTest(x, y, FALSE,OC.WithGuardTrap); x.obj.typ := x.typ
+                xtyp := x.typ; OBE.TypTest(x, y, FALSE,OC.WithGuardTrap); x.obj.typ := x.typ;
+                NEW(n); n.obj := x.obj; n.typ := xtyp; n.next := narrowed; narrowed := n
               ELSE OBS.Mark(130)
               END
             ELSE OBS.Mark(52)
@@ -844,7 +857,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         ELSE OBS.Mark(10)
         END ;
         CheckSym(OC.do); OBC.FreeRegs({}); StatSeq; CheckSym(OC.end);
-        IF xtyp # NIL THEN x.obj.typ := xtyp END
+        IF xtyp # NIL THEN x.obj.typ := xtyp; narrowed := narrowed.next END
       ELSIF sym = OC.exit THEN
         IF (LoopLevel>0) & (LoopLevel<=MaxLoopNesting) THEN OBH.RemoveTempVars(ForDepth[LoopLevel-1]) END;
         OBS.Get(sym); OBE.FJ(L0);
@@ -989,7 +1002,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         impid, FName: ARRAY 320 OF CHAR;
 
   BEGIN
-    dsize := 0; LoopLevel := 0; ExitNo := 0; 
+    dsize := 0; LoopLevel := 0; ExitNo := 0; narrowed := NIL; 
     OBC.Init; OBT.Init; OBS.Init(source, pos); OBS.Get(sym);
     Texts.WriteString(W, "  compiling ");
     IF sym = OC.module THEN OBS.Get(sym) ELSE OBS.Mark(16) END ;

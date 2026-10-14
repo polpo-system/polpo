@@ -65,8 +65,13 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
       RECORD
         low, high: LONGINT
       END ;
+    Narrowed = POINTER TO NarrowedDesc;  (* polpo: a variable narrowed by an enclosing WITH, with its declared type *)
+    NarrowedDesc = RECORD
+      obj: OPT.Object; typ: OPT.Struct; next: Narrowed
+    END ;
     
   VAR
+    narrowed: Narrowed;
     sym, level: SHORTINT;
     LoopLevel: INTEGER;
     TDinit, lastTDinit: OPT.Node;
@@ -395,12 +400,16 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
   END selector;
 
   PROCEDURE ActualParameters(VAR aparlist: OPT.Node; fpar: OPT.Object);
-    VAR apar, last: OPT.Node;
+    VAR apar, last: OPT.Node; typ: OPT.Struct; n: Narrowed;
   BEGIN aparlist := NIL; last := NIL;
     IF sym # rparen THEN
       LOOP Expression(apar);
         IF fpar # NIL THEN
-          OPB.Param(apar, fpar); OPB.Link(aparlist, last, apar);
+          (* polpo: a parameter of the procedure itself narrowed by a WITH around the call is checked against
+             its declared type, the outermost entry *)
+          typ := fpar^.typ; n := narrowed;
+          WHILE n # NIL DO IF n^.obj = fpar THEN fpar^.typ := n^.typ END; n := n^.next END;
+          OPB.Param(apar, fpar); fpar^.typ := typ; OPB.Link(aparlist, last, apar);
           fpar := fpar^.link;
         ELSE err(64)
         END ;
@@ -753,7 +762,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
 
   PROCEDURE StatSeq(VAR stat: OPT.Node);
     VAR fpar, id, t, obj: OPT.Object; idtyp: OPT.Struct; e, cproc: BOOLEAN;
-        s, x, y, z, apar, last, lastif: OPT.Node; pos: LONGINT; name: OPS.Name;
+        s, x, y, z, apar, last, lastif: OPT.Node; pos: LONGINT; name: OPS.Name; n: Narrowed;
 
     PROCEDURE CasePart(VAR x: OPT.Node);
       VAR n: INTEGER; low, high: LONGINT; e: BOOLEAN;
@@ -898,7 +907,8 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
             IF sym = ident THEN qualident(t);
               IF t^.mode = Typ THEN
                 IF id # NIL THEN
-                  idtyp := id^.typ; OPB.TypTest(y, t, FALSE); id^.typ := t^.typ
+                  idtyp := id^.typ; OPB.TypTest(y, t, FALSE); id^.typ := t^.typ;
+                  NEW(n); n^.obj := id; n^.typ := idtyp; n^.next := narrowed; narrowed := n
                 ELSE err(130)
                 END
               ELSE err(52)
@@ -908,7 +918,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
           ELSE err(ident)
           END ;
           pos := OPM.errpos; CheckSym(do); StatSeq(s); OPB.Construct(Nif, y, s); SetPos(y);
-          IF idtyp # NIL THEN id^.typ := idtyp; idtyp := NIL END ;
+          IF idtyp # NIL THEN id^.typ := idtyp; idtyp := NIL; narrowed := narrowed^.next END ;
           IF x = NIL THEN x := y; lastif := x ELSE OPB.Link(x, lastif, y) END ;
           IF sym = bar THEN OPS.Get(sym) ELSE EXIT END
         END;
@@ -1036,7 +1046,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
         procdec, statseq: OPT.Node;
         c: LONGINT; done: BOOLEAN;
   BEGIN
-    OPS.Init; LoopLevel := 0; level := 0; OPS.Get(sym);
+    OPS.Init; LoopLevel := 0; level := 0; narrowed := NIL; OPS.Get(sym);
     IF sym = module THEN OPS.Get(sym) ELSE err(16) END ;
     IF sym = ident THEN
       OPT.Init(OPS.name, opt); OPS.Get(sym); CheckSym(semicolon);
