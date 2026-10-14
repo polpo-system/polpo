@@ -104,7 +104,7 @@ END DaysInMonth;
 
 (* Convert Unix timestamp (seconds since 1970-01-01) to Oberon time/date format.
    Oberon time: hours*4096 + minutes*64 + seconds
-   Oberon date: year*512 + month*32 + day
+   Oberon date: (year-1900)*512 + month*32 + day, as Kernel and Files have it
    Valid for dates before 2038 (32-bit mtime from stat64). *)
 PROCEDURE UnixToOberon(unix: LONGINT; VAR oTime, oDate: LONGINT);
 VAR days, year, month, day, hour, min, sec, rem, yd: LONGINT;
@@ -126,7 +126,7 @@ BEGIN
     DEC(days, yd); INC(month)
   END;
   oTime := hour * 4096 + min * 64 + sec;
-  oDate := year * 512 + month * 32 + (days + 1)
+  oDate := (year - 1900) * 512 + month * 32 + (days + 1)  (* polpo: was year * 512, not an Oberon date *)
 END UnixToOberon;
 
 (* Map stat64 st_mode to FATFiles-compatible attr SET.
