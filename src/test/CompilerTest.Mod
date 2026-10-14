@@ -34,7 +34,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARM, ROP2: in Sum(n: Node), Sum(n.left) inside WITH n: Pair was refused (err 113): the parameter
    of the call was checked against the narrowed type of n (2026-10-14);
    ARM: RETURN F(x) left R0 as the preferred register of the next GetReg, and RETURN a[i] of an
-   open array in the next procedure stopped the compiler (division by zero, 2026-10-14). *)
+   open array in the next procedure stopped the compiler (division by zero, 2026-10-14);
+   ARMv7: an index of a two-dimensional open array took the size of a row as a stale constant, not
+   the register it was in: a[r, 3], a[r] as an open array argument (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -55,6 +57,7 @@ VAR
   g: ARRAY 3 OF Small;
   flag: BOOLEAN;
   row: ARRAY 4 OF INTEGER;
+  grid: ARRAY 3, 4 OF INTEGER;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
@@ -209,6 +212,19 @@ PROCEDURE OpenElem(VAR a: ARRAY OF INTEGER; i: LONGINT): LONGINT;
 BEGIN RETURN a[i]
 END OpenElem;
 
+(* rows of a two-dimensional open array *)
+PROCEDURE RowSum(VAR row: ARRAY OF INTEGER): LONGINT;
+VAR i, s: LONGINT;
+BEGIN s := 0; i := 0; WHILE i < LEN(row) DO s := s + row[i]; INC(i) END; RETURN s
+END RowSum;
+
+PROCEDURE OpenRows(VAR a: ARRAY OF ARRAY OF INTEGER; r: LONGINT): BOOLEAN;
+  PROCEDURE Inner(): LONGINT;
+  BEGIN RETURN a[1, 2]
+  END Inner;
+BEGIN RETURN (a[r, 3] = 23) & (RowSum(a[r]) = 86) & (Inner() = 12)
+END OpenRows;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -284,6 +300,8 @@ BEGIN
   Check("every parameter a call", AllCalls());
   Check("a call of the procedure itself inside a WITH on its parameter", WithSelf());
   row[2] := 77; Check("RETURN a[i] of an open array after RETURN F(x)", (RetCall(5) = 5) & (OpenElem(row, 2) = 77));
+  i := 0; WHILE i < 3 DO j := 0; WHILE j < 4 DO grid[i, j] := SHORT(10 * i + j); INC(j) END; INC(i) END;
+  Check("rows of a two-dimensional open array", OpenRows(grid, 2));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

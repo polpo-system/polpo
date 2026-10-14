@@ -134,7 +134,8 @@ END PowerOf2;
           OPL.PutTrap( OPL.LT, IndexTrap);
         END ;
         OPL.Size(x, size, -1, x.typ^.BaseTyp);
-        IF PowerOf2(size.offset, dummy) THEN OPL.LoadAddr(x, -1); x.reg := OPL.PutSPC(OPL.ADD+ASH(dummy, 7), rt, x, y);  (* dummy is shift amount) *)
+        (* polpo: a shift only for a constant size; the size of a row of an open array is in a register *)
+        IF (size.mode = OPT.Con) & PowerOf2(size.offset, dummy) THEN OPL.LoadAddr(x, -1); x.reg := OPL.PutSPC(OPL.ADD+ASH(dummy, 7), rt, x, y);  (* dummy is shift amount) *)
         ELSE
 (*          OPL.Mul(y, size, -1); OPL.LoadAddr(x, -1); x.reg := OPL.PutSPC(OPL.ADD+ASH(dummy, 7), rt, x, y);*)
 
