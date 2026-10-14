@@ -26,6 +26,8 @@ BEGIN
   Write("zq_dir/a.txt", "a");
   Check("Exists of a file", Files.Exists("zq_dir/a.txt", full, flags) & ~(Files.Directory IN flags) & ~(Files.ReadOnly IN flags));
   Check("Exists of nothing", ~Files.Exists("zq_dir/none.txt", full, flags) & (full = ""));
+  Write("zq_dir/2024 notes սոնա.txt", "u");
+  Check("a name with a digit first, a blank and UTF-8", Files.Exists("zq_dir/2024 notes սոնա.txt", full, flags));
   Files.CreateDirectory("zq_dir/sub", res); Check("CreateDirectory inside", res = 0);
   Write("zq_dir/sub/b.txt", "b");
   Files.CreateDirectory("zq_dir/sub/deeper", res); Write("zq_dir/sub/deeper/c.txt", "c");

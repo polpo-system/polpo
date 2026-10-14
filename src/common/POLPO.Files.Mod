@@ -138,22 +138,19 @@ END GetDirfd;
 
 PROCEDURE Check(VAR s, name: ARRAY OF CHAR; VAR dirfd: LONGINT; VAR res: INTEGER);
   VAR i: LONGINT; ch: CHAR;
-BEGIN
+BEGIN  (* polpo: every character but 0X, as Linux has it; only letters, digits and . / _ - before (the
+  rule of ETH's own file system): names starting with a digit, with a blank or in UTF-8 were refused *)
   dirfd:=GetDirfd(s);
   ch := s[0]; i := 0;
-  IF ("A" <= CAP(ch)) & (CAP(ch) <= "Z")OR (ch = ".") OR (ch="/") OR (ch="_") OR (ch="-") THEN
+  IF ch # 0X THEN
     LOOP name[i] := ch; INC(i); ch := s[i];
       IF ch = 0X THEN
         WHILE i < LEN(name) DO name[i] := 0X; INC(i) END ;
         res := 0; EXIT
       END ;
-      IF ~(("A" <= CAP(ch)) & (CAP(ch) <= "Z")
-        OR ("0" <= ch) & (ch <= "9") OR (ch = ".") OR (ch="/") OR (ch="_") OR (ch="-")) THEN res := 3; EXIT
-      END ;
       IF i = LEN(name)-1 THEN res := 4; EXIT END
     END
-  ELSIF ch = 0X THEN name[0] := 0X; res := -1
-  ELSE res := 3
+  ELSE name[0] := 0X; res := -1
   END
 END Check;
 
