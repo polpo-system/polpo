@@ -1591,7 +1591,9 @@ CONST
             IF (L # 0) OR ~(typ.form IN {OC.DynArr, OC.Array}) THEN OBS.Mark(132)
             ELSE
               IF typ.form = OC.DynArr THEN 
-                IF p.mode = OC.Var THEN INC(p.a,typ.adr) ELSE INC(p.b,typ.adr) END; p.typ := OBT.linttyp
+                (* polpo: the lengths are next to the address of an open array, as for LEN(x) in StFct; INC(p.b)
+                   of a parameter (Par) read them from the array's elements *)
+                p.mode := OC.Var; INC(p.a,typ.adr); p.typ := OBT.linttyp
               ELSE p := x; p.a := typ.size DIV typ.BaseTyp.size; SetIntType(p)
               END
             END

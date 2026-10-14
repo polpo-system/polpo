@@ -36,7 +36,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARM: RETURN F(x) left R0 as the preferred register of the next GetReg, and RETURN a[i] of an
    open array in the next procedure stopped the compiler (division by zero, 2026-10-14);
    ARMv7: an index of a two-dimensional open array took the size of a row as a stale constant, not
-   the register it was in: a[r, 3], a[r] as an open array argument (2026-10-14). *)
+   the register it was in: a[r, 3], a[r] as an open array argument (2026-10-14);
+   ARM: LEN(a, n) of an open array parameter read the length from the elements of the array, not
+   from beside its address; LEN(a) was right (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -225,6 +227,14 @@ PROCEDURE OpenRows(VAR a: ARRAY OF ARRAY OF INTEGER; r: LONGINT): BOOLEAN;
 BEGIN RETURN (a[r, 3] = 23) & (RowSum(a[r]) = 86) & (Inner() = 12)
 END OpenRows;
 
+(* LEN with a dimension, also from a nested procedure *)
+PROCEDURE Lens(VAR a: ARRAY OF ARRAY OF INTEGER): BOOLEAN;
+  PROCEDURE Inner(): LONGINT;
+  BEGIN RETURN LEN(a, 1) * 10 + LEN(a, 0)
+  END Inner;
+BEGIN RETURN (LEN(a, 1) = 4) & (LEN(a, 0) = 3) & (LEN(a) = 3) & (Inner() = 43)
+END Lens;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -302,6 +312,7 @@ BEGIN
   row[2] := 77; Check("RETURN a[i] of an open array after RETURN F(x)", (RetCall(5) = 5) & (OpenElem(row, 2) = 77));
   i := 0; WHILE i < 3 DO j := 0; WHILE j < 4 DO grid[i, j] := SHORT(10 * i + j); INC(j) END; INC(i) END;
   Check("rows of a two-dimensional open array", OpenRows(grid, 2));
+  Check("LEN(a, n) of an open array", Lens(grid));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
