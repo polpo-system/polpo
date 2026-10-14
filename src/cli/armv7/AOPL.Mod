@@ -1336,7 +1336,9 @@ END AdjustLink;
       ELSE rx := RRI; INCL(tempLiveR, RRI);
         IF RRI IN saved.r THEN GetR(TempReg, rt) END
       END ;
-      IF rt # -1 THEN y.mode := Reg; y.reg := rx; x.reg := rt; Move(x, y, f)
+      IF rt # -1 THEN y.mode := Reg; y.reg := rx; x.reg := rt; Move(x, y, f);
+        (* polpo: Move freed rx, but rx gets its saved value back below and stays live *)
+        IF rx = RRF THEN INCL(tempLiveF, RRF-32) ELSE INCL(tempLiveR, RRI) END
       ELSE x.reg := rx
       END ;
     END ;

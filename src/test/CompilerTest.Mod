@@ -28,7 +28,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARMv7: a call inside a designator of a later parameter, P(3, a[F(x)]), overwrote the registers
    of the parameters before it, which were stored early (the Scheme of Ceres Oberon, 2026-10-13);
    x86: a constant FALSE right of & (TRUE right of OR) under ~ trapped in the compiler, and with
-   the constant TRUE (FALSE) the jumps of the left operand were lost in IF and WHILE (2026-10-14). *)
+   the constant TRUE (FALSE) the jumps of the left operand were lost in IF and WHILE (2026-10-14);
+   ARMv7: in P(F(1), G(2), H(3)) the first parameter was H's result: the register of F's result was
+   freed when G returned and H did not save it (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -180,6 +182,16 @@ BEGIN
   RETURN Five(3, cells.r[Id(1)], cells.r[Id(cellx + 1)], cells.r[Id(cellx)], 2) = 31432
 END CallInIndex;
 
+(* every parameter a call: ARMv7 moved the second result out of the result register, which freed
+   that register though the first result was restored into it; the third call then overwrote it *)
+PROCEDURE Three(a, b, c: REAL): REAL;
+BEGIN RETURN a * 100 + b * 10 + c
+END Three;
+
+PROCEDURE AllCalls(): BOOLEAN;
+BEGIN RETURN (Five(1, Id(2), Id(3), Id(4), Id(5)) = 12345) & (Three(Sq(1.0), Sq(2.0), Sq(3.0)) = 149.0)
+END AllCalls;
+
 (* the constant operands are kept by the parser (side effects of the other one) *)
 PROCEDURE ConstCond(b, d: BOOLEAN): BOOLEAN;
 VAR r: BOOLEAN; n: INTEGER;
@@ -234,6 +246,7 @@ BEGIN
   Check("16 RETURN of a REAL function result", (RF1(3.0) = 9.0) & (RF16(2.0) = 4.0) & (RF8(RF9(1.5)) = 5.0625));
   Check("calls inside the index of a later parameter", CallInIndex());
   Check("constant FALSE and TRUE as operands of & and OR, under ~", ConstCond(TRUE, FALSE));
+  Check("every parameter a call", AllCalls());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
