@@ -989,8 +989,8 @@ END PutTrap;
       END;
       x.reg:=rt;
     ELSE
-      zeroTrap:=(y.mode#OPT.Con);
-      IF ~zeroTrap THEN ASSERT(y.offset>0, 52) END;
+      (* polpo: a constant divisor <= 0 is checked at run time as a variable one; the ASSERT stopped the compiler *)
+      zeroTrap:=(y.mode#OPT.Con) OR (y.offset <= 0);
       Load(x, -1); Load(y, -1); 
       ASSERT(x.reg#ZeroReg, 51); ASSERT(y.reg#ZeroReg, 52);
       GetR(TempReg, rt); ReleaseR(x.reg); ReleaseR(y.reg);

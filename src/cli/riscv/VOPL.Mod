@@ -879,8 +879,8 @@ END PutTrap;
   PROCEDURE Div*(VAR x, y: Item; rt: LONGINT; mod: BOOLEAN);  
   VAR zeroTrap: BOOLEAN;
   BEGIN
-    zeroTrap:=(y.mode#OPT.Con);
-    IF ~zeroTrap THEN ASSERT( y.offset>0, 52) END;
+    (* polpo: a constant divisor <= 0 is checked at run time as a variable one; the ASSERT stopped the compiler *)
+    zeroTrap:=(y.mode#OPT.Con) OR (y.offset <= 0);
     Load(x, -1); Load(y, -1); 
     ReleaseR(x.reg); GetR(TempReg, rt); ReleaseR(y.reg);
     IF rt = y.reg THEN rt:=-1; GetR(TempReg, rt) END;
