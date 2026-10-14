@@ -532,6 +532,16 @@ CODE {SYSTEM.i386}
   INT  80H
 END MkDir0;
 
+PROCEDURE Mkdirat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: a directory relative to dirfd *)
+CONST MKDIRAT= 296;
+CODE {SYSTEM.i386}
+  MOV  EAX, MKDIRAT
+  MOV  EBX, dirfd[ EBP]
+  MOV  ECX, name[ EBP]
+  MOV  EDX, mode[ EBP]
+  INT  80H
+END Mkdirat0;
+
 PROCEDURE ChDir0*( name: LONGINT): LONGINT;
 CONST CHDIR= 12;
 CODE {SYSTEM.i386}

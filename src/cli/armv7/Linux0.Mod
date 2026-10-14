@@ -595,6 +595,14 @@ BEGIN
   SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
 END MkDir0;
 
+PROCEDURE Mkdirat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: a directory relative to dirfd *)
+BEGIN
+  SYSTEM.CODE(LDMIA3);  (*LDMIA   SP, {R0 R1 R2 } *)
+  SYSTEM.PUTREG(7, 323);        (* mkdirat *)
+  SYSTEM.CODE(SVC);  (* EF000000  SWI  0H *)
+  SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
+END Mkdirat0;
+
 PROCEDURE ChDir0*( name: LONGINT): LONGINT;
 BEGIN
   SYSTEM.CODE(LDMIA1);  (*LDMIA   SP, {R0 } *)

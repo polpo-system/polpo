@@ -53,11 +53,16 @@ CONST
 
   FnLength = 256;  (* includes 0X *)
   MremapMaymove = 1;
+  (** file flags of Exists, as in Files of A2 *)
+  ReadOnly* = 0; Directory* = 1;
+  ATREMOVEDIR = 200H;  (* unlinkat: remove a directory *)
 
 TYPE
   File* = POINTER TO FileDesc;
 
   FileName*= ARRAY FnLength OF CHAR;
+  Entry = POINTER TO EntryDesc;  (* polpo: a name in a directory, for RemoveTree *)
+  EntryDesc = RECORD name: FileName; next: Entry END;
 
   FileDesc = RECORD
       (** private fields for implementors *)
@@ -618,6 +623,84 @@ BEGIN
     IF r#0 THEN res:=2 END;
   END;
 END Delete;
+
+(* polpo: directories, with the procedures of Files in A2 *)
+
+(** Creates the directory path; res = 0 indicates success, else the error number of the system *)
+PROCEDURE CreateDirectory*(path: ARRAY OF CHAR; VAR res: INTEGER);
+VAR namebuf: FileName; r, dirfd: LONGINT;
+BEGIN
+  Check(path, namebuf, dirfd, res);
+  IF res=0 THEN
+    r:=Linux0.Mkdirat0( dirfd, SYSTEM.ADR(path[0]), 1EDH);
+    IF r#0 THEN res:=SHORT(-r) ELSE SyncDir( dirfd, path) END
+  END
+END CreateDirectory;
+
+PROCEDURE IsDir(dirfd: LONGINT; VAR name: ARRAY OF CHAR; VAR mode: LONGINT): BOOLEAN;  (* FALSE also if name is not there *)
+VAR st: Linux0.Status;
+BEGIN
+  mode:=0;
+  IF Linux0.FStatat0( dirfd, SYSTEM.ADR(name[0]), SYSTEM.ADR(st), 0)#0 THEN mode:=-1; RETURN FALSE END;
+  SYSTEM.GET( SYSTEM.ADR(st)+Linux0.StatModeOfs, mode);
+  RETURN (mode DIV 1000H) MOD 10H = 4
+END IsDir;
+
+PROCEDURE RemoveTree(dirfd: LONGINT; VAR name: ARRAY OF CHAR): LONGINT;  (* name in dirfd with all it contains *)
+VAR fd, n, pos, reclen, r, mode, i: LONGINT; buf: ARRAY 1024 OF LONGINT; list, e: Entry; ch: CHAR; len: INTEGER;
+BEGIN
+  fd:=Linux0.Openat0( dirfd, SYSTEM.ADR(name[0]), Linux0.ORDonly+Linux0.ODirectory, 0);
+  IF fd<0 THEN RETURN fd END;
+  list:=NIL;  (* the names first: removing while reading the directory may skip entries *)
+  LOOP
+    n:=Linux0.GetDents0( fd, SYSTEM.ADR(buf[0]), LEN(buf)*4);
+    IF n<=0 THEN EXIT END;
+    pos:=0;
+    WHILE pos<n DO
+      SYSTEM.GET( SYSTEM.ADR(buf[0])+pos+16, len); reclen:=len MOD 10000H;  (* d_reclen; d_name at 19 *)
+      NEW(e); i:=0;
+      REPEAT SYSTEM.GET( SYSTEM.ADR(buf[0])+pos+19+i, ch); e.name[i]:=ch; INC(i) UNTIL (ch=0X) OR (i=FnLength-1);
+      e.name[i]:=0X;
+      IF ~((e.name[0]=".") & ((e.name[1]=0X) OR (e.name[1]=".") & (e.name[2]=0X))) THEN e.next:=list; list:=e END;
+      INC(pos, reclen)
+    END
+  END;
+  e:=list;
+  WHILE e#NIL DO
+    IF IsDir( fd, e.name, mode) THEN r:=RemoveTree( fd, e.name) ELSE r:=Linux0.UnLinkat0( fd, SYSTEM.ADR(e.name[0]), 0) END;
+    e:=e.next
+  END;
+  r:=Linux0.Close0( fd);
+  RETURN Linux0.UnLinkat0( dirfd, SYSTEM.ADR(name[0]), ATREMOVEDIR)
+END RemoveTree;
+
+(** Removes the directory path; if force, with the files and directories in it, else it must be empty.
+   res = 0 indicates success, else the error number of the system *)
+PROCEDURE RemoveDirectory*(path: ARRAY OF CHAR; force: BOOLEAN; VAR res: INTEGER);
+VAR namebuf: FileName; r, dirfd: LONGINT;
+BEGIN
+  Check(path, namebuf, dirfd, res);
+  IF res=0 THEN
+    IF force THEN r:=RemoveTree( dirfd, path) ELSE r:=Linux0.UnLinkat0( dirfd, SYSTEM.ADR(path[0]), ATREMOVEDIR) END;
+    IF r#0 THEN res:=SHORT(-r) END
+  END
+END RemoveDirectory;
+
+(** TRUE if fileName is there (as Old would find it, in the search path too); fullName: where it is;
+   flags: Directory for a directory, ReadOnly if the owner may not write it *)
+PROCEDURE Exists*(fileName: ARRAY OF CHAR; VAR fullName: ARRAY OF CHAR; VAR flags: SET): BOOLEAN;
+VAR namebuf: FileName; dirfd, mode: LONGINT; res: INTEGER;
+BEGIN
+  flags:={}; fullName[0]:=0X;
+  Check(fileName, namebuf, dirfd, res);
+  IF res#0 THEN RETURN FALSE END;
+  Locate( fileName, dirfd);
+  IF IsDir( dirfd, fileName, mode) THEN INCL(flags, Directory) END;
+  IF mode=-1 THEN RETURN FALSE END;
+  IF mode MOD 100H DIV 80H = 0 THEN INCL(flags, ReadOnly) END;
+  COPY(fileName, fullName);
+  RETURN TRUE
+END Exists;
 
 (** Renames a file. res = 0 indicates success. *)
 PROCEDURE Rename*(old, new: ARRAY OF CHAR; VAR res: INTEGER);

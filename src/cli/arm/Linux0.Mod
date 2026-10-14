@@ -451,6 +451,17 @@ CODE
   MOV  PC, LR
 END MkDir0;
 
+PROCEDURE Mkdirat0*( dirfd, name, mode: LONGINT): LONGINT;  (* polpo: a directory relative to dirfd *)
+CODE
+  LDR  R2, [SP],4
+  LDR  R1, [SP],4
+  LDR  R0, [SP],4
+  MOV  R7, 140H    (* MKDIRAT= 143H *)
+  ADD  R7, R7, 3
+  SWI  0
+  MOV  PC, LR
+END Mkdirat0;
+
 PROCEDURE ChDir0*( name: LONGINT): LONGINT;
 CODE
   LDR  R0, [SP],4
