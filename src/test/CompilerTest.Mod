@@ -45,7 +45,8 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    all: the constant MIN(LONGINT) DIV (-1) or MOD (-1) stopped the compiler (division overflow on the
    host); DIV is err 203 now, MOD gives 0 (2026-10-14);
    all: CAP cleared bit 5 of any character, CAP("7") was 17X and CAP("{") "["; only "a".."z"
-   change now, folded and at run time (2026-10-14). *)
+   change now, folded and at run time (2026-10-14);
+   x86: SHORT(x) of a LONGREAL stayed in full precision in the FPU, LONG(SHORT(x)) was x (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -256,6 +257,13 @@ BEGIN c := "{"; d := "z"; e := "@";
   RETURN (seven = "7") & (CAP(c) = "{") & (CAP(d) = "Z") & (CAP(e) = "@") & (CAP("a") = "A")
 END CapOnly;
 
+(* SHORT of a LONGREAL inside an expression is rounded to REAL *)
+PROCEDURE ShortReal(): BOOLEAN;
+VAR x, y: LONGREAL; r: REAL;
+BEGIN x := 0.1D0; r := SHORT(x); y := LONG(SHORT(x));
+  RETURN (y = LONG(r)) & (SHORT(x) * 1.0D0 = LONG(r)) & (y # x)
+END ShortReal;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -337,6 +345,7 @@ BEGIN
   Check("an open array on the heap as an open array argument", HeapArg());
   Check("constant MOD (-1)", (MIN(LONGINT) MOD (-1) = 0) & (7 DIV (-1) = -7));
   Check("CAP changes only lower-case letters", CapOnly());
+  Check("SHORT of a LONGREAL in an expression", ShortReal());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

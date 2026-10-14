@@ -849,12 +849,20 @@ Intel i386 :
 
     PROCEDURE RealToReal (VAR z, x: Item; xform, zform: SHORTINT);
     (* real to real convertion *)
+      VAR t, cons: Item;
     BEGIN
       IF xform < zform THEN (* smaller to bigger *)
         z := x; loadf (z);
       ELSE (* bigger to smaller *)
         z := x; loadf (z);
-        CheckRealRange (x, Real)
+        CheckRealRange (x, Real);
+        (* polpo: the FPU keeps the value in full precision; stored as a REAL and loaded back it is rounded,
+           else SHORT(x) inside an expression was x itself *)
+        MakeCon (cons, OPT.linttyp, 4);
+        t := Stack; Gen3 (sub, t, t, cons);
+        t.mode := RegRel; t.adr := ESP; t.offs := 0; t.inx := none; t.typ := OPT.realtyp; t.node := NIL;
+        GenStore (fstore, t, z); GenLoad (fload, z, t);
+        t := Stack; Gen3 (add, t, t, cons)
       END
       (* z.typ will be changed by Convert *)
     END RealToReal;
