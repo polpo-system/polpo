@@ -15,7 +15,7 @@ The Module Fonts implement the Oberon font manager. Fonts are collections
 of characters, each character being a pattern and and metric data.
 *)
 
-  IMPORT SYSTEM, Linux0, Kernel, Files, Objects, Display, Root;
+  IMPORT SYSTEM, Kernel, Files, Objects, Display, Root;
 
   CONST substitute* = -1; font* = 0; metric* = 1; (** Font types. *)
     TraceMissing = TRUE;  TraceAlias = FALSE;
@@ -274,7 +274,7 @@ of characters, each character being a pattern and and metric data.
 
   (* Does the font file name exist in the current directory, fonts/ or <root>/fonts/? (quietly) *)
   PROCEDURE Exists(VAR name: ARRAY OF CHAR): BOOLEAN;
-    VAR path: ARRAY 320 OF CHAR; i, j, k, fd, res: LONGINT;
+    VAR path: ARRAY 320 OF CHAR; i, j, k: LONGINT; full: Files.FileName; flags: SET;
   BEGIN
     k := 0;
     WHILE k < 3 DO
@@ -284,8 +284,7 @@ of characters, each character being a pattern and and metric data.
       END;
       j := 0; WHILE (name[j] # 0X) & (i < LEN(path)-1) DO path[i] := name[j]; INC(i); INC(j) END;
       path[i] := 0X;
-      fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), Linux0.ORDonly, 0);
-      IF fd > 0 THEN res := Linux0.Close0(fd); RETURN TRUE END;
+      IF Files.Exists(path, full, flags) THEN RETURN TRUE END;
       INC(k)
     END;
     RETURN FALSE
