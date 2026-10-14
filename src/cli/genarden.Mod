@@ -11,7 +11,7 @@ MODULE genarden;  (** the recipes of the base system of polpo for the package tr
    tree made by portia.Sync (it has COMMIT) is refused: changes go into a git clone of arden.
    Run it after changing the build recipes, then portia.Check. *)
 
-IMPORT SYSTEM, Kernel, Linux0, Files, FATFiles, Root, Texts := Texts0, Oberon := Oberon0, texts, TOML, out;
+IMPORT Kernel, Files, FATFiles, Root, Texts := Texts0, Oberon := Oberon0, texts, TOML, out;
 
 CONST
   NameLen = 256; MaxArchs = 5; MaxLine = 1024;
@@ -92,11 +92,11 @@ BEGIN
 END ReadFile;
 
 PROCEDURE MakeDirs(VAR full: ARRAY OF CHAR);  (* the directories of the file path full *)
-VAR i, r: LONGINT; dir: Name;
+VAR i: LONGINT; res: INTEGER; dir: Name;
 BEGIN
   dir[0] := full[0]; i := 1;
   WHILE (full[i] # 0X) & (i < NameLen - 1) DO
-    IF full[i] = "/" THEN dir[i] := 0X; r := Linux0.MkDir0(SYSTEM.ADR(dir), 1EDH) END;
+    IF full[i] = "/" THEN dir[i] := 0X; Files.CreateDirectory(dir, res) END;
     dir[i] := full[i]; INC(i)
   END
 END MakeDirs;
