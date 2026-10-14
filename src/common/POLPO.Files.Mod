@@ -246,20 +246,20 @@ BEGIN
 END New;
 
 PROCEDURE Old*( name: ARRAY OF CHAR): File;
-VAR f: File; fd, r: LONGINT; status: Linux0.Status; res: INTEGER;
+VAR f: File; fd, r, share: LONGINT; status: Linux0.Status; res: INTEGER;
 BEGIN
-  NEW( f);
+  NEW( f); share:=Linux0.MAPSHARED;
   IF trace THEN Kernel.WriteString("Files.Old "); Kernel.WriteString(name); Kernel.WriteLn END;
   Check( name, f.Name, f.dirfd, res);
   IF res=0 THEN
     fd:=Linux0.Openat0( f.dirfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDWR , 0);  (* 0x400*O_EXCL *)
     IF -fd=0DH THEN  (* permission denied, try read only *)
-      fd:=Linux0.Openat0( f.dirfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDonly , 0);
+      fd:=Linux0.Openat0( f.dirfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDonly , 0); share:=Linux0.MAPPRIVATE
     END;
     IF fd<=0 THEN
       fd:=Linux0.Openat0( sysfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDWR , 0);  (* 0x400*O_EXCL *)
       IF -fd=0DH THEN  (* permission denied, try read only *)
-        fd:=Linux0.Openat0( sysfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDonly , 0);
+        fd:=Linux0.Openat0( sysfd, SYSTEM.ADR(f.Name[0]), Linux0.ORDonly , 0); share:=Linux0.MAPPRIVATE
       END;
     END;
     IF fd<=0 THEN
@@ -281,7 +281,12 @@ BEGIN
     IF f.len = 0 THEN  (* polpo: a mapping of length 0 fails, an empty file got NIL; a page as in New *)
       f.addr:=Linux0.Mmap20( 0, Linux0.PageSize, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0); f.disk:=-1
     ELSE
-      f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, Linux0.MAPSHARED, f.fd, 0); f.disk:=f.len
+      (* polpo: a file opened read only cannot be mapped shared for writing (EACCES, Old gave NIL for
+         /etc/ssl/certs/ca-certificates.crt); mapped privately it reads, and changes stay in memory *)
+      f.addr:=Linux0.Mmap20( 0, f.len (*((f.len+bsize-1) DIV bsize)*bsize*), 3, share, f.fd, 0); f.disk:=f.len;
+      IF ((f.addr MOD 1000H)#0) & (share=Linux0.MAPSHARED) THEN  (* read only, found in the search path *)
+        f.addr:=Linux0.Mmap20( 0, f.len, 3, Linux0.MAPPRIVATE, f.fd, 0)
+      END
     END;
     IF (f.addr MOD 1000H)#0 THEN
       Kernel.WriteString("Files.Old mmap failed"); Kernel.WriteHex(-f.addr, 9); Kernel.WriteLn;
