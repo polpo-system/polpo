@@ -67,7 +67,7 @@ MODULE A32Decoder;  (* rc 20.11.89 / 5.5.93 *)  (* object model 4.12.93 *)
     j := 0;
     WHILE i#0 DO
       IF ODD(i) THEN Texts.WriteInt(W, j, 0); Texts.Write(W, " ") END;
-      i:=i DIV 2 MOD 80000000H;
+      i:=SYSTEM.LSH(i, -1);  (* polpo: was i DIV 2 MOD 80000000H, a negative divisor *)
       INC(j)
     END
   END WriteSet;
