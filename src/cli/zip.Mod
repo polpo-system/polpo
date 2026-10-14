@@ -7,7 +7,7 @@ MODULE zip;  (** zip archives in the console, with Zip of ETH Oberon *)
    The archives are those of zip and unzip (deflate or stored, no encryption). ZipTool is the
    desktop tool. *)
 
-IMPORT SYSTEM, Linux0, Files, Zip, texts, out;
+IMPORT Files, Zip, texts, out;
 
 CONST MaxFiles = 128;
 
@@ -38,11 +38,11 @@ BEGIN
 END Error;
 
 PROCEDURE MakeDirs(VAR path: ARRAY OF CHAR);  (* the directories of the file path *)
-VAR i, r: LONGINT; dir: Name;
+VAR i: LONGINT; res: INTEGER; dir: Name;
 BEGIN
   dir[0] := path[0]; i := 1;
   WHILE (path[i] # 0X) & (i < LEN(dir) - 1) DO
-    IF path[i] = "/" THEN dir[i] := 0X; r := Linux0.MkDir0(SYSTEM.ADR(dir), 1EDH) END;
+    IF path[i] = "/" THEN dir[i] := 0X; Files.CreateDirectory(dir, res) END;
     dir[i] := path[i]; INC(i)
   END
 END MakeDirs;
