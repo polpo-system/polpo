@@ -1,5 +1,5 @@
 MODULE TLSCABundle;
-IMPORT SYSTEM, Linux0, Kernel, TLSBytes;  (* Linux0: polpo's, or the one of the voc Internet module *)
+IMPORT Files, Kernel, TLSBytes;
 
 CONST
   MaxBundle* = 1048576;
@@ -16,25 +16,19 @@ BEGIN
   b.len := 0; b.text[0] := 0X
 END Init;
 
+(** the file path into b (it is read as it is, the bytes and nothing else); FALSE if it is not there or
+   too large *)
 PROCEDURE Load*(path: ARRAY OF CHAR; VAR b: Bundle): BOOLEAN;
-VAR fd, n, total, want, r: LONGINT; name: ARRAY 512 OF CHAR;
+VAR f: Files.File; r: Files.Rider; n: LONGINT;
 BEGIN
   Init(b);
-  COPY(path, name);
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), Linux0.ORDonly, 0);
-  IF fd < 0 THEN RETURN FALSE END;
-  total := 0;
-  REPEAT
-    want := MaxBundle - 1 - total;
-    IF want > 8192 THEN want := 8192 END;
-    IF want <= 0 THEN n := 0
-    ELSE n := Linux0.Read0(fd, SYSTEM.ADR(b.text[total]), want)
-    END;
-    IF n > 0 THEN INC(total, n) END
-  UNTIL (n <= 0) OR (total >= MaxBundle - 1);
-  r := Linux0.Close0(fd);
-  IF (n < 0) OR (total >= MaxBundle - 1) THEN RETURN FALSE END;
-  b.len := total; b.text[total] := 0X;
+  f := Files.Old(path);
+  IF f = NIL THEN RETURN FALSE END;
+  n := Files.Length(f);
+  IF n >= MaxBundle - 1 THEN RETURN FALSE END;
+  Files.Set(r, f, 0); Files.ReadBytes(r, b.text, n);
+  IF r.res # 0 THEN RETURN FALSE END;
+  b.len := n; b.text[n] := 0X;
   RETURN TRUE
 END Load;
 
