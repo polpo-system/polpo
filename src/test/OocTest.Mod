@@ -1,6 +1,6 @@
 MODULE OocTest;  (** loksh OocTest.Run: the OOC library on this port (strings, conversions, math, time) *)
 
-IMPORT SYSTEM, Strings := oocStrings, Strings2, IntStr, RealStr, LRealStr, ConvTypes,
+IMPORT SYSTEM, Ascii, Strings := oocStrings, Strings2, IntStr, RealStr, LRealStr, ConvTypes,
   LowReal, LowLReal, RealMath, LRealMath, ComplexMath, JulianDay, SysClock, out;
 
 VAR fails, checks: LONGINT;
@@ -22,7 +22,8 @@ BEGIN
   Strings.Extract("hello", 1, 3, s); Check("oocStrings.Extract", s = "ell");
   Strings.FindNext("lo", "hello", 0, found, pos); Check("oocStrings.FindNext", found & (pos = 3));
   s := "abc"; Strings.Insert("XY", 1, s); Check("oocStrings.Insert", s = "aXYbc");
-  Check("Strings2.PosChar", Strings2.PosChar("x", "abxc") = 2)
+  Check("Strings2.PosChar", Strings2.PosChar("x", "abxc") = 2);
+  Check("Ascii.dle is 10X, soh 01X", (Ascii.dle = 10X) & (Ascii.soh = 01X) & (Ascii.dc1 = 11X))
 END Strs;
 
 PROCEDURE Convs;
