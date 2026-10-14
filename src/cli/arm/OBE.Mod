@@ -1326,7 +1326,7 @@ CONST
   END Op;
 
   PROCEDURE StPar1*(VAR x: OBT.Item; fctno: LONGINT);
-    VAR f : INTEGER; y: OBT.Item;  typ : OBT.Struct; L0, r : LONGINT; lr : LONGREAL;
+    VAR f : INTEGER; y: OBT.Item;  typ : OBT.Struct; L0, r : LONGINT; lr : LONGREAL; rr: REAL;
   BEGIN f := x.typ.form;
     CASE fctno OF
        OBT.FnHalt, OBT.FnSysHalt: 
@@ -1414,7 +1414,12 @@ CONST
           END ;
           x.typ := OBT.inttyp
     |  OBT.FnEntier:
-          IF f = OC.Real THEN RealMOpH(x, VCVTLS, OC.LInt)  (*RealMOp(x,"RealEntier")*)
+          IF (x.mode = OC.Const) & ((f = OC.Real) OR (f = OC.LReal)) THEN
+            (* polpo: folded, as the other compilers do; a constant was "expression should be constant" *)
+            IF f = OC.Real THEN SYSTEM.GET(SYSTEM.ADR(x.a), rr); lr := rr ELSE SYSTEM.GET(SYSTEM.ADR(x.a), lr) END;
+            IF (lr < MIN(LONGINT)) OR (lr >= MAX(LONGINT) + 1.0D0) THEN OBS.Mark(203); lr := 0 END;
+            x.a := ENTIER(lr); x.b := 0
+          ELSIF f = OC.Real THEN RealMOpH(x, VCVTLS, OC.LInt)  (*RealMOp(x,"RealEntier")*)
           ELSIF f = OC.LReal THEN RealMOpH(x, VCVTLD, OC.LInt)  (*RealMOp(x,"LRealEntier")*)
           ELSE OBS.Mark(111); 
           END ;

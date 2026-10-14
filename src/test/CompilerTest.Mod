@@ -48,7 +48,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    change now, folded and at run time (2026-10-14);
    x86: SHORT(x) of a LONGREAL stayed in full precision in the FPU, LONG(SHORT(x)) was x (2026-10-14);
    all: real literals were made with floating point arithmetic: 1.0D23 one unit in the last place off,
-   3.4E38 and 1.7D308 too large, denormal numbers refused or 0; DecReal rounds them once (2026-10-14). *)
+   3.4E38 and 1.7D308 too large, denormal numbers refused or 0; DecReal rounds them once (2026-10-14);
+   x86, ROP2: the constant ENTIER(2147483647.5D0) was refused, the value was compared before ENTIER;
+   ARM: ENTIER of a constant was not folded at all (2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -281,6 +283,12 @@ BEGIN
   RETURN ok
 END Literals;
 
+(* ENTIER of constants near the ends of LONGINT *)
+PROCEDURE ConstEntier(): BOOLEAN;
+CONST a = ENTIER(2147483647.5D0); b = ENTIER(-2147483648.0D0); c = ENTIER(-0.5); d = ENTIER(2.5E0);
+BEGIN RETURN (a = MAX(LONGINT)) & (b = MIN(LONGINT)) & (c = -1) & (d = 2)
+END ConstEntier;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -364,6 +372,7 @@ BEGIN
   Check("CAP changes only lower-case letters", CapOnly());
   Check("SHORT of a LONGREAL in an expression", ShortReal());
   Check("real literals", Literals());
+  Check("ENTIER of constants", ConstEntier());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

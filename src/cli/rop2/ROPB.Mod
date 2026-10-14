@@ -708,7 +708,8 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
         IF g IN realSet THEN CheckRealType(g, 203, x^.conval)
         ELSE (*g = LInt*)
           r := x^.conval^.realval;
-          IF (r < MIN(LONGINT)) OR (r > MAX(LONGINT)) THEN err(203); r := 1 END ;
+          (* polpo: ENTIER of 2^31 - 0.5 is MAX(LONGINT); r > MAX(LONGINT) refused it *)
+          IF (r < MIN(LONGINT)) OR (r >= MAX(LONGINT) + 1.0D0) THEN err(203); r := 1 END ;
           x^.conval^.intval := ENTIER(r); SetIntType(x)
         END
       ELSE (* (f IN {Char, Byte}) & (g IN {Byte} + intSet) OR (f = Undef) *)
