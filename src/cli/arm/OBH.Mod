@@ -65,10 +65,11 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
             OBE.load(y); OBC.PutMUL(OBC.MUL,y.r,z.r,y.r,0); (* MULD z, Ry *)
           END
         ELSE 
-          OBE.load(y); 
+          OBE.load(y); OBC.FreeRegs(OBC.UsedRegisters()+{basereg}); (* polpo: load freed basereg *)
           REPEAT 
             z.mode := OC.Var; z.r:=basereg; z.lev := lev; z.a := atyp.adr + adr; z.typ := OBT.linttyp;
-            OBE.load(z); OBC.PutMUL(OBC.MUL,y.r,z.r,y.r,0);  (* MULD Rz, Ry *)
+            OBE.load(z); OBC.FreeRegs(OBC.UsedRegisters()+{basereg}); (* polpo: load freed basereg *)
+            OBC.PutMUL(OBC.MUL,y.r,z.r,y.r,0);  (* MULD Rz, Ry *)
             atyp := atyp.BaseTyp
           UNTIL atyp.form # OC.DynArr;
           IF atyp.size > 1 THEN
@@ -83,6 +84,9 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
         f := atyp.form;
         IF f = OC.Array THEN Leng(atyp.size DIV atyp.BaseTyp.size)
         ELSIF f = OC.DynArr THEN y.lev := lev; y.a := atyp.adr + adr; y.typ:=OBT.linttyp; OBE.PushWord(y);
+          (* polpo: the load freed basereg, a temporary register for an open array on the heap (p^); the next
+             length was loaded into it, and the address of the array after it *)
+          OBC.FreeRegs(OBC.UsedRegisters()+{basereg}); y.r := basereg
         ELSE OBS.Mark(66); EXIT
         END ;
         ftyp := ftyp.BaseTyp; atyp := atyp.BaseTyp;

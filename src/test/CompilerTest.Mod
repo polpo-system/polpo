@@ -38,7 +38,10 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARMv7: an index of a two-dimensional open array took the size of a row as a stale constant, not
    the register it was in: a[r, 3], a[r] as an open array argument (2026-10-14);
    ARM: LEN(a, n) of an open array parameter read the length from the elements of the array, not
-   from beside its address; LEN(a) was right (2026-10-14). *)
+   from beside its address; LEN(a) was right (2026-10-14);
+   ARM: p^ of a POINTER TO ARRAY OF ARRAY passed to an open array parameter: loading the first length
+   freed the register of p^, the second length was loaded into it and the address read after it
+   came from there (a trap, 2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -235,6 +238,12 @@ PROCEDURE Lens(VAR a: ARRAY OF ARRAY OF INTEGER): BOOLEAN;
 BEGIN RETURN (LEN(a, 1) = 4) & (LEN(a, 0) = 3) & (LEN(a) = 3) & (Inner() = 43)
 END Lens;
 
+(* an open array on the heap passed to an open array parameter *)
+PROCEDURE HeapArg(): BOOLEAN;
+VAR p: POINTER TO ARRAY OF ARRAY OF INTEGER;
+BEGIN NEW(p, 3, 4); p[2, 3] := 23; p[2, 0] := 63; RETURN Lens(p^) & (RowSum(p[2]) = 86)
+END HeapArg;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -313,6 +322,7 @@ BEGIN
   i := 0; WHILE i < 3 DO j := 0; WHILE j < 4 DO grid[i, j] := SHORT(10 * i + j); INC(j) END; INC(i) END;
   Check("rows of a two-dimensional open array", OpenRows(grid, 2));
   Check("LEN(a, n) of an open array", Lens(grid));
+  Check("an open array on the heap as an open array argument", HeapArg());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
