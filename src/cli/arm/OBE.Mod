@@ -193,6 +193,7 @@ CONST
   BEGIN 
     OBC.SetPreferredReg(r); 
     IF x.mode=OC.CC THEN loadB(x) ELSE load(x) END;
+    OBC.SetPreferredReg(-1);  (* polpo: unused when x was in a register already; it stayed for a later GetReg *)
     IF x.r#r THEN
       IF r IN OBC.UsedRegisters() THEN OBS.Mark(215) END; 
       OBC.PutDP(OBC.MOV,r,0,x.r,0);

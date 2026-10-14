@@ -32,7 +32,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARMv7: in P(F(1), G(2), H(3)) the first parameter was H's result: the register of F's result was
    freed when G returned and H did not save it (2026-10-14);
    ARM, ROP2: in Sum(n: Node), Sum(n.left) inside WITH n: Pair was refused (err 113): the parameter
-   of the call was checked against the narrowed type of n (2026-10-14). *)
+   of the call was checked against the narrowed type of n (2026-10-14);
+   ARM: RETURN F(x) left R0 as the preferred register of the next GetReg, and RETURN a[i] of an
+   open array in the next procedure stopped the compiler (division by zero, 2026-10-14). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -52,6 +54,7 @@ VAR
   fails, checks: LONGINT;
   g: ARRAY 3 OF Small;
   flag: BOOLEAN;
+  row: ARRAY 4 OF INTEGER;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
@@ -197,6 +200,15 @@ PROCEDURE AllCalls(): BOOLEAN;
 BEGIN RETURN (Five(1, Id(2), Id(3), Id(4), Id(5)) = 12345) & (Three(Sq(1.0), Sq(2.0), Sq(3.0)) = 149.0)
 END AllCalls;
 
+(* RETURN F(x) followed by RETURN a[i] of an open array *)
+PROCEDURE RetCall(x: LONGINT): LONGINT;
+BEGIN RETURN Id(x)
+END RetCall;
+
+PROCEDURE OpenElem(VAR a: ARRAY OF INTEGER; i: LONGINT): LONGINT;
+BEGIN RETURN a[i]
+END OpenElem;
+
 (* the procedure called inside a WITH on its own parameter: its parameter keeps the declared type *)
 PROCEDURE WSum(n: WNode): LONGINT;
 VAR s: LONGINT;
@@ -271,6 +283,7 @@ BEGIN
   Check("constant FALSE and TRUE as operands of & and OR, under ~", ConstCond(TRUE, FALSE));
   Check("every parameter a call", AllCalls());
   Check("a call of the procedure itself inside a WITH on its parameter", WithSelf());
+  row[2] := 77; Check("RETURN a[i] of an open array after RETURN F(x)", (RetCall(5) = 5) & (OpenElem(row, 2) = 77));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
