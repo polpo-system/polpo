@@ -185,6 +185,7 @@ Limitations of implementation
 234
 235  
 236  too many exported variables
+237  divisor of DIV or MOD must be positive
 240  identifier too long
 241  string too long
 242  address overflow

@@ -720,19 +720,18 @@ MODULE OPB;  (** non-portable *)
         END
     | div:
         IF f IN intSet THEN
-          IF (yval^.intval = -1) & (xval^.intval = MIN(LONGINT)) THEN err(203)  (* polpo: the quotient does not fit, and the host traps *)
-          ELSIF yval^.intval # 0 THEN
+          (* polpo: DIV and MOD want a divisor > 0, as in Oberon-07 *)
+          IF yval^.intval > 0 THEN
             xval^.intval := xval^.intval DIV yval^.intval; SetIntType(x)
-          ELSE err(205)
+          ELSE err(237)
           END
         ELSIF f # Undef THEN err(103)
         END
     | mod:
         IF f IN intSet THEN
-          IF yval^.intval = -1 THEN xval^.intval := 0; SetIntType(x)  (* polpo: MIN(LONGINT) MOD -1 trapped on the host *)
-          ELSIF yval^.intval # 0 THEN
+          IF yval^.intval > 0 THEN
             xval^.intval := xval^.intval MOD yval^.intval; SetIntType(x)
-          ELSE err(205)
+          ELSE err(237)
           END
         ELSIF f # Undef THEN err(104)
         END
@@ -988,7 +987,7 @@ MODULE OPB;  (** non-portable *)
           do := TRUE;
           IF f IN intSet THEN
             IF y^.class = Nconst THEN val := y^.conval^.intval;
-              IF val = 0 THEN err(205)
+              IF val <= 0 THEN err(237)  (* polpo: DIV wants a divisor > 0 *)
               ELSIF val = 1 THEN do := FALSE
               ELSIF log(val) = 1 THEN
                 op := ash; y^.typ := OPT.sinttyp; y^.conval^.intval := -exp; y^.obj := NIL
@@ -1000,7 +999,7 @@ MODULE OPB;  (** non-portable *)
       | mod:
           IF f IN intSet THEN
             IF y^.class = Nconst THEN
-              IF y^.conval^.intval = 0 THEN err(205)
+              IF y^.conval^.intval <= 0 THEN err(237)  (* polpo: MOD wants a divisor > 0 *)
               ELSIF y^.conval^.intval = 1 THEN               (* <== optimize x MOD 1 = 0 *)
                 x := OPT.NewNode(Nconst); x^.typ := typ;
                 x^.conval := OPT.NewConst(); x^.conval^.intval := 0;

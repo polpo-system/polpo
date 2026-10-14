@@ -971,7 +971,9 @@ END PutTrap;
   VAR zeroTrap: BOOLEAN; xreg:LONGINT;
   BEGIN
     IF softDiv THEN  (* R0 = R1 DIV R0; R1 = R1 MOD R0 *)
+      zeroTrap:=(y.mode#OPT.Con) OR (y.offset <= 0);
       Load(y, T0); Load(x, T1); (* first load T0 as T1 is used in adress loading *)
+      IF zeroTrap THEN PutI( CMPI, 0, y.reg, 0); PutTrap( GT, ZeroTrap) END;  (* polpo: as with SDIV below *)
       GetR(TempReg, rt);
       PutB( STMDBwb +ASH(SP, 16), 403CH);  (* we need to store LR, so store all used registers *)
       IF y.reg#T0 THEN PutR( MOV, T0, 0, y.reg) END;

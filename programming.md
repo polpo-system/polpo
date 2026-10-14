@@ -212,8 +212,12 @@ something in between. A module that keeps to the following compiles with all of 
     module names shorter than 20 characters, identifiers shorter than 32, string constants
     shorter than 128 characters, and less than 16 KB of them in a module;
 
-    no real constants at the very ends of the range (1.17549435E-38): write them as quotients
-    of powers of two.
+    DIV and MOD only with a divisor > 0, as in Oberon-07: a constant divisor <= 0 does not
+    compile (err 237), a variable one stops the program (trap 10). For a negative dividend
+    they round down: -7 DIV 2 = -4, -7 MOD 2 = 1, the remainder is never negative.
+
+Real literals are converted exactly and rounded to the nearest REAL or LONGREAL, the ends of the
+range and the denormal numbers included; a literal that is not 0 but rounds to 0 is an error.
 
 (Note: ORD(ch) is an INTEGER, 16 bits, on x86, so ORD(ch) * 256 can overflow there without a trap;
 write LONG(ORD(ch)) * 256. FOR loops are fine on all five compilers.)

@@ -945,7 +945,7 @@ BEGIN
     |7: Texts.WriteString(W, "Index out of range")
     |8: Texts.WriteString(W, "ASSERT failed")
     |9: Texts.WriteString(W, "Array dimension error")
-    |10: Texts.WriteString(W, "Division by zero")
+    |10: Texts.WriteString(W, "Division by zero or a negative divisor")
     |11: Texts.WriteString(W, "General protection fault")
     |12: Texts.WriteString(W, "Stack overflow")
     |13, 113: Texts.WriteString(W, "Keyboard interrupt")  (* 113: HALT of Input, Ctrl+Pause/Break or Ctrl+Alt+C *)

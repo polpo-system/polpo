@@ -607,20 +607,19 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
         END
     | div:
         IF f IN intSet THEN
-          IF (yval^.intval = -1) & (xval^.intval = MIN(LONGINT)) THEN err(203)  (* polpo: the quotient does not fit, and the host traps *)
-          ELSIF yval^.intval # 0 THEN
+          (* polpo: DIV and MOD want a divisor > 0, as in Oberon-07 *)
+          IF yval^.intval > 0 THEN
             xval^.intval := xval^.intval DIV yval^.intval; SetIntType(x)
-          ELSE err(205)
+          ELSE err(237)
 
           END
         ELSIF f # Undef THEN err(103)
         END
     | mod2:
         IF f IN intSet THEN
-          IF yval^.intval = -1 THEN xval^.intval := 0; SetIntType(x)  (* polpo: MIN(LONGINT) MOD -1 trapped on the host *)
-          ELSIF yval^.intval # 0 THEN
+          IF yval^.intval > 0 THEN
             xval^.intval := xval^.intval MOD yval^.intval; SetIntType(x);
-          ELSE err(205)
+          ELSE err(237)
           END
         ELSIF f # Undef THEN err(104)
         END
@@ -834,7 +833,7 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
           do := TRUE;
           IF f IN intSet THEN
             IF y^.class = Nconst THEN val := y^.conval^.intval;
-              IF val = 0 THEN err(205)
+              IF val <= 0 THEN err(237)  (* polpo: DIV wants a divisor > 0 *)
               ELSIF val = 1 THEN do := FALSE
               ELSIF log(val) = 1 THEN
                 op := ash; y^.typ := OPT.sinttyp; y^.conval^.intval := -exp; y^.obj := NIL
@@ -846,7 +845,7 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
       | mod2:
           IF f IN intSet THEN
             IF y^.class = Nconst THEN
-              IF y^.conval^.intval = 0 THEN err(205)
+              IF y^.conval^.intval <= 0 THEN err(237)  (* polpo: MOD wants a divisor > 0 *)
               ELSIF log(y^.conval^.intval) = 1 THEN
                 op := msk; y^.conval^.intval := ASH(-1, exp); y^.obj := NIL
               END

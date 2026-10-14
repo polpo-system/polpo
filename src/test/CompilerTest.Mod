@@ -43,7 +43,8 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    freed the register of p^, the second length was loaded into it and the address read after it
    came from there (a trap, 2026-10-14);
    all: the constant MIN(LONGINT) DIV (-1) or MOD (-1) stopped the compiler (division overflow on the
-   host); DIV is err 203 now, MOD gives 0 (2026-10-14);
+   host); since then DIV and MOD want a divisor > 0 on all ports, as in Oberon-07: a constant one <= 0
+   is err 237, a variable one traps (10); x86 and ARM gave odd results for negative ones (2026-10-14);
    all: CAP cleared bit 5 of any character, CAP("7") was 17X and CAP("{") "["; only "a".."z"
    change now, folded and at run time (2026-10-14);
    x86: SHORT(x) of a LONGREAL stayed in full precision in the FPU, LONG(SHORT(x)) was x (2026-10-14);
@@ -368,7 +369,8 @@ BEGIN
   Check("rows of a two-dimensional open array", OpenRows(grid, 2));
   Check("LEN(a, n) of an open array", Lens(grid));
   Check("an open array on the heap as an open array argument", HeapArg());
-  Check("constant MOD (-1)", (MIN(LONGINT) MOD (-1) = 0) & (7 DIV (-1) = -7));
+  x := -7; k := 3; Check("DIV and MOD of a negative dividend: floor", (x DIV k = -3) & (x MOD k = 2) & (x DIV 2 = -4)
+    & (x MOD 2 = 1) & ((-7) DIV 3 = -3) & ((-7) MOD 3 = 2) & (MIN(LONGINT) DIV 3 = -715827883) & (MIN(LONGINT) MOD 3 = 1));
   Check("CAP changes only lower-case letters", CapOnly());
   Check("SHORT of a LONGREAL in an expression", ShortReal());
   Check("real literals", Literals());

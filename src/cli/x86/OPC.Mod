@@ -1340,6 +1340,13 @@ Intel i386 :
     END
   END Mul;
 
+  PROCEDURE DivisorCheck (VAR y: Item);
+    VAR c: Item;
+  BEGIN (* polpo: DIV and MOD want a divisor > 0 (Oberon-07): trap 10 as for 0, which the CPU traps itself *)
+    MakeCon (c, y.typ, 0); GenFlags (cmp, y, c);
+    Gen1 (tle, 10, NIL)
+  END DivisorCheck;
+
   PROCEDURE Div* (VAR z, x, y: Item; f: INTEGER); (* z := x DIV y; z := x / y *)
   BEGIN
     ASSERT ( (f IN realSet) OR (f = Set) OR (f IN intSet) );
@@ -1355,7 +1362,7 @@ Intel i386 :
       END
     ELSE (* f IN intSet *) (* front end checks for shift right possibilities *)
       load (x);
-      IF y.mode # Con THEN load (y) END;
+      IF y.mode # Con THEN load (y); DivisorCheck (y) END;
       Gen3 (div, z, x, y)
       (* no overflow check necessary *)
     END
@@ -1364,7 +1371,7 @@ Intel i386 :
   PROCEDURE Mod* (VAR z, x, y: Item); (* z := x MOD y *)
   BEGIN
     load (x);
-    IF y.mode # Con THEN load (y) END; (* front end checks for shift left possibilities *)
+    IF y.mode # Con THEN load (y); DivisorCheck (y) END; (* front end checks for shift left possibilities *)
     Gen3 (mod, z, x, y)
     (* no overflow check necessary *)
   END Mod;

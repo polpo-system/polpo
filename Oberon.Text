@@ -399,6 +399,7 @@ OP2 = {
     234  export of recursive type not allowed
     235  too many accesses to global variables or constants
     236  too many exported variables
+    237  divisor of DIV or MOD must be positive
     240  identifier too long
     241  string too long
     242  address overflow

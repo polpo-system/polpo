@@ -947,8 +947,9 @@ CONST
   END CompStrings;
 
   PROCEDURE DivMod(VAR x,y : OBT.Item; isDiv : BOOLEAN);
-  VAR oldy, r : LONGINT; r0Save, r1Save : LONGINT;
+  VAR oldy, r : LONGINT; r0Save, r1Save : LONGINT; check: BOOLEAN;
   BEGIN
+    check := y.mode # OC.Const;  (* polpo: a constant divisor <= 0 is refused by Op *)
     r0Save:=-1; r1Save:=-1;
     IF (x.mode # OC.Reg) & (x.mode # OC.Const) THEN
       (* polpo: load x first: its address may use R0 or R1 (a[i DIV 15] DIV k: the index is the
@@ -964,6 +965,9 @@ CONST
       OBC.GetReg(r0Save); OBC.PutDP(OBC.MOV,r0Save,0,0,0); OBC.FreeReg(0)
     END;
     loadInto(y,0);
+    IF check THEN  (* polpo: DIV and MOD want a divisor > 0 (Oberon-07): trap 10, division by zero *)
+      OBC.PutDP1(OBC.CMP,0,0,0); OBC.PutSWI(OBC.LE,OC.DivByZeroTrap)
+    END;
     
     (* Load R1 *)
     IF (1 IN OBC.UsedRegisters()) & ~( (x.mode=OC.Reg) & (x.r=1)) THEN
@@ -1148,11 +1152,9 @@ CONST
 
      | OC.div:
            IF f IN intSet THEN  (*DIV*)
-             IF (y.mode=OC.Const) & (y.a=0) THEN OBS.Mark(205) 
+             IF (y.mode=OC.Const) & (y.a<=0) THEN OBS.Mark(237)  (* polpo: DIV wants a divisor > 0 *)
              ELSE
-               IF (x.mode = OC.Const) & (y.mode = OC.Const) & (y.a = -1) & (x.a = MIN(LONGINT)) THEN
-                 OBS.Mark(203)  (* polpo: the quotient does not fit, and the host traps *)
-               ELSIF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
+               IF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
                  x.a := x.a DIV y.a; SetIntType(x)
                ELSIF (y.mode = OC.Const) & (mant(y.a) = 1) THEN
                  IF log#0 THEN load(x); OBC.PutDP(OBC.MOV,x.r,0,x.r,log*8+4) END; (* MOV x.r, x.r ASR log *)
@@ -1165,11 +1167,9 @@ CONST
 
      | OC.mod:
            IF f IN intSet THEN  (*MOD*)
-             IF (y.mode = OC.Const) & (y.a=0) THEN OBS.Mark(205)
+             IF (y.mode = OC.Const) & (y.a<=0) THEN OBS.Mark(237)  (* polpo: MOD wants a divisor > 0 *)
              ELSE
-               IF (x.mode = OC.Const) & (y.mode = OC.Const) & (y.a = -1) THEN
-                 x.a := 0; x.typ := y.typ  (* polpo: MIN(LONGINT) MOD -1 trapped on the host *)
-               ELSIF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
+               IF (x.mode = OC.Const) & (y.mode = OC.Const) THEN
                  x.a := x.a MOD y.a; x.typ := y.typ
                ELSIF (y.mode = OC.Const) & (mant(y.a) = 1) THEN
                  y.a := ASH(-1, log); load(x); OBC.PutDP1(OBC.BIC,x.r,x.r,y.a)   
