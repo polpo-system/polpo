@@ -69,6 +69,7 @@ TYPE
       Name: FileName;
       fd, addr, len, dirfd: LONGINT;
       disk: LONGINT;  (* polpo: the length on disk of a file mapped shared, -1 for a private mapping *)
+      epoch: LONGINT;  (* polpo: the value of epoch when the file was opened, see Reset *)
       changed: BOOLEAN;
   END;
 
@@ -90,6 +91,7 @@ VAR
   trace: BOOLEAN;
 (* Check a file name. *)
   sysfd, wrkfd: LONGINT;
+  epoch: LONGINT;  (* polpo: counts Reset *)
   searchPath: ARRAY 5 OF FileName;  (* polpo: directories tried by Old for plain names *)
   nofSearch: LONGINT;
 
@@ -115,6 +117,11 @@ BEGIN
   IF (old>0) & (old#wrkfd) & (old#sysfd) THEN r:=Linux0.Close0(old) END;
 END SetWRK;
 
+PROCEDURE GetDirfd0(): LONGINT;
+BEGIN
+  IF wrkfd>0 THEN RETURN wrkfd ELSIF sysfd>0 THEN RETURN sysfd ELSE RETURN Linux0.ATFDCWD END
+END GetDirfd0;
+
 PROCEDURE GetDirfd(VAR s: ARRAY OF CHAR): LONGINT;
 VAR i, fd: LONGINT;
 BEGIN
@@ -132,9 +139,23 @@ BEGIN
     RETURN fd;  
   END;
   IF wrkfd>0 THEN  RETURN wrkfd;
-  ELSE RETURN sysfd;
+  ELSIF sysfd>0 THEN RETURN sysfd;
+  ELSE RETURN Linux0.ATFDCWD  (* polpo: none after Reset, until SetSYS *)
   END;
-END GetDirfd;    
+END GetDirfd;
+
+(** polpo: the descriptors of the process were closed behind Files (portia does so in the process of a
+   test): the directories of SetSYS and SetWRK are forgotten, and files opened before do not use their
+   descriptors any more (closing, truncating or writing through them would hit the files that got
+   those numbers since); they are read from memory as before and a Register writes them by name *)
+PROCEDURE Reset*;
+BEGIN INC(epoch); sysfd:=-1; wrkfd:=-1
+END Reset;
+
+PROCEDURE Fresh(f: File);  (* a file from before Reset forgets its descriptor *)
+BEGIN
+  IF f.epoch#epoch THEN f.fd:=-1; f.epoch:=epoch; f.dirfd:=GetDirfd0() END
+END Fresh;    
 
 PROCEDURE Check(VAR s, name: ARRAY OF CHAR; VAR dirfd: LONGINT; VAR res: INTEGER);
   VAR i: LONGINT; ch: CHAR;
@@ -159,7 +180,7 @@ VAR res: LONGINT; newName: FileName; f2: File;
 BEGIN
   IF trace THEN Kernel.WriteString("Files.Cleanup: ") END; 
   IF f # NIL THEN
-    f2:=SYSTEM.VAL(File, f);
+    f2:=SYSTEM.VAL(File, f); Fresh(f2);
     IF trace THEN Kernel.WriteString(f2.Name) END;
     IF f2.fd#-1 THEN res:= Linux0.Close0( f2.fd); f2.fd:=-1 END;
   END;
@@ -233,7 +254,7 @@ BEGIN
 (* MAP_SHARED=1, MAP_PRIVATE=2, MAP_ANONYMOUS=20H, 800@MIPS, RW=3 Anonymous files have to be private for mmap to work! *)
     f.addr:=Linux0.Mmap20( 0, Linux0.PageSize, 3, Linux0.MAPPRIVATE+Linux0.MAPANONYMOUS, 0, 0);
     IF (f.addr MOD 1000H) #0 THEN Kernel.WriteString("Files.New mmap failed"); Kernel.WriteHex(f.addr, 9); Kernel.WriteLn;END;
-    f.len:=0; f.disk:=-1;
+    f.len:=0; f.disk:=-1; f.epoch:=epoch;
     f.changed:=FALSE;
     Kernel.RegisterObject( f, Cleanup, FALSE);
     RETURN f;
@@ -298,7 +319,7 @@ BEGIN
       r:= Linux0.Close0( fd);
       RETURN NIL;
     END;
-    f.changed:=FALSE;
+    f.changed:=FALSE; f.epoch:=epoch;
     Kernel.RegisterObject( f, Cleanup, FALSE);
     RETURN f;
   END;
@@ -309,6 +330,7 @@ END Old;
 PROCEDURE ReleaseRead*(f: File);
 VAR res: LONGINT;
 BEGIN
+  IF f # NIL THEN Fresh(f) END;
   IF (f # NIL) & (f.fd > 0) THEN
     res := Linux0.Close0(f.fd); f.fd := -1
   END
@@ -335,6 +357,7 @@ VAR res, i: LONGINT; tmp: FileName;
 BEGIN
   IF f# NIL THEN
     IF trace THEN Kernel.WriteString("Files.Register "); Kernel.WriteString(f.Name); Kernel.WriteLn END;
+    Fresh(f);
     IF f.Name#"" THEN
       IF f.fd=-1 THEN                                  (* flags were 242H for X86 *)
         (* polpo: written as name.new~, synced, then renamed over the old file: a power loss leaves
@@ -390,6 +413,7 @@ VAR res: LONGINT;
 BEGIN
   IF f# NIL THEN
     IF trace THEN Kernel.WriteString("Files.Close "); Kernel.WriteString(f.Name); Kernel.WriteLn END;
+    Fresh(f);
     IF (f.fd>0) & f.changed THEN
       res:=Linux0.LSeek0( f.fd, 0, Linux0.SEEKSET);
       res:=Linux0.Write0( f.fd, f.addr, f.len);
@@ -412,8 +436,9 @@ END Length;
 PROCEDURE GetDate*(f: File; VAR t, d: LONGINT);
 VAR status: Linux0.Status; res: LONGINT;
 BEGIN
-  res:=Linux0.FStat0( f.fd, SYSTEM.ADR(status));
-  Kernel.U2OTime( status.mtime, d, t);
+  Fresh(f); t:=0; d:=0;
+  IF f.fd>0 THEN res:=Linux0.FStat0( f.fd, SYSTEM.ADR(status)) ELSE res:=-1 END;
+  IF res=0 THEN Kernel.U2OTime( status.mtime, d, t) END;
 END GetDate;
 
 (** Sets the modification time (t) and date (d) of a file. *)
@@ -535,7 +560,7 @@ END ReadNum;
 PROCEDURE WriteBytes*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.BYTE; n: LONGINT);
 VAR f: File;  lo, ln: LONGINT;
 BEGIN
-  f:=r.file;
+  f:=r.file; Fresh(f);
   lo:=(f.len+Linux0.PageSize-1)DIV Linux0.PageSize*Linux0.PageSize;  (* the length of the mapping *)
   IF lo=0 THEN lo:= Linux0.PageSize END;
   ln:=(r.apos+n+Linux0.PageSize-1) DIV Linux0.PageSize*Linux0.PageSize;
