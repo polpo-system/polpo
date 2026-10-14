@@ -17,7 +17,7 @@ MODULE dcs;  (** dcs, the digital command system: a command line Gemini and Spar
    dcs.NewIdent name [mail] [/years n]   make an identity (a P-256 key, self-signed)
    dcs.Help *)
 
-IMPORT SYSTEM, Linux0, Gemini0, Texts := texts, out;
+IMPORT SYSTEM, Linux0, Files, Gemini0, Texts := texts, out;
 
 CONST
   MaxInput = 3000;  (* a Gemini query is at most 1024 bytes in all *)
@@ -92,15 +92,18 @@ END Head;
 
 (* the whole of standard input, or of the file name, into inputText *)
 PROCEDURE ReadInput(VAR name: ARRAY OF CHAR): BOOLEAN;
-VAR fd, n, r: LONGINT;
+VAR n, r: LONGINT; f: Files.File; rd: Files.Rider;
 BEGIN
-  IF name = "-" THEN fd := 0 ELSE fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), Linux0.ORDonly, 0) END;
-  IF fd < 0 THEN RETURN FALSE END;
-  n := 0; r := 1;
-  WHILE (r > 0) & (n < MaxInput - 1) DO r := Linux0.Read0(fd, SYSTEM.ADR(inputText[n]), MaxInput - 1 - n); IF r > 0 THEN INC(n, r) END END;
-  inputText[n] := 0X;
-  IF fd # 0 THEN r := Linux0.Close0(fd) END;
-  RETURN r >= 0
+  IF name = "-" THEN  (* standard input, the console *)
+    n := 0; r := 1;
+    WHILE (r > 0) & (n < MaxInput - 1) DO r := Linux0.Read0(0, SYSTEM.ADR(inputText[n]), MaxInput - 1 - n); IF r > 0 THEN INC(n, r) END END;
+    inputText[n] := 0X; RETURN r >= 0
+  END;
+  f := Files.Old(name);
+  IF f = NIL THEN RETURN FALSE END;
+  n := Files.Length(f); IF n > MaxInput - 1 THEN n := MaxInput - 1 END;
+  Files.Set(rd, f, 0); Files.ReadBytes(rd, inputText, n); inputText[n] := 0X;
+  RETURN TRUE
 END ReadInput;
 
 PROCEDURE Usage;
