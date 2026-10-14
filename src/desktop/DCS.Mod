@@ -8,7 +8,7 @@ MODULE DCS;  (** dcs in the desktop: Gemini and Spartan requests, the answers in
    DCS.Idents ~
    DCS.NewIdent name [mail] [/years n] ~ *)
 
-IMPORT SYSTEM, Linux0, Gemini0, Args := texts, Texts, Oberon, MenuViewers, TextFrames;
+IMPORT Files, Gemini0, Args := texts, Texts, Oberon, MenuViewers, TextFrames;
 
 CONST
   Menu = "System.Close System.Copy System.Grow Edit.Search Edit.Store";
@@ -75,13 +75,12 @@ BEGIN
 END Body;
 
 PROCEDURE ReadInput(VAR name: ARRAY OF CHAR): BOOLEAN;
-VAR fd, n, r: LONGINT;
+VAR n: LONGINT; f: Files.File; rd: Files.Rider;
 BEGIN
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(name[0]), Linux0.ORDonly, 0);
-  IF fd < 0 THEN RETURN FALSE END;
-  n := 0; r := 1;
-  WHILE (r > 0) & (n < MaxInput - 1) DO r := Linux0.Read0(fd, SYSTEM.ADR(inputText[n]), MaxInput - 1 - n); IF r > 0 THEN INC(n, r) END END;
-  inputText[n] := 0X; r := Linux0.Close0(fd);
+  f := Files.Old(name);
+  IF f = NIL THEN RETURN FALSE END;
+  n := Files.Length(f); IF n > MaxInput - 1 THEN n := MaxInput - 1 END;
+  Files.Set(rd, f, 0); Files.ReadBytes(rd, inputText, n); inputText[n] := 0X;
   RETURN TRUE
 END ReadInput;
 
