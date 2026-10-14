@@ -11,7 +11,7 @@ MODULE tar;  (** tar archives, plain or gzip compressed, in the console *)
    are entries that would land outside dir. Pack writes ustar, with GNU long names for paths of
    more than 100 characters that no prefix splits; the archives are those of tar and tar -z. *)
 
-IMPORT SYSTEM, Linux0, Files, GZReaders, GZWriters, texts, out;
+IMPORT Kernel, Files, FATFiles, GZReaders, GZWriters, texts, out;
 
 CONST Block = 512; NameLen = 256;
 
@@ -25,6 +25,8 @@ VAR
   eof: BOOLEAN;
   zw: GZWriters.Writer; aw: Files.Rider;  (* the archive written by Pack *)
   packed, dirsPacked: LONGINT; ok: BOOLEAN;
+  entries: Entry;  (* the names Collect gathers *)
+  want: Name; found, wantDir: BOOLEAN; wantTime: LONGINT;  (* for Find *)
 
 PROCEDURE Open(VAR name: ARRAY OF CHAR): BOOLEAN;
 VAR f: Files.File; c0, c1: CHAR;
@@ -77,11 +79,11 @@ BEGIN
 END Append;
 
 PROCEDURE MakeDirs(VAR full: ARRAY OF CHAR);  (* the directories of the path full; full itself too if it ends with "/" *)
-VAR i, r: LONGINT; dir: Name;
+VAR i: LONGINT; res: INTEGER; dir: Name;
 BEGIN
   dir[0] := full[0]; i := 1;
   WHILE (full[i] # 0X) & (i < NameLen - 1) DO
-    IF full[i] = "/" THEN dir[i] := 0X; r := Linux0.MkDir0(SYSTEM.ADR(dir), 1EDH) END;
+    IF full[i] = "/" THEN dir[i] := 0X; Files.CreateDirectory(dir, res) END;
     dir[i] := full[i]; INC(i)
   END
 END MakeDirs;
@@ -259,34 +261,37 @@ BEGIN
   Emit(h, Block)
 END Header;
 
-PROCEDURE MTime(VAR path: ARRAY OF CHAR): LONGINT;
-VAR st: Linux0.Status;
-BEGIN
-  IF Linux0.FStatat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), SYSTEM.ADR(st), 0) = 0 THEN RETURN st.mtime ELSE RETURN 0 END
-END MTime;
+PROCEDURE Collect(name: ARRAY OF CHAR; time, date, size: LONGINT; attr: SET; VAR continue: BOOLEAN);
+VAR e: Entry;
+BEGIN NEW(e); COPY(name, e.name); e.next := entries; entries := e
+END Collect;
 
-(* the entries of the directory path, NIL if it is not one (or empty); dir: it is a directory *)
-PROCEDURE Entries(VAR path: ARRAY OF CHAR; VAR dir: BOOLEAN): Entry;
-VAR fd, n, i, r, rec: LONGINT; buf: ARRAY 8192 OF CHAR; list, e: Entry; k: LONGINT;
+PROCEDURE Match(name: ARRAY OF CHAR; time, date, size: LONGINT; attr: SET; VAR continue: BOOLEAN);
 BEGIN
-  list := NIL; dir := FALSE;
-  fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), Linux0.ORDonly, 0);
-  IF fd <= 0 THEN RETURN NIL END;
-  LOOP
-    n := Linux0.GetDents0(fd, SYSTEM.ADR(buf[0]), LEN(buf));  (* getdents64: the length at 16, the name at 19 *)
-    IF n <= 0 THEN EXIT END;
-    dir := TRUE; i := 0;
-    WHILE i < n DO
-      rec := ORD(buf[i + 16]) + 256 * LONG(ORD(buf[i + 17]));
-      IF ~((buf[i + 19] = ".") & ((buf[i + 20] = 0X) OR (buf[i + 20] = ".") & (buf[i + 21] = 0X))) THEN
-        NEW(e); k := 0; WHILE (buf[i + 19 + k] # 0X) & (k < NameLen - 1) DO e.name[k] := buf[i + 19 + k]; INC(k) END; e.name[k] := 0X;
-        e.next := list; list := e
-      END;
-      INC(i, rec)
-    END
-  END;
-  r := Linux0.Close0(fd);
-  RETURN list
+  IF name = want THEN found := TRUE; wantDir := FATFiles.SubDir IN attr; wantTime := Kernel.O2UTime(date, time); continue := FALSE END
+END Match;
+
+(* path there? dir: a directory; mtime: the time of its last change, Unix time *)
+PROCEDURE Find(VAR path: ARRAY OF CHAR; VAR dir: BOOLEAN; VAR mtime: LONGINT): BOOLEAN;
+VAR parent: Name; i, slash: LONGINT; res: LONGINT;
+BEGIN
+  COPY(path, parent); i := Len(parent); IF (i > 1) & (parent[i - 1] = "/") THEN DEC(i); parent[i] := 0X END;
+  slash := i - 1; WHILE (slash >= 0) & (parent[slash] # "/") DO DEC(slash) END;
+  i := 0; WHILE parent[slash + 1 + i] # 0X DO want[i] := parent[slash + 1 + i]; INC(i) END; want[i] := 0X;
+  IF slash < 0 THEN parent := "" ELSE parent[slash + 1] := 0X END;
+  Append(parent, want);  (* the pattern is the name itself; Match compares exactly *)
+  found := FALSE; FATFiles.Enumerate(parent, Match, res);
+  dir := wantDir; mtime := wantTime;
+  RETURN found
+END Find;
+
+(* the entries of the directory path, reversed *)
+PROCEDURE Entries(VAR path: ARRAY OF CHAR): Entry;
+VAR dir: Name; res: LONGINT;
+BEGIN
+  COPY(path, dir); IF dir[Len(dir) - 1] # "/" THEN Append(dir, "/") END;
+  entries := NIL; FATFiles.Enumerate(dir, Collect, res);
+  RETURN entries
 END Entries;
 
 (* the entries of a directory in the order of their names, the list reversed by Entries *)
@@ -306,16 +311,14 @@ END Sort;
 
 (* path into the archive: a file, or a directory and everything in it *)
 PROCEDURE Pack1(VAR path: ARRAY OF CHAR);
-VAR e: Entry; dir: BOOLEAN; f: Files.File; r: Files.Rider; buf: ARRAY 8192 OF CHAR; sub: Name; size, k, n: LONGINT; st: Linux0.Status;
+VAR e: Entry; dir: BOOLEAN; f: Files.File; r: Files.Rider; buf: ARRAY 8192 OF CHAR; sub: Name; size, k, n, mtime: LONGINT;
 BEGIN
   IF ~ok THEN RETURN END;
-  IF Linux0.FStatat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), SYSTEM.ADR(st), 0) # 0 THEN
-    out.String("tar: no "); out.String(path); out.Ln; RETURN
-  END;
-  e := Sort(Entries(path, dir));
+  IF ~Find(path, dir, mtime) THEN out.String("tar: no "); out.String(path); out.Ln; RETURN END;
   IF dir THEN
+    e := Sort(Entries(path));
     COPY(path, sub); IF sub[Len(sub) - 1] # "/" THEN Append(sub, "/") END;
-    Header(sub, "5", 0, MTime(path)); INC(dirsPacked);
+    Header(sub, "5", 0, mtime); INC(dirsPacked);
     WHILE e # NIL DO  (* in the order of the names *)
       COPY(path, sub); IF sub[Len(sub) - 1] # "/" THEN Append(sub, "/") END; Append(sub, e.name);
       IF Len(sub) >= NameLen - 1 THEN out.String("tar: skipped, too long: "); out.String(sub); out.Ln ELSE Pack1(sub) END;
@@ -324,7 +327,7 @@ BEGIN
   ELSE
     f := Files.Old(path);
     IF f = NIL THEN out.String("tar: cannot read "); out.String(path); out.Ln; RETURN END;
-    size := Files.Length(f); Header(path, "0", size, MTime(path)); Files.Set(r, f, 0); k := size;
+    size := Files.Length(f); Header(path, "0", size, mtime); Files.Set(r, f, 0); k := size;
     WHILE k > 0 DO
       n := k; IF n > LEN(buf) THEN n := LEN(buf) END;
       Files.ReadBytes(r, buf, n); Emit(buf, n); DEC(k, n)
