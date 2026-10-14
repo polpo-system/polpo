@@ -773,4 +773,82 @@ Gadgets = {
     CurrentLoad = Gages.NewLoad
     EventTimer = Gages.NewLap
     Scope = Gages.NewFrame
-    Me
+    MemoryUsed = Gages.NewMem
+    Histogram = Histogram.NewFrame
+
+    TimeStamp = TimeStamps.New
+    Finder = Finder.NewFrame
+    
+    Line = BasicFigures.NewLine
+    Circle = BasicFigures.NewCircle
+    Rectangle = BasicFigures.NewRect
+    Spline = BasicFigures.NewSpline
+
+    Rectangle3D = BasicFigures.NewRect3D
+    ScrollView = ScrollViews.NewView
+    Reference = RefGadgets.NewReference
+    RefFrame = RefGadgets.NewFrame
+    Set = SetGadgets.NewSet
+    SetFrame = SetGadgets.NewFrame
+
+    ProgressMeter = ProgressMeters.NewFrame
+    Columbus = Columbus.NewDoc
+    Scrollbar = Scrollbars.New
+    ListGadget = ListGadgets.NewFrame
+    ListModel = ListModels.NewList
+    Tree = ListModels.NewTree
+    Dag = ListDags.New
+    
+    CDTracks = AudioGadgets.NewTrack
+    LCD = AudioGadgets.NewLCD
+  }
+  Documents = {
+    html = HTMLDocs.NewDoc
+    htm = HTMLDocs.NewDoc
+    gif = RembrandtDocs.NewDoc
+    jpg = ImageDocs.NewDoc
+    xbm = RembrandtDocs.NewDoc
+    bmp = ImageDocs.NewDoc
+    pcx = RembrandtDocs.NewDoc
+    ico = RembrandtDocs.NewDoc
+    tga = RembrandtDocs.NewDoc
+    iff = RembrandtDocs.NewDoc
+    xpm = RembrandtDocs.NewDoc
+    pbm = RembrandtDocs.NewDoc
+    pgm = RembrandtDocs.NewDoc
+    ppm = RembrandtDocs.NewDoc
+    zip = UnZip.NewDoc
+    Arc = Compress.NewDoc
+    Pict = RembrandtDocs.NewDoc
+    Graph = LeoDraw.NewDoc
+    Fig = Leonardo.NewDoc
+    Lib = Columbus.NewDoc
+    tar = Tar.NewDoc
+  }
+  DocumentServices = {
+    file = HyperDocs.NewDoc
+    http = HTTPDocs.NewDoc
+    ftp = FTPDocs.NewDoc
+    mailto = Mail.NewDoc
+    mailserver = Mail.NewDoc
+    finger = Finger.NewDoc
+    news = News.NewDoc
+    nntp = News.NewDoc
+    gopher = Gopher.NewDoc
+    telnet = TelnetGadgets.NewDoc
+  }
+  FinderTemplates = {
+    Gadgets.Panel = "Gadgets.Panel"
+    Libraries.Panel = "Libraries.Panel"
+    Columbus = "(Columbus.NewDoc)"
+    Watson = "Watson.Panel"
+    TextDocs.Panel = "TextDocs.Panel"
+    Documents.Panel = "Documents.Panel"
+    Rembrandt = "Rembrandt.Panel"
+    Leonardo = "Leonardo.Tool"
+    "New Text" = "(TextDocs.NewDoc)"
+    "New Panel" = "(PanelDocs.NewDoc)"
+    "New Log" = "(TextDocs.NewLog)"
+    System3.Tool = "System3.Tool"
+  }
+}
