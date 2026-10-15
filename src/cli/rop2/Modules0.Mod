@@ -312,7 +312,8 @@ END FindMod;
       INC(root, (-root+2) MOD 4);  (* ADR(tdesc.a[root]) MOD 16 = 8 ! *)
       types[descnr].root := root;
       tdsize := (root + 1 (* recsize *) + nofptr + 1 (* sentinel *))*4;
-      IF Kernel.LargestAvailable() < tdsize THEN COPY(name, importing); res := notEnoughSpace; ErrMsg( res); RETURN END;
+      (* polpo: no test of Kernel.LargestAvailable() before NEW here and below: NEW collects and grows the
+         heap when no free block is large enough, the test refused modules the heap had room for *)
       S.NEW(tdb, tdsize - 24 (* SysBlk header *));
       DEC(S.VAL(ADDRESS, tdb), 24);
       types[descnr].tdb := tdb; tdd := S.VAL(TDescDesc, tdb);
@@ -487,15 +488,10 @@ END FindMod;
     m := Kernel.modules;
     WHILE (m # NIL) & (modname # m.name) DO m := m.next END ;
     IF m # NIL THEN (* cyclic load, done *) RETURN END ;
-    IF Kernel.LargestAvailable() < SIZE(ModuleDesc) THEN 
-      importing := ""; res := notEnoughSpace; ErrMsg( res);
-      RETURN
-    END ;
     NEW(m);
     k := ((LONG(nofexp)*SIZE(Export) + 35) DIV 16 + (LONG(nofdesc)*4 + 35) DIV 16 +
       (LONG(nofcom)*SIZE(Cmd) + 35) DIV 16 + (LONG(nofptr)*4 + 35) DIV 16 + ((nofimp+1)*4 + 35) DIV 16 +
       (datasize + (-datasize) MOD 8 + consize + codesize*4 + 35) DIV 16 + (refsize + 35) DIV 16)*16;
-    IF Kernel.LargestAvailable() < k + 24 THEN COPY(modname, importing); m := NIL; res := notEnoughSpace; ErrMsg( res);  RETURN END ;
     m.next := Kernel.modules; Kernel.modules := m;
     m.name := modname; (*m.init := FALSE;*) m.refcnt := -1;
     S.NEW(arrPtr, k); BuildModBlock;
