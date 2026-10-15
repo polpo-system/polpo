@@ -47,7 +47,7 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
    dest in the polpo root (share/, tools/: where Files.Old finds plain names) and removed with
    the objects; the copies in src/pkg/<name>/ go with /src. *)
 
-IMPORT Kernel, Linux0, SYSTEM, F := Files, Root, Texts := texts, Oberon := Oberon0, TOML, Versions, Checksums, termios, out;
+IMPORT Kernel, Linux0, SYSTEM, F := Files, Modules, Root, Texts := texts, Oberon := Oberon0, TOML, Versions, Checksums, termios, out;
 
 CONST
   NameLen = 256;
@@ -844,7 +844,11 @@ BEGIN
   Texts.OpenWriter(W); j := i; WHILE line[j] # 0X DO Texts.Write(W, line[j]); INC(j) END;
   Texts.Append(par.text, W.buf);
   Oberon.Call(cmd, par, FALSE, res);
-  IF res # 0 THEN Pre; out.String("cannot run "); out.String(cmd); out.Ln; RETURN FALSE END;
+  IF res # 0 THEN
+    Pre; out.String("cannot run "); out.String(cmd);
+    IF Modules.resMsg # "" THEN out.String(": "); out.String(Modules.resMsg) END;  (* why the module did not load *)
+    out.Ln; RETURN FALSE
+  END;
   RETURN TRUE
 END Run;
 
