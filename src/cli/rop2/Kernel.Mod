@@ -1077,8 +1077,9 @@ BEGIN
             GC;
             firstTry := FALSE; ptr := NewBlock(size); firstTry := TRUE;
             RETURN ptr
-          ELSE
-            GrowHeap(size);
+          ELSE  (* polpo: + 2*B, the free block of a new chunk is B smaller than the chunk: a request of
+            exactly 1 MB never fitted, the heap grew until the stack overflowed (Trap in GC) *)
+            GrowHeap(size + 2*B);
             firstTry := TRUE; ptr := NewBlock(size);
             RETURN ptr;
           END
