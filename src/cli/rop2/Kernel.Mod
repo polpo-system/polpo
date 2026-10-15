@@ -998,15 +998,17 @@ BEGIN
     m := modules;  (* ModuleDesc and ModuleBlock are marked via Kernel.modules *)
     WHILE m # NIL DO
       Mark(SYSTEM.VAL(BlockPtr, m));  (* the code, data etc. is marked via fields of m *)
-      i := LEN(m.ptrTab^); IF i > 0 THEN ptradr := SYSTEM.ADR(m.ptrTab[0]) END; 
+      (* polpo: a module being loaded is in the list before its tables are allocated and filled (NEW in
+        the loader can collect): no tables yet, entries still 0 *)
+      IF m.ptrTab = NIL THEN i := 0 ELSE i := LEN(m.ptrTab^) END; IF i > 0 THEN ptradr := SYSTEM.ADR(m.ptrTab[0]) END; 
       WHILE i > 0 DO
-        SYSTEM.GET(ptradr, p); SYSTEM.GET(p, ptr);
-        IF ptr # NIL THEN Mark(ptr) END;
+        SYSTEM.GET(ptradr, p);
+        IF p # 0 THEN SYSTEM.GET(p, ptr); IF ptr # NIL THEN Mark(ptr) END END;
         DEC(i); INC(ptradr, 4);
       END;
-      i := LEN(m.tdescs^); IF i > 0 THEN ptradr := SYSTEM.ADR(m.tdescs[0]) END; 
+      IF m.tdescs = NIL THEN i := 0 ELSE i := LEN(m.tdescs^) END; IF i > 0 THEN ptradr := SYSTEM.ADR(m.tdescs[0]) END; 
       WHILE i > 0 DO
-        SYSTEM.GET(ptradr, ptr); Mark(ptr);
+        SYSTEM.GET(ptradr, ptr); IF ptr # NIL THEN Mark(ptr) END;
         DEC(i); INC(ptradr, 4);
       END;
       m := m^.next;
