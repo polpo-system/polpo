@@ -56,7 +56,9 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    computing an offset from pc and the instruction reading PC moved the instruction away from its
    offset (a string assignment wrote into the code, Tetris), and the conditional branch of IF and
    WHILE took its position before a flush, the compiler stopped in FixLink; ENTIER truncated and
-   subtracted 1 from any negative value, ENTIER(-2.0) was -3 (2026-10-15). *)
+   subtracted 1 from any negative value, ENTIER(-2.0) was -3; FOR on a variable of an enclosing
+   procedure compared and increased it through a register freed after the first assignment (PPM
+   crashed) (2026-10-15). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -80,6 +82,7 @@ VAR
   grid: ARRAY 3, 4 OF INTEGER;
   pg0: ARRAY 64 OF CHAR; pstr: ARRAY 150, 6 OF CHAR; pg1: ARRAY 64 OF CHAR; ppad: ARRAY 8 OF LONGINT;
   pif: ARRAY 300 OF LONGINT;
+  forLimit: INTEGER;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
@@ -331,6 +334,16 @@ BEGIN
   d := -2147483648.0D0; e := ENTIER(d);
   RETURN (a = -2) & (b = -3) & (c = -3) & (e = MIN(LONGINT))
 END VarEntier;
+
+PROCEDURE OuterFor(): LONGINT;  (* ARM: FOR on a variable of the enclosing procedure, a limit from a global *)
+VAR i, n: INTEGER;
+  PROCEDURE Inner;
+  BEGIN
+    n := 0; FOR i := 0 TO forLimit DO INC(n) END
+  END Inner;
+BEGIN
+  Inner; RETURN n
+END OuterFor;
 
 PROCEDURE PoolFill;  (* ARM: 150 string assignments, the constants are flushed inside one of them
   (the six ppad lines place the flush where the old code lost a string) *)
@@ -737,6 +750,7 @@ BEGIN
   Check("real literals", Literals());
   Check("ENTIER of constants", ConstEntier());
   Check("ENTIER of negative variables", VarEntier());
+  forLimit := 5; Check("FOR on a variable of the enclosing procedure", OuterFor() = 6);
   Check("string assignments around a flush of the constants", PoolStrings());
   Check("conditional branches around a flush of the constants", PoolBranches());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
