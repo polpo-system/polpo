@@ -714,7 +714,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
 
   PROCEDURE StatSeq;
     VAR fpar: OBT.Object; xtyp: OBT.Struct; n: Narrowed;
-        x, x0, y, z: OBT.Item; ExitIndex: INTEGER;
+        x, x0, xv, y, z: OBT.Item; ExitIndex: INTEGER;
         L0, L1 : LONGINT;
         tempVar : BOOLEAN;
 
@@ -805,7 +805,10 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       ELSIF sym = OC.for THEN
         OBS.Get(sym);
         IF sym = OC.ident THEN
-          qualident(x);
+          qualident(x); xv := x;
+          (* polpo: xv, the control variable as qualident made it; Assign set the base register of x
+             (the frame of an outer procedure, an imported module) and freed it, the limit could reuse
+             it: the comparison and the increment take a new copy of xv, which loads the base again *)
           IF ~(x.typ.form IN {OC.SInt, OC.Int, OC.LInt}) THEN OBS.Mark(68) END ;
           IF sym = OC.becomes THEN
             OBS.Get(sym); Expression(y); OBH.Assign(x, y, FALSE);
@@ -823,14 +826,14 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
             IF sym = OC.by THEN OBS.Get(sym); ConstExpression(z)
             ELSE z.mode := OC.Const; z.a := 1
             END ;
-            L0 := OBC.pc; x0 := x; z.typ := x.typ;
+            L0 := OBC.pc; x0 := xv; z.typ := x.typ;
             IF z.a > 0 THEN OBE.Op(OC.leq, x0, y)
             ELSIF z.a < 0 THEN OBE.Op(OC.geq, x0, y)
             ELSE OBS.Mark(99)
             END ;
             OBE.CFJ(x0, L1);
             CheckSym(OC.do); StatSeq; CheckSym(OC.end);
-            OBE.Inc(x, z); OBE.BJ(L0); OBC.FixLink(L1);
+            x := xv; OBE.Inc(x, z); OBE.BJ(L0); OBC.FixLink(L1);
             IF tempVar THEN 
               OBH.RemoveTempVars(1); 
               IF (LoopLevel>0) & (LoopLevel<=MaxLoopNesting) THEN DEC(ForDepth[LoopLevel-1]) END
