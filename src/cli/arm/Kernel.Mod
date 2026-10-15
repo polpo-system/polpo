@@ -953,6 +953,8 @@ BEGIN
   END;
 END GC;
 
+PROCEDURE^ GrowHeap( size: LONGINT);
+
 PROCEDURE NewBlock (size: LONGINT): InitPtr;  (* size MOD B = 0 *)
   VAR i, rest: LONGINT; adr, AN: ADDRESS; ptr: InitPtr; restptr: FreeBlockPtr;
 BEGIN
@@ -970,7 +972,11 @@ BEGIN
           IF (* (TrapHandlingLevel = 0) & *) firstTry THEN GC;
             firstTry := FALSE; ptr := NewBlock(size); firstTry := TRUE;
             RETURN ptr
-          ELSE  reserve := NIL; CheckHeap("out of mem"); GC; firstTry := TRUE; SYSTEM.HALT(14)
+          ELSE  (* polpo: the heap grows as on the other ports (it stayed at 16 MB: compiling the gadgets
+            in one process ran out of memory, trap 14); by 1 MB at least, + 2*B: the free block of a new
+            chunk is B smaller than the chunk *)
+            GrowHeap((size + 2*B + 0FFFFFH) DIV 100000H * 100000H);
+            firstTry := TRUE; ptr := NewBlock(size); RETURN ptr
           END
         END;
         IF ptr^.z0 + 4 >= size THEN EXIT END;
