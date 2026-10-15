@@ -400,6 +400,13 @@ BEGIN
   SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
 END Fsync0;
 
+PROCEDURE StoreRegs*( adr: LONGINT);  (* polpo: register n to adr+4*n, for the stack scan of Kernel.GC *)
+BEGIN
+  SYSTEM.CODE(LDMIA1);  (* LDMIA SP, {R0} *)
+  SYSTEM.CODE(0E8801FFEH);  (* STMIA R0, {R1-R12} *)
+  SYSTEM.CODE(BX);
+END StoreRegs;
+
 PROCEDURE Read0*( fd, buf, num: LONGINT): LONGINT;
 BEGIN
   SYSTEM.CODE(LDMIA3);  (*LDMIA   SP, {R0 R1 R2 } *)

@@ -986,6 +986,7 @@ PROCEDURE ^GetTimer*( ):LONGINT;
 
 PROCEDURE GC*;
   VAR i, p, sp, ptradr: LONGINT; m: Module; ptr: BlockPtr;  avail, largest, t0, tf0, tf1, st: LONGINT;
+    regs: ARRAY 32 OF LONGINT;
 BEGIN
   inGC := TRUE;
   IF GClevel > 0 THEN
@@ -1012,6 +1013,9 @@ BEGIN
     END;
       (* check stack *)
     IF GCstack THEN
+      (* polpo: the registers into regs, which the scan covers: a pointer kept only in a callee-saved
+        register that no procedure on the way here had saved was not seen, its object freed *)
+      Linux0.StoreRegs(SYSTEM.ADR(regs[0]));
       SYSTEM.GETREG( Linux0.SP, sp);  (* was SYSTEM.ESP *)
       ASSERT(sp <= StackOrg);
 
