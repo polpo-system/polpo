@@ -36,6 +36,9 @@ CONST
   VCMPZS = 0EEB50A40H;  VCMPZD = 0EEB50B40H;  (* Vd, Zero ; vquiet nan *)
 
   VMRS = 0EEF1FA10H;  (* vmrs APSR_nzcv, FPSCR *)
+  VMRSR = 0EEF10A10H;  VMSRR = 0EEE10A10H;  (* polpo: vmrs Rt, FPSCR; vmsr FPSCR, Rt (Rt in bits 12..15) *)
+  RModeMask = 0C00000H;  RModeMinus = 800000H;  (* polpo: FPSCR bits 22, 23: round towards minus infinity *)
+  VCVTRound = 80H;  (* polpo: VCVTLS/VCVTLD - VCVTRound: the conversion rounds as FPSCR says *)
 
   VAR inxchk*, ovfchk*: BOOLEAN;
       log: INTEGER;   (*side effect of mant*)
@@ -811,26 +814,31 @@ CONST
   END RealOpH;
 
   PROCEDURE RealMOpH(VAR x : OBT.Item; op: LONGINT; restyp: INTEGER);
-  VAR xr: LONGINT;
+  VAR xr, t, u: LONGINT;
   BEGIN
     IF x.typ.form=OC.LReal THEN
       loadLRealF(x);
-      IF restyp= OC.LInt THEN OBC.PutVFP( VCMPZD, 0, x.r, 0) END;
     ELSE
       load(x);
-      IF restyp= OC.LInt THEN OBC.PutVFP( VCMPZS, 0, x.r, 0) END;
       IF x.typ.form IN intSet THEN OBC.GetRegF(xr); OBC.PutVFP( VMOV1S, xr, x.r, 0); OBC.FreeReg(x.r); x.r:=xr; x.mode:=OC.RegX;
       END;
     END;
-    OBC.PutVFP( op, 0, x.r, x.r );
-    IF restyp=OC.LInt THEN    (* ENTIER, adjust rounding... *)
+    IF restyp=OC.LInt THEN    (* ENTIER *)
+      (* polpo: the conversion rounds towards minus infinity (FPSCR, restored after it); it truncated
+         and subtracted 1 from every negative value: ENTIER(-2.0) was -3, ENTIER(MIN(LONGINT)) MAX(LONGINT) *)
+      OBC.GetReg(t); OBC.GetReg(u);
+      OBC.PutVFP( VMRSR, 0, t, 0);
+      OBC.PutDP1( OBC.BIC, u, t, RModeMask); OBC.PutDP1( OBC.ORR, u, u, RModeMinus);
+      OBC.PutVFP( VMSRR, 0, u, 0);
+      OBC.PutVFP( op - VCVTRound, 0, x.r, x.r );
+      OBC.PutVFP( VMSRR, 0, t, 0);
+      OBC.FreeReg(u); OBC.FreeReg(t);
       x.mode:=OC.Reg; x.typ:= OBT.linttyp;
-      OBC.PutVFP( VMRS, 0, 0, 0);
       OBC.GetReg( xr);
       OBC.PutVFP( VMOV1SB, x.r, xr, 0);
       OBC.FreeRegF( x.r); x.r:=xr;
-      OBC.PutDP1( 5*100H+OBC.SUB , xr, xr, 1); (* 5 is CC +2; 2 is subtracted always *)
-    ELSE x.mode:=OC.RegX;
+    ELSE
+      OBC.PutVFP( op, 0, x.r, x.r ); x.mode:=OC.RegX;
       IF restyp=OC.LReal THEN x.typ:=OBT.lrltyp
       ELSE x.typ:=OBT.realtyp
       END;
