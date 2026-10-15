@@ -1370,7 +1370,7 @@ PROCEDURE GrowHeap( size: LONGINT);
 VAR
   high0, high1, i: LONGINT;
   f: FreeBlockPtr;
-  first: BOOLEAN;
+  first: BOOLEAN;  level: LONGINT;
 BEGIN
   size:= (size+0FFFFFH) DIV 100000H * 100000H;
   high0:=endBlock+4;
@@ -1397,9 +1397,9 @@ BEGIN
 (*
 CheckHeap(" Checking Heap: ");
 *)  
-  GClevel := 1;  GCstack := TRUE;
+  level := GClevel;  GClevel := 1;  GCstack := TRUE;
   GC;
-  GClevel := 0;  GCstack := TRUE;
+  GClevel := level;  GCstack := TRUE;  (* polpo: was 0, which turned the collector off after a growth *)
 END GrowHeap;
 
 PROCEDURE InitHeap;  (* modules already initialized *)
