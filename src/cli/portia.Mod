@@ -1156,6 +1156,13 @@ BEGIN
   PackageDir(p, rel); Append(rel, "portia-"); Append(rel, arch); Append(rel, ".keys"); Root.Join(rel, full)
 END KeysFile;
 
+(* delete the keys file of this architecture, and src/pkg/<name>/ when nothing else is in it *)
+PROCEDURE DeleteKeys(p: Package);
+VAR rel: Name;
+BEGIN
+  PackageDir(p, rel); Append(rel, "portia-"); Append(rel, arch); Append(rel, ".keys"); DeleteFile(rel)
+END DeleteKeys;
+
 PROCEDURE SaveKeys(p: Package);
 VAR it, im, mods: Item; mod, full: Name; f: F.File; R: F.Rider; l, a, b: LONGINT;
 
@@ -1511,7 +1518,7 @@ END Conflict;
 PROCEDURE Undo(p: Package);
 BEGIN
   DeleteObjects(p, NIL);
-  IF p.remote # "" THEN DeleteData(p, NIL); DeleteSources(p) END;
+  IF p.remote # "" THEN DeleteData(p, NIL); DeleteSources(p); DeleteKeys(p) END;
   Drop(installed, p.name); SaveDb;
   Pre; out.String(p.name); out.String(" removed again: it is not installed"); out.Ln
 END Undo;
@@ -1780,7 +1787,7 @@ BEGIN
       WHILE it # NIL DO
         p := Find(it.s);
         IF delObj & IsInstalled(p) THEN
-          DeleteObjects(p, NIL); IF p.remote # "" THEN DeleteData(p, NIL) END; Drop(installed, p.name)
+          DeleteObjects(p, NIL); IF p.remote # "" THEN DeleteData(p, NIL); DeleteKeys(p) END; Drop(installed, p.name)
         END;
         IF delSrc & (p.remote # "") THEN DeleteSources(p) END;
         it := it.next
