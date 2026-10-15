@@ -310,12 +310,12 @@ CONST
         OBC.LoadExtAddr(x.r,-x.lev,x.a); x.lev:=OBC.level;
       ELSE
         IF x.a=-1 THEN OBC.LoadUnknownProcAddr(x.r,x.obj)
-        ELSE OBC.PutDP1(OBC.ADD,x.r,OBC.PC,x.a*4 - OBC.pc*4 -8)
+        ELSE OBC.Reserve(3); OBC.PutDP1(OBC.ADD,x.r,OBC.PC,x.a*4 - OBC.pc*4 -8)  (* polpo: Reserve, see OBC *)
         END
       END
     ELSE
       AdjustBaseReg(x);
-      IF (x.mode IN {OC.Var, OC.Var1, OC.LProc}) & (x.r=OBC.PC) THEN x.a:=x.a - OBC.pc*4 -8 END; 
+      IF (x.mode IN {OC.Var, OC.Var1, OC.LProc}) & (x.r=OBC.PC) THEN OBC.Reserve(3); x.a:=x.a - OBC.pc*4 -8 END; 
       y:=x;
       OBC.GetReg(x.r);
       CASE x.mode OF
@@ -502,7 +502,7 @@ CONST
           IF (x.mode = OC.Var) & (x.a=0) THEN 
              x.mode := OC.Var1; x.a:=y.r; x.b := n;
            ELSIF (x.mode=OC.Var) OR (x.mode=OC.Var1) THEN
-            IF x.r = OBC.PC THEN x.a:=x.a-(OBC.pc*4 + 8) END;
+            IF x.r = OBC.PC THEN OBC.Reserve(2); x.a:=x.a-(OBC.pc*4 + 8) END;
             OBC.PutDP(OBC.ADD,y.r,x.r,y.r, n*8); (* ADD reg,x.r,y.r LSL n *)
             OBC.FreeReg(x.r); x.r:=y.r;
           ELSE HALT(200);
@@ -514,7 +514,7 @@ CONST
             IF x.r IN {OBC.FP, OBC.PC, OBC.SP} THEN
               (* polpo: the ADD that reads PC comes after the MUL, one instruction later: + 12, not + 8
                  (global arrays of records whose size is not a power of 2 were read 4 bytes off) *)
-              OBC.GetReg(reg); IF x.r = OBC.PC THEN x.a:=x.a-(OBC.pc*4 + 12) END
+              OBC.GetReg(reg); IF x.r = OBC.PC THEN OBC.Reserve(3); x.a:=x.a-(OBC.pc*4 + 12) END
             ELSE
               reg:=x.r 
             END;

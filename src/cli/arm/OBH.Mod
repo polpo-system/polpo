@@ -36,6 +36,7 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
             DEC(s)
           END
         ELSE 
+          OBC.Reserve(6);  (* polpo: no flush of the constants inside the loop, its branch goes back 3 *)
           OBC.LoadConst(cnt,s);
           OBC.PutSDT(OBC.LDRBpost,reg,y.r,1);
           OBC.PutSDT(OBC.STRBpost,reg,x.r,1);

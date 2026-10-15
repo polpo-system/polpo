@@ -232,11 +232,15 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     RETURN (lrconstCnt-1);
   END EnterLRConst;
   
-  PROCEDURE CheckConstReachability;
+  PROCEDURE Reserve*(n : LONGINT);
+  (* polpo: flushes the constants now unless n more words fit before they must be flushed, so that the
+     next n instructions come without a flush between them: code that computes an offset from pc before
+     it emits the instruction that reads PC, or branches back over its instructions, calls this first
+     (a flush in between moved the instruction away from its offset: Tetris wrote into its own code) *)
   VAR L : LONGINT;
   BEGIN
     IF allowConstFlushing<0 THEN RETURN END;
-    IF constDist>=MaxConstDist THEN
+    IF constDist+n>=MaxConstDist THEN
       INC(constJumpOvers); (* statistics *)
       DEC(allowConstFlushing);
       L:=pc;
@@ -245,7 +249,12 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
       fixup(L);
       INC(allowConstFlushing)
     END
-  END CheckConstReachability;  
+  END Reserve;
+
+  PROCEDURE CheckConstReachability;
+  BEGIN
+    Reserve(0)
+  END CheckConstReachability;
     
   PROCEDURE EnterExtAddress(mno, eno : LONGINT) : LONGINT;
   (* Enters a address and returns the offset within the constant block *)
