@@ -21,7 +21,8 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
                             them, if nothing needs them (/deps: what needs them goes too);
                             /src: the downloaded sources only, /all: both
    portia.Test name ...     run the tests of installed packages ([TESTS]); Install /t and
-                            Build /t test after building
+                            Build /t test after building, and a package whose tests fail is
+                            removed again (as one that does not build, if it was new)
    portia.Fetch name ...    download the sources of remote packages, checked by their sums
    portia.Sums name [dir]   the [SUMS] section of a remote package, from its files in dir
                             (default: where portia keeps them)
@@ -1505,8 +1506,18 @@ BEGIN RETURN (p # q) & (Has(p.conflicts, q.name) OR Has(q.conflicts, p.name))
 END Conflict;
 
 (* build the packages of set in dependency order, link, record them; replace conflicts *)
+(* p failed to install or its tests failed: delete what of it is here (objects, data files, the
+   downloaded sources of a remote package) and the record of it, as Remove does *)
+PROCEDURE Undo(p: Package);
+BEGIN
+  DeleteObjects(p, NIL);
+  IF p.remote # "" THEN DeleteData(p, NIL); DeleteSources(p) END;
+  Drop(installed, p.name); SaveDb;
+  Pre; out.String(p.name); out.String(" removed again: it is not installed"); out.Ln
+END Undo;
+
 PROCEDURE Execute(set: Item; verb: ARRAY OF CHAR);
-VAR order, it, c, cf, d, im: Item; p, q: Package; ok, changed: BOOLEAN; line, mod: Name; n: LONGINT; v: ARRAY 32 OF CHAR;
+VAR order, it, c, cf, d, im: Item; p, q: Package; ok, changed, was: BOOLEAN; line, mod: Name; n: LONGINT; v: ARRAY 32 OF CHAR;
 BEGIN
   order := NIL; it := set; WHILE it # NIL DO p := Find(it.s); Order(p, order); it := it.next END;
   q := packages; WHILE q # NIL DO IF IsInstalled(q) THEN Order(q, order) END; q := q.next END;  (* for importers *)
@@ -1547,6 +1558,7 @@ BEGIN
         END;
         q := q.next
       END;
+      was := IsInstalled(p);
       IF p.remote # "" THEN ok := FetchPackage(p, TRUE) END;
       IF ok THEN ok := BuildPackage(p, changed) END; INC(n);
       IF ok & changed THEN  (* packages importing a changed module are recompiled when their turn comes *)
@@ -1572,7 +1584,8 @@ BEGIN
       c := p.build; WHILE ok & (c # NIL) DO COPY(c.s, line); ok := Run(line); c := c.next END;
       IF ok THEN
         SetInstalled(p.name, p.version); SaveDb;
-        IF doTest & (arch = hostArch) THEN ok := TestPackage(p) END
+        IF doTest & (arch = hostArch) THEN ok := TestPackage(p); IF ~ok THEN Undo(p) END END
+      ELSIF ~was THEN Undo(p)  (* a new package that did not build leaves nothing *)
       END
     END;
     it := it.next
@@ -1896,7 +1909,7 @@ BEGIN
 END Sums;
 
 (** portia.Test name ... -- run the tests of installed packages ([TESTS]); Install /t and
-  Build /t test what they build *)
+  Build /t test what they build, and remove a package again whose tests fail *)
 PROCEDURE Test*;
 VAR names, it: Item; p: Package; failed: LONGINT;
 BEGIN
