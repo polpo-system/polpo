@@ -1004,8 +1004,10 @@ CONST
       IF x.mode # OC.CC THEN loadCC(x)  END
     ELSE OBS.Mark(120); setCC(x, 0)
     END ;
-    cc := Never(OBC.InvertedCC(x.r)); loc:=OBC.pc;
-    OBC.PutBabs(OBC.B,x.b); OBC.SetCondition(loc,cc); OBC.FixLink(x.a);
+    cc := Never(OBC.InvertedCC(x.r));
+    (* polpo: loc after PutBabs, which can flush the constants first: loc was the branch over them,
+       the compiler stopped in FixLink or the code jumped wrong *)
+    OBC.PutBabs(OBC.B,x.b); loc:=OBC.pc-1; OBC.SetCondition(loc,cc); OBC.FixLink(x.a);
   END CFJ;
 
   PROCEDURE BJ*(loc: LONGINT);
