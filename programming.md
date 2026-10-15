@@ -47,6 +47,34 @@ one, and otherwise into the polpo directory. The loader looks for obj/<arch>/Nam
 current directory first and then in polpo's, each time it loads a module. So a project with its
 own obj/<arch>/ uses its own objects while you work in it, and polpo's directory stays clean.
 
+### Trying a changed system module in a directory of its own
+
+The same rule lets you replace a module of polpo itself for a while, without touching polpo:
+make a directory with an obj/<arch>/ in it, compile your changed copy of the module there (or
+copy an object you already have into it), and run loksh in that directory. There, your object
+is loaded instead of polpo's; everywhere else polpo's is. When you are done, leave the directory
+behind; nothing in polpo has changed, so there is nothing to undo.
+
+    mkdir -p /tmp/try/obj/x86 /tmp/try/obj/arm && cd /tmp/try
+    cp ~/polpo/src/cli/arm/OBC.Mod .       # a copy of a module of the ARM compiler, changed
+    loksh compiler.Compile OBC.Mod         # its object goes to /tmp/try/obj/x86/OBC.Obj
+    loksh acompiler.Compile Test.Mod       # the ARM compiler, with your OBC: /tmp/try/obj/arm/Test.Obj
+
+This works for any module that is loaded from an object file, and for every port (obj/arm,
+obj/riscv and so on, with that port's loksh). Three things to keep in mind:
+
+- The modules linked into loksh itself are not loaded from objects: Linux0, Kernel, Root,
+  Modules0 and loksh (on x86 also Files). To try a change of one of them you build a new loksh.
+- Keep the interface. If your copy exports something different, every module that imports it
+  must be compiled into the same directory too; otherwise loading stops with "imports
+  incompatible version". A changed body with the same exports needs nothing else.
+- A module is loaded once per loksh process and then stays. After compiling, start a new loksh
+  (an interactive one keeps the old module), and start it in the directory with your objects.
+
+The compilers write their output there as well, into obj/<arch>/ of the current directory when it
+exists, so make one for every port you compile for; a test module compiled there then does not
+end up in polpo either.
+
 ## Looking at module interfaces
 
 To see what a module exports without reading its source, ask the browser. It reads the interface

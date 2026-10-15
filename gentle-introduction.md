@@ -192,6 +192,11 @@ one, and otherwise into the polpo directory. loksh looks for a module first in o
 current directory and then in polpo's. So a project of your own can keep its objects to itself:
 make a directory, make obj/x86 in it, compile there, and run loksh there.
 
+The same works the other way round: an object in obj/x86/ of the current directory wins over
+polpo's own object of the same name. To try a changed version of one of polpo's modules,
+compile your copy in such a directory and run loksh there; polpo itself stays as it was.
+programming.md ("Trying a changed system module") tells what to keep in mind.
+
 ## Changing a module
 
 Now let us give hello a second command. Open the file in xxs, the small editor of the console:
