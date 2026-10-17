@@ -1125,6 +1125,7 @@ VAR
 BEGIN 
   IF ~init THEN
     init := TRUE;  (* avoid user call *)
+    Display.ShowMain;  (* polpo: the screen of the desktop; programs in windows of their own do without *)
     out.writer := LogOut;
     NEW(outTask); outTask.safe := TRUE; outTask.handle := FlushOut; Oberon.Install(outTask);
     Texts.OpenWriter(Wt);

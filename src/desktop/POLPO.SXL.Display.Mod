@@ -1660,6 +1660,9 @@ END OpenWindow;
 PROCEDURE CloseWindow*(n: INTEGER);
 END CloseWindow;
 
+PROCEDURE ShowMain*;  (** the terminal shows the screen anyway *)
+END ShowMain;
+
 PROCEDURE CloseRequested*(n: INTEGER): BOOLEAN;
 BEGIN RETURN FALSE
 END CloseRequested;

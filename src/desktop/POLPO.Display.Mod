@@ -1501,13 +1501,20 @@ BEGIN
   END;
   PutImage:=PutImageX11;
 
-(* MapWindow *)
-  b[ 0]:= 8+2*10000H;
-  b[ 1]:= wid;
-  res:=Linux0.Write0( xfd, SYSTEM.ADR(b),  8);
-(*  generates exposure event: X11Err(9);*)
-
+(* polpo: mapped by ShowMain, when the desktop starts *)
 END OpenWindowX11;
+
+(** polpo: show the main window, the screen of the desktop (System.Init); without it, as for the
+  programs in windows of their own (Windows.Run), it stays hidden *)
+PROCEDURE ShowMain*;
+VAR b: ARRAY 2 OF LONGINT; res: LONGINT;
+BEGIN
+  IF winBottom#0 THEN
+    b[ 0]:= 8+2*10000H;  (* MapWindow, it generates an Expose event *)
+    b[ 1]:= wid;
+    res:=Linux0.Write0( xfd, SYSTEM.ADR(b),  8)
+  END
+END ShowMain;
 
 (* polpo: the window of X11 window id, -1 *)
 PROCEDURE FindWin(id: LONGINT): LONGINT;

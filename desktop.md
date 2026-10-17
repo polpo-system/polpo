@@ -128,6 +128,10 @@ With the package gadgets-windows, DocWindows.OpenDoc name opens a document the s
 as the document: DocWindows.OpenDoc HPCalc.Panel. There are at most 16 windows, each at most as
 large as the screen, and only with X11 (not in a terminal with sixel graphics).
 
+Such a window also works without the desktop, as a program of its own: run from a shell,
+loksh Windows.OpenText System.Tool or loksh DocWindows.OpenDoc HPCalc.Panel shows only that window
+(the desktop's screen stays hidden), and loksh ends when it is closed.
+
 ## Stopping and pausing a command
 
 A command runs until it ends, and meanwhile the desktop waits; the games, for example, take it over

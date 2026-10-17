@@ -5,9 +5,12 @@ MODULE Windows;  (** polpo: frames in X11 windows of their own *)
   window of W x H: the window shows an area below the screen (Display.OpenWindow), where the frame
   is a free viewer (Viewers.OpenFree) that gets the mouse, the keyboard and the broadcasts as the
   viewers of the desktop do. The close button closes the window when the desktop is idle.
-  Windows exist with X11 only, at most 16, as wide as the screen and as high as it. *)
+  Windows exist with X11 only, at most 16, as wide as the screen and as high as it.
+  Without the desktop (a command run from the shell, as loksh Windows.OpenText name), Run makes
+  the windows a program of their own: the desktop's loop runs for them alone, its screen stays
+  hidden, and loksh ends when the last window is closed. *)
 
-IMPORT Objects, Input, Display, Viewers, Texts, Oberon, TextFrames;
+IMPORT Kernel, Modules, Objects, Input, Display, Viewers, Texts, Oberon, TextFrames;
 
 TYPE
   Window* = POINTER TO WindowDesc;
@@ -19,6 +22,7 @@ TYPE
 VAR
   first: Window;  (* the open windows *)
   task: Oberon.Task;  (* looks for clicked close buttons *)
+  alone: BOOLEAN;  (* Run: the windows without the desktop, loksh ends with the last *)
   W: Texts.Writer;
 
 PROCEDURE Modify(F: Display.Frame; id, Y, H: INTEGER);
@@ -75,7 +79,8 @@ BEGIN
     P := first; WHILE (P # NIL) & (P.link # V) DO P := P.link END;
     IF P # NIL THEN P.link := V.link END
   END;
-  V.link := NIL
+  V.link := NIL;
+  IF alone & (first = NIL) THEN Kernel.Shutdown(1) END
 END Close;
 
 PROCEDURE Check(me: Oberon.Task);  (* close the windows whose close button was clicked *)
@@ -106,6 +111,13 @@ BEGIN
   RETURN V
 END Open;
 
+(** Without the desktop, run the windows (V the first) as a program of their own until the last
+  is closed, then end loksh; in the desktop, return at once: it runs them *)
+PROCEDURE Run*(V: Window);
+BEGIN
+  IF (V # NIL) & (Modules.FindMod("System") = NIL) THEN alone := TRUE; Oberon.Loop END
+END Run;
+
 (** Windows.OpenText name [width height] ~  the text name in a window of its own (640 x 480 when
   no size is given); ^ takes the selected name *)
 PROCEDURE OpenText*;
@@ -124,7 +136,8 @@ BEGIN
       IF S.class = Texts.Int THEN h := SHORT(S.i) END
     END;
     V := Open(TextFrames.NewText(TextFrames.Text(name), 0), name, w, h);
-    IF V = NIL THEN
+    IF V # NIL THEN Run(V)
+    ELSE
       Texts.WriteString(W, "Windows.OpenText: no window (X11 only, at most 16, as large as the screen)");
       Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf)
     END
@@ -135,5 +148,5 @@ BEGIN
 END OpenText;
 
 BEGIN
-  first := NIL; task := NIL; Texts.OpenWriter(W)
+  first := NIL; task := NIL; alone := FALSE; Texts.OpenWriter(W)
 END Windows.

@@ -222,8 +222,11 @@ the close button of the window manager, when the desktop is idle. The frame work
 viewer of the desktop: it gets the mouse, the keyboard and the broadcasts. The window shows an
 area below the screen (y < 0), so the frame's coordinates are negative there; frames that draw
 only inside their own rectangle need not know. Underneath, Display.OpenWindow makes the X11 window
-and Viewers.OpenFree a viewer outside the tracks. Windows.OpenText shows the use with a text frame;
-DocWindows (package gadgets-windows) does it for gadget documents.
+and Viewers.OpenFree a viewer outside the tracks. Windows.Run(V) after Open makes a command a program of
+its own when it runs without the desktop (from a shell): the desktop's loop runs for the windows
+alone, its screen is not shown (System.Init shows it with Display.ShowMain), and loksh ends when
+the last window closes; in the desktop Run returns at once. Windows.OpenText shows the use with a
+text frame; DocWindows (in the package gadgets) does it for gadget documents.
 
 ## Files
 
