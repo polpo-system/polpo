@@ -761,6 +761,10 @@ END Provided;
 (** portia.Check -- every file present and every import satisfied, on this architecture *)
 PROCEDURE ^Resolve(VAR name: ARRAY OF CHAR): Package;
 
+PROCEDURE Conflict(p, q: Package): BOOLEAN;
+BEGIN RETURN (p # q) & (Has(p.conflicts, q.name) OR Has(q.conflicts, p.name))
+END Conflict;
+
 PROCEDURE Check*;
 VAR p, q: Package; it, im, set: Item; path, mod: Name; problems: LONGINT; v: ARRAY 32 OF CHAR;
 BEGIN
@@ -806,6 +810,26 @@ BEGIN
       it := it.next
     END
    END;
+    p := p.next
+  END;
+  (* two packages of the tree that install the same file: one replaces the other's, and removing
+     one deletes it for the other (packages in conflict are never installed together) *)
+  p := packages;
+  WHILE p # NIL DO
+    q := p.next;
+    WHILE q # NIL DO
+      IF ~Conflict(p, q) THEN
+        it := p.files;
+        WHILE it # NIL DO
+          IF Has(q.files, it.s) THEN
+            out.String(p.name); out.String(" and "); out.String(q.name); out.String(" both install ");
+            out.String(it.s); out.Ln; INC(problems)
+          END;
+          it := it.next
+        END
+      END;
+      q := q.next
+    END;
     p := p.next
   END;
   out.Int(problems, 0); out.String(" problems ("); out.String(arch); out.String(")"); out.Ln
@@ -1509,9 +1533,6 @@ BEGIN
 END AddNeeded;
 
 (* p and q cannot be installed together: one of them says so *)
-PROCEDURE Conflict(p, q: Package): BOOLEAN;
-BEGIN RETURN (p # q) & (Has(p.conflicts, q.name) OR Has(q.conflicts, p.name))
-END Conflict;
 
 (* build the packages of set in dependency order, link, record them; replace conflicts *)
 (* p failed to install or its tests failed: delete what of it is here (objects, data files, the
