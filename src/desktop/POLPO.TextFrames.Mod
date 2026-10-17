@@ -10,7 +10,7 @@ Refer to the license.txt file provided with this distribution. *)
 
 MODULE TextFrames;  (** portable *) (* JG / pjm *)
 
-  IMPORT Input, Modules, Objects, Display, Viewers, Fonts, Texts, Utf8, Oberon, MenuViewers;
+  IMPORT Input, Modules, Objects, Display, Viewers, Fonts, Texts, Utf8, Oberon, MenuViewers, TextComplete;
 
   CONST CR = 0DX;
     replace = Display.replace; paint = Display.paint; invert = Display.invert;
@@ -1173,6 +1173,16 @@ END MulDiv;
     END
   END PasteClipboard;
 
+  (* polpo: Tab after a word completes it (TextComplete); FALSE: nothing to complete, a Tab is wanted *)
+  PROCEDURE Completed (F: Frame; lib: Objects.Library; col, voff: SHORTINT): BOOLEAN;
+    VAR n: LONGINT;
+  BEGIN
+    KW.lib := lib; KW.col := col; KW.voff := voff;
+    n := TextComplete.Word(F.text, F.carloc.pos, KW);
+    IF n > 0 THEN SetCaret(F, F.carloc.pos + n) END;
+    RETURN n >= 0
+  END Completed;
+
   PROCEDURE Write* (F: Frame; ch: CHAR; lib: Objects.Library; col, voff: SHORTINT);
   VAR pos, beg, end, time: LONGINT; keys: SET; shift, ctrl: BOOLEAN; text: Texts.Text;
   BEGIN (*F.car # 0*)
@@ -1239,6 +1249,7 @@ END MulDiv;
     ELSIF (ch >= 0A0X) & (ch <= 0A9X) THEN
     ELSIF (ch >= 0F0X) & (ch <= 0FFX) THEN
     ELSIF (ch < " ") & (ch # CR) & (ch # 09X) & (ch # 0AX) THEN  (* other Ctrl keys *)
+    ELSIF (ch = 09X) & ~shift & Completed(F, lib, col, voff) THEN
     ELSE
       KW.lib := lib; KW.col := col; KW.voff := voff; Texts.Write(KW, ch);
       Texts.Insert(F.text, F.carloc.pos, KW.buf);
