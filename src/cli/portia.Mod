@@ -367,6 +367,7 @@ BEGIN
     ReadSums(doc, p.sums)
   END;
   Keys(doc, "DEPS", p.deps); Keys(doc, "PROVIDES", p.provides); Keys(doc, "CONFLICTS", p.conflicts);
+  COPY("DEPS.", mod); Append(mod, arch); Keys(doc, mod, p.deps);  (* [DEPS.x86]: only on that architecture *)
   IF Field(doc, "MODULES", "all", v) THEN AddSources(p.sources, v) END;
   IF Field(doc, "MODULES", arch, v) THEN AddSources(p.sources, v) END;
   Commands(doc, "BUILD", arch, p.build);
