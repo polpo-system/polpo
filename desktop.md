@@ -124,7 +124,7 @@ Windows.OpenText name opens a text in an X11 window of its own, beside the deskt
 the size given after the name (Windows.OpenText System.Tool 500 300). The window looks like the
 windows of the other programs: the window manager gives it a title bar, moves it, and its close
 button closes it. Inside it works as a viewer does: click to type, middle-click commands, select.
-With the package gadgets-windows, DocWindows.OpenDoc name opens a document the same way, as large
+With the package gadgets, DocWindows.OpenDoc name opens a document the same way, as large
 as the document: DocWindows.OpenDoc HPCalc.Panel. There are at most 16 windows, each at most as
 large as the screen, and only with X11 (not in a terminal with sixel graphics).
 
