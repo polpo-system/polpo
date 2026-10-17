@@ -124,6 +124,7 @@ VAR
   clip*: Chars;  (* clipboard *)
   dfd: LONGINT;  (* Display Filedescriptor (X11 socket or /dev/fb0 *)
   mouseX, mouseY: INTEGER;
+  inWin: BOOLEAN; winX, winY: INTEGER;  (* polpo: the mouse is in a window of its own, at winX, winY *)
   keyss, keyState: SET;
   modState: LONGINT;  (* polpo: X modifier mask of the last key or mouse event: 1 Shift, 4 Control, 8 Alt *)
   err: LONGINT;
@@ -517,6 +518,9 @@ BEGIN
       code:= ORD(event.code) MOD 128;  (* polpo: without the bit of sent events (MOD 32 made ClientMessage 1, MappingNotify a KeyPress) *)
       detail:= ORD( event.detail);
       IF (code >= 2) & (code <= 6) THEN modState := event.f MOD 10000H END;
+      IF (code >= 4) & (code <= 6) THEN  (* polpo: a window of its own (Display.OpenWindow) or the main one *)
+        inWin := (event.b # Display.wid) & Display.ThisWindow(event.b, event.ex, event.ey, winX, winY)
+      END;
       IF code=2 THEN    (* KeyPress *)
         state:=event.f MOD 10000H;
         grp := state DIV 2000H MOD 4; state := state MOD 2000H;
@@ -616,12 +620,16 @@ BEGIN
         mouseY:= event.ey DIV SHORT(Display.Zoom);
       ELSIF code = 11 THEN  (* KeymapNotify*)
         WriteString("KeymapNotify");
+      ELSIF (code = 12) & (event.time # Display.wid) THEN  (* polpo: Expose of a window of its own *)
+        Display.ExposeWindow(event.time, event.a MOD 10000H, event.a DIV 10000H MOD 10000H, event.b MOD 10000H, event.b DIV 10000H MOD 10000H)
       ELSIF code= 12 THEN  (* Expose *)
         w:= (event.b)  MOD 10000H;
         h:= (event.b DIV 10000H) MOD 10000H;
         IF w> Display.Width*Display.Zoom THEN w:= Display.Width*Display.Zoom END;
         IF h> Display.Height*Display.Zoom THEN h:= Display.Height*Display.Zoom END;
         Display.PutImage( event.a MOD 10000H, Display.Height*Display.Zoom-h-(event.a DIV 10000H), w , h);
+      ELSIF code = 33 THEN  (* polpo: ClientMessage, the close button of a window of its own *)
+        Display.ClientMessage(event.time, event.b)
       ELSIF code=15 THEN   (* VisibilityChange *)
       ELSIF code= 28 THEN    (* PropertyNotify *)
       ELSIF code = 29 THEN  (* SelectionClear *)
@@ -701,7 +709,9 @@ BEGIN
   IF mouseX<0 THEN mouseX:=0 END;
   IF mouseY>=Display.Height THEN mouseY:=Display.Height-1 END;
   IF mouseY<0  THEN mouseY:= 0 END;
-  x:= (mouseX ); y:= (Display.Height-1-mouseY) ;
+  IF inWin THEN x := winX; y := winY  (* polpo: below the screen, in a window of its own *)
+  ELSE x:= (mouseX ); y:= (Display.Height-1-mouseY)
+  END;
   keys:= keyss;
 END Mouse;
 
@@ -918,7 +928,7 @@ END Init;
 
 BEGIN
   trace:=Kernel.trace="Input";
-  CopyClip:=NIL; PasteClip:=NIL;
+  CopyClip:=NIL; PasteClip:=NIL; inWin:=FALSE;
   Init;
 END Input.
 

@@ -118,6 +118,8 @@ CONST
   unknown* = 0; index8* = 8; color555* = 16; color565* = 17; color664* = 18; color888* = 24; color8888* = 32;
   
   X11SOCKETPATH="/tmp/.X11-unix/X0";
+
+  MaxWin = 16;  (* polpo: windows of their own, see OpenWindow *)
     
 (* domain in Socket *)  
   PFUNIX= 1;
@@ -235,6 +237,11 @@ TYPE
         pad: LONGINT;
     END;
   
+    Win = RECORD  (* polpo: a window of its own: an X11 window id, its band below the screen *)
+        id, x, y, w, h: LONGINT;  (* id 0: free *)
+        close: BOOLEAN  (* its close button was clicked *)
+    END;
+
 VAR
   Unit*: LONGINT; (** RasterUnit = Unit/36000 mm *)
   Zoom*: LONGINT;  (** Zoom factor for HiDPI displays, currently only X11 with XShm *)
@@ -276,6 +283,11 @@ VAR
   xfd: LONGINT;  (* X11 socket or frambuffer fd *)
   fbuf: POINTER TO ARRAY OF CHAR;  (* buffer for X11 without SHM *)
   xrv: POINTER TO ARRAY OF LONGINT;  (* X11 request vector *)
+  (* polpo: windows of their own show bands of an area below the screen, Height rows deep *)
+  winBottom: LONGINT;  (* the bottom of that area: -Height with X11, 0 without *)
+  win: ARRAY MaxWin OF Win;
+  xaProtocols, xaDelete: LONGINT;  (* the atoms WM_PROTOCOLS, WM_DELETE_WINDOW *)
+  Send: PROCEDURE (id, x, y, w, h, dx, dy: LONGINT);  (* SendX11 or SendX11SHM *)
 
 (* common OLR  *)
   PutImage*: PROCEDURE( x, y, w, h: LONGINT);  (* argument are in X11 display pixel, not oberon! *)
@@ -338,14 +350,15 @@ END Str2Int;
 PROCEDURE PutImageFB( x, y, w, h: LONGINT);
 END PutImageFB;
 
-PROCEDURE PutImageX11( x, y, w, h: LONGINT);
+(* polpo: Send copies the area x, y, w, h of the buffer (in X11 pixels, from the bottom left of the
+   screen; y < 0 below it) to dx, dy (from the top left) of the X11 window id *)
+PROCEDURE SendX11(id, x, y, w, h, dx, dy: LONGINT);
 (* polpo, after OLR 2017: send tall images in bands that fit the server's maximum request
    length, and each band in writev calls of at most 256 iovecs (Linux allows 1024) *)
 VAR i, j, res, wl, adr, rows, band, maxv: LONGINT;
   b: ARRAY 10 OF LONGINT;
 BEGIN
-  x:=x DIV Zoom; y:=y DIV Zoom; w:=w DIV Zoom; h:=h DIV Zoom;
-  IF y<0 THEN INC(h, y); y:=0 END;
+  x:=x DIV Zoom; y:=y DIV Zoom; w:=w DIV Zoom; h:=h DIV Zoom; dx:=dx DIV Zoom; dy:=dy DIV Zoom;
   IF (w>0) & (h>0) THEN
     y:=Height-h-y;
     wl:=(w*bytes+3) DIV 4 *4;
@@ -356,10 +369,10 @@ BEGIN
       band:=h; IF band>rows THEN band:=rows END;
       b[ 0]:= 72+2*100H;    (* BIG-REQUESTS *)
       b[ 1]:= band*wl DIV 4+7;
-      b[ 2]:= wid;
+      b[ 2]:= id;
       b[ 3]:= gcid;
       b[ 4]:= w+band*10000H;
-      b[ 5]:= x+y*10000H;
+      b[ 5]:= dx+dy*10000H;
       b[ 6]:= 0+ORD( scn.rdepth)*100H;
       xrv[0]:= SYSTEM.ADR(b); xrv[1]:=28;
       j:=2; i:=0;
@@ -370,29 +383,48 @@ BEGIN
         IF j=2*maxv THEN res:=Linux0.Writev0( xfd, SYSTEM.ADR(xrv[0]), maxv); j:=0 END;
       UNTIL i>=band;
       IF j>0 THEN res:=Linux0.Writev0( xfd, SYSTEM.ADR(xrv[0]), j DIV 2) END;
-      INC(y, band); DEC(h, band)
+      INC(dy, band); DEC(h, band)
     END
   END;
-END PutImageX11;
+END SendX11;
 
-PROCEDURE PutImageX11SHM( x, y, w, h: LONGINT);
+PROCEDURE SendX11SHM(id, x, y, w, h, dx, dy: LONGINT);
 VAR res: LONGINT;  b: ARRAY 10 OF LONGINT;
 BEGIN
-  IF y<0 THEN INC(h, y); y:=0 END;
   IF (w>0) & (h>0) THEN
     b[ 0]:= ShmReqCode+3*100H+10*10000H;  (* XShmPutImage = 3 *)
-    b[ 1]:= wid;
+    b[ 1]:= id;
     b[ 2]:= gcid;
-    b[ 3]:= (Width+Height*10000H)*Zoom;  (* total w h*)
+    b[ 3]:= Width*Zoom+(Height-winBottom)*Zoom*10000H;  (* total w h*)
     b[ 4]:= (x+(Height*Zoom-h-y)*10000H);  (* src x y *)
     b[ 5]:= (w+h*10000H);  (* src w h *)
-    b[ 6]:= b[4];  (* dst x y *)
+    b[ 6]:= dx+dy*10000H;  (* dst x y *)
     b[ 7]:= ORD(scn.rdepth)+2 (* ZPixmap=2 *)*100H ;    (* depth, format, sendevent, bpad *) 
     b[ 8]:= shmseg;    (* shmseg *)
     b[ 9]:= 0H;    (* offset *)
     res:=Linux0.Write0( xfd, SYSTEM.ADR(b), 40);
   END;
-END PutImageX11SHM;
+END SendX11SHM;
+
+(* polpo: the main window shows the screen (y >= 0), each window of its own its band below *)
+PROCEDURE PutImageX11( x, y, w, h: LONGINT);
+VAR i, x0, y0, x1, y1, bx, by, bw, bh: LONGINT;
+BEGIN
+  y0:=y; y1:=y+h; IF y0<0 THEN y0:=0 END;
+  IF (w>0) & (y1>y0) THEN Send(wid, x, y0, w, y1-y0, x, Height*Zoom-y1) END;
+  IF y<0 THEN
+    i:=0;
+    WHILE i<MaxWin DO
+      IF win[i].id#0 THEN
+        bx:=win[i].x*Zoom; by:=win[i].y*Zoom; bw:=win[i].w*Zoom; bh:=win[i].h*Zoom;
+        x0:=x; IF x0<bx THEN x0:=bx END; x1:=x+w; IF x1>bx+bw THEN x1:=bx+bw END;
+        y0:=y; IF y0<by THEN y0:=by END; y1:=y+h; IF y1>by+bh THEN y1:=by+bh END;
+        IF (x0<x1) & (y0<y1) THEN Send(win[i].id, x0, y0, x1-x0, y1-y0, x0-bx, by+bh-y1) END
+      END;
+      INC(i)
+    END
+  END
+END PutImageX11;
 
 (** Change color palette entry. 0 <= col, red, green, blue < 256. *)
 PROCEDURE SetColor*(col: Color; red, green, blue: LONGINT);
@@ -457,7 +489,7 @@ END AdjustClip;
 (** Reset the current clipping rectangle to the whole display, including offscreen area. *)
 PROCEDURE ResetClip*;
 BEGIN
-  clipX := 0;  clipY := UBottom;
+  clipX := 0;  clipY := UBottom;  IF winBottom < clipY THEN clipY := winBottom END;  (* polpo: and the windows' area *)
   clipXR := Width;  clipYT := Height
 END ResetClip;
 
@@ -1292,6 +1324,21 @@ BEGIN;
   END;
 END QueryExtensionX11;
 
+(* polpo: the atom of name *)
+PROCEDURE InternAtomX11(name: ARRAY OF CHAR): LONGINT;
+VAR xr: ARRAY 64 OF CHAR; n, i, len, res: LONGINT; b: ARRAY 8 OF LONGINT;
+BEGIN
+  n:=0; WHILE (n<LEN(name)) & (name[n]#0X) DO INC(n) END;
+  len:=2+(n+3) DIV 4;
+  xr[0]:=10X; xr[1]:=0X; xr[2]:=CHR(len); xr[3]:=0X;  (* InternAtom = 16, only-if-exists FALSE *)
+  xr[4]:=CHR(n); xr[5]:=0X; xr[6]:=0X; xr[7]:=0X;
+  i:=0; WHILE i<n DO xr[8+i]:=name[i]; INC(i) END;
+  WHILE 8+i<len*4 DO xr[8+i]:=0X; INC(i) END;
+  res:=Linux0.Write0(xfd, SYSTEM.ADR(xr), len*4);
+  res:=Linux0.Read0(xfd, SYSTEM.ADR(b), 32);
+  IF b[0] MOD 100H=1 THEN RETURN b[2] ELSE RETURN 0 END
+END InternAtomX11;
+
 PROCEDURE OpenWindowX11;
 VAR b: ARRAY 24 OF LONGINT; i, res: LONGINT; str: ARRAY 8 OF CHAR;
 BEGIN
@@ -1309,6 +1356,8 @@ BEGIN
     BigReqSize:=b[2];  (* maximum request length, after OLR 2017 *)
     IF trace THEN WriteSH("BIG-REQUESTS size= ", BigReqSize) END;
   END;
+  xaProtocols:=InternAtomX11("WM_PROTOCOLS"); xaDelete:=InternAtomX11("WM_DELETE_WINDOW");
+  winBottom:=-Height;  (* polpo: the area of the windows of their own *)
 
 (* needed create win for cursor pixmap *)
   b[ 0]:= 1+0*100H+8*10000H;
@@ -1434,7 +1483,7 @@ BEGIN
   Kernel.GetConfig("OSHM", str);
   IF (str#"NO") & ( tcp=0) THEN QueryExtensionX11("MIT-SHM", ShmReqCode) END;
   IF ShmReqCode#0 THEN
-    shmid:= Linux0.Shmget0( 0, LONG(Height)* Width*bytes*Zoom, 3FFH);
+    shmid:= Linux0.Shmget0( 0, (Height-winBottom)* Width*bytes*Zoom, 3FFH);
     fbadr:= Linux0.Shmat0(shmid, 0, 0);  
     IF trace THEN WriteSH("shmid= ",  shmid); WriteSH("fbadr= ",  fbadr) END;
     b[ 0]:= ShmReqCode+1*100H+4*10000H;  (* X_ShmAttach = 1 *)
@@ -1443,13 +1492,14 @@ BEGIN
     b[ 3]:= 0;
     res:=Linux0.Write0( xfd, SYSTEM.ADR(b), 16);
     X11Err(8);
-    PutImage:=PutImageX11SHM;
+    Send:=SendX11SHM;
   ELSE
     NEW( xrv, (Height+1)*2);
-    NEW( fbuf, LONG(Height)* LONG(Width)*bytes*Zoom);  (* rows are linelength*Zoom apart, as with MIT-SHM *)
+    NEW( fbuf, (Height-winBottom)* LONG(Width)*bytes*Zoom);  (* rows are linelength*Zoom apart, as with MIT-SHM *)
     fbadr:=SYSTEM.ADR( fbuf[0]);
-    PutImage:=PutImageX11;
+    Send:=SendX11;
   END;
+  PutImage:=PutImageX11;
 
 (* MapWindow *)
   b[ 0]:= 8+2*10000H;
@@ -1458,6 +1508,110 @@ BEGIN
 (*  generates exposure event: X11Err(9);*)
 
 END OpenWindowX11;
+
+(* polpo: the window of X11 window id, -1 *)
+PROCEDURE FindWin(id: LONGINT): LONGINT;
+VAR n: LONGINT;
+BEGIN
+  n:=0; WHILE (n<MaxWin) & ((win[n].id=0) OR (win[n].id#id)) DO INC(n) END;
+  IF n=MaxWin THEN RETURN -1 ELSE RETURN n END
+END FindWin;
+
+(** polpo: open an X11 window of its own, W x H, with the title title. It shows the area X, Y, W, H
+  below the screen (Y < 0), where the frames in it draw. Returns its number, or -1 (no X11, too
+  large, too many). *)
+PROCEDURE OpenWindow*(title: ARRAY OF CHAR; W, H: INTEGER; VAR X, Y: INTEGER): INTEGER;
+VAR i, n, top, len, res, id: LONGINT; b: ARRAY 64 OF LONGINT;
+BEGIN
+  IF (winBottom=0) OR (W<=0) OR (H<=0) OR (W>Width) OR (H>-winBottom) THEN RETURN -1 END;
+  n:=0; WHILE (n<MaxWin) & (win[n].id#0) DO INC(n) END;
+  IF n=MaxWin THEN RETURN -1 END;
+  top:=0;  (* the first band [top-H, top) from the top that no window uses *)
+  LOOP
+    IF top-H<winBottom THEN RETURN -1 END;
+    i:=0;
+    WHILE (i<MaxWin) & ~((win[i].id#0) & (win[i].y<top) & (win[i].y+win[i].h>top-H)) DO INC(i) END;
+    IF i=MaxWin THEN EXIT END;
+    top:=win[i].y
+  END;
+  id:=r1data.ridbase+12000H+n;
+  win[n].x:=0; win[n].y:=top-H; win[n].w:=W; win[n].h:=H; win[n].close:=FALSE; win[n].id:=id;
+  (* CreateWindow, with the events of the main window and the cursor of the screen *)
+  b[0]:=1+ORD(scn.rdepth)*100H+9*10000H; b[1]:=id; b[2]:=scn.root; b[3]:=0;
+  b[4]:=(W+LONG(H)*10000H)*Zoom; b[5]:=1; b[6]:=0; b[7]:=800H; b[8]:=0804FH;
+  res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 36);
+  (* WM_NAME *)
+  len:=0; WHILE (len<LEN(title)) & (title[len]#0X) & (len<200) DO INC(len) END;
+  i:=6; WHILE i<6+(len+3) DIV 4 DO b[i]:=0; INC(i) END;
+  b[0]:=18+(6+(len+3) DIV 4)*10000H; b[1]:=id; b[2]:=39; b[3]:=31; b[4]:=8; b[5]:=len;
+  SYSTEM.MOVE(SYSTEM.ADR(title), SYSTEM.ADR(b[6]), len);
+  res:=Linux0.Write0(xfd, SYSTEM.ADR(b), (6+(len+3) DIV 4)*4);
+  (* WM_NORMAL_HINTS: the size is fixed *)
+  i:=0; WHILE i<24 DO b[i]:=0; INC(i) END;
+  b[0]:=18+24*10000H; b[1]:=id; b[2]:=40; b[3]:=41; b[4]:=32; b[5]:=18;
+  b[6]:=038H; b[9]:=W*Zoom; b[10]:=H*Zoom; b[11]:=b[9]; b[12]:=b[10]; b[13]:=b[9]; b[14]:=b[10];
+  res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 96);
+  (* WM_PROTOCOLS: WM_DELETE_WINDOW, the close button sends a ClientMessage *)
+  IF xaDelete#0 THEN
+    b[0]:=18+7*10000H; b[1]:=id; b[2]:=xaProtocols; b[3]:=4; b[4]:=32; b[5]:=1; b[6]:=xaDelete;
+    res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 28)
+  END;
+  b[0]:=8+2*10000H; b[1]:=id;  (* MapWindow *)
+  res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 8);
+  X:=0; Y:=SHORT(win[n].y);
+  RETURN SHORT(n)
+END OpenWindow;
+
+(** polpo: close the window n of OpenWindow *)
+PROCEDURE CloseWindow*(n: INTEGER);
+VAR b: ARRAY 2 OF LONGINT; res: LONGINT;
+BEGIN
+  IF (n>=0) & (n<MaxWin) & (win[n].id#0) THEN
+    b[0]:=4+2*10000H; b[1]:=win[n].id;  (* DestroyWindow *)
+    res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 8);
+    win[n].id:=0
+  END
+END CloseWindow;
+
+(** polpo: was the close button of window n clicked? *)
+PROCEDURE CloseRequested*(n: INTEGER): BOOLEAN;
+BEGIN RETURN (n>=0) & (n<MaxWin) & (win[n].id#0) & win[n].close
+END CloseRequested;
+
+(** polpo, for Input: the screen coordinates X, Y of the point ex, ey (X11 pixels from the top left)
+  of X11 window id; FALSE when id is no window of OpenWindow *)
+PROCEDURE ThisWindow*(id, ex, ey: LONGINT; VAR X, Y: INTEGER): BOOLEAN;
+VAR n: LONGINT;
+BEGIN
+  n:=FindWin(id);
+  IF n<0 THEN RETURN FALSE END;
+  ex:=ex DIV Zoom; ey:=ey DIV Zoom;
+  IF ex<0 THEN ex:=0 ELSIF ex>=win[n].w THEN ex:=win[n].w-1 END;
+  IF ey<0 THEN ey:=0 ELSIF ey>=win[n].h THEN ey:=win[n].h-1 END;
+  X:=SHORT(win[n].x+ex); Y:=SHORT(win[n].y+win[n].h-1-ey);
+  RETURN TRUE
+END ThisWindow;
+
+(** polpo, for Input: the area x, y, w, h (X11 pixels from the top left) of X11 window id was exposed *)
+PROCEDURE ExposeWindow*(id, x, y, w, h: LONGINT);
+VAR n, bx, by, bw, bh: LONGINT;
+BEGIN
+  n:=FindWin(id);
+  IF n>=0 THEN
+    bx:=win[n].x*Zoom; by:=win[n].y*Zoom; bw:=win[n].w*Zoom; bh:=win[n].h*Zoom;
+    IF x+w>bw THEN w:=bw-x END;
+    IF y+h>bh THEN h:=bh-y END;
+    IF (w>0) & (h>0) THEN Send(id, bx+x, by+bh-y-h, w, h, x, y) END
+  END
+END ExposeWindow;
+
+(** polpo, for Input: a ClientMessage to X11 window id, with atom in its first data word *)
+PROCEDURE ClientMessage*(id, atom: LONGINT);
+VAR n: LONGINT;
+BEGIN
+  n:=FindWin(id);
+  IF (n>=0) & (xaDelete#0) & (atom=xaDelete) THEN win[n].close:=TRUE END
+END ClientMessage;
 
 PROCEDURE CloseWindowX11;  (* not used ? *)
 VAR b: ARRAY 2 OF LONGINT;
@@ -1876,10 +2030,18 @@ BEGIN
   RETURN xfd;
 END InitX11;
 
+PROCEDURE InitWin;  (* polpo: no windows of their own yet *)
+VAR i: LONGINT;
+BEGIN
+  winBottom := 0; xaProtocols := 0; xaDelete := 0; Send := NIL;
+  i := 0; WHILE i < MaxWin DO win[i].id := 0; INC(i) END
+END InitWin;
+
 BEGIN
   Zoom:=1; DPI:=0;
   trace:=Kernel.trace="Display";
   Left := 0;  ColLeft := 0;  Bottom := 0;  UBottom := 0; Unit := 10000;
+  InitWin;
   tcp:=0; ShmReqCode:= 0;
   pattern := NIL;
   PutImage:=PutImageFB;

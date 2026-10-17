@@ -1652,6 +1652,28 @@ BEGIN
 
 END OpenWindowX11;
 
+(** polpo: windows of their own exist with X11 only (see POLPO.Display.Mod); the terminal has none *)
+PROCEDURE OpenWindow*(title: ARRAY OF CHAR; W, H: INTEGER; VAR X, Y: INTEGER): INTEGER;
+BEGIN X := 0; Y := 0; RETURN -1
+END OpenWindow;
+
+PROCEDURE CloseWindow*(n: INTEGER);
+END CloseWindow;
+
+PROCEDURE CloseRequested*(n: INTEGER): BOOLEAN;
+BEGIN RETURN FALSE
+END CloseRequested;
+
+PROCEDURE ThisWindow*(id, ex, ey: LONGINT; VAR X, Y: INTEGER): BOOLEAN;
+BEGIN RETURN FALSE
+END ThisWindow;
+
+PROCEDURE ExposeWindow*(id, x, y, w, h: LONGINT);
+END ExposeWindow;
+
+PROCEDURE ClientMessage*(id, atom: LONGINT);
+END ClientMessage;
+
 PROCEDURE CloseWindowX11;  (* not used ? *)
 VAR b: ARRAY 2 OF LONGINT;
   res: LONGINT;

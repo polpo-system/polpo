@@ -213,6 +213,18 @@ use only global variables. If p itself traps, it is not called again, and at mos
 can be registered at once. net.Echo works this way: Ctrl+C closes its listening socket and its
 connection at once, so the port is free again.
 
+## Windows of their own
+
+A desktop program can put any frame into an X11 window of its own: Windows.Open(F, title, W, H)
+opens a window of W x H with the title and makes F fill it; it returns the window, a viewer, or
+NIL (no X11, more than 16 windows, larger than the screen). Windows.Close(V) closes it, and so does
+the close button of the window manager, when the desktop is idle. The frame works there as in a
+viewer of the desktop: it gets the mouse, the keyboard and the broadcasts. The window shows an
+area below the screen (y < 0), so the frame's coordinates are negative there; frames that draw
+only inside their own rectangle need not know. Underneath, Display.OpenWindow makes the X11 window
+and Viewers.OpenFree a viewer outside the tracks. Windows.OpenText shows the use with a text frame;
+DocWindows (package gadgets-windows) does it for gadget documents.
+
 ## Files
 
 Files.Old(name) opens a file. A plain name (without a slash) is looked up in the current directory
