@@ -765,8 +765,10 @@ PROCEDURE Conflict(p, q: Package): BOOLEAN;
 BEGIN RETURN (p # q) & (Has(p.conflicts, q.name) OR Has(q.conflicts, p.name))
 END Conflict;
 
+PROCEDURE^ Stale(p: Package; VAR why: ARRAY OF CHAR): BOOLEAN;
+
 PROCEDURE Check*;
-VAR p, q: Package; it, im, set: Item; path, mod: Name; problems: LONGINT; v: ARRAY 32 OF CHAR;
+VAR p, q: Package; it, im, set: Item; path, mod, why: Name; problems: LONGINT; v: ARRAY 32 OF CHAR;
 BEGIN
   IF ~LoadTree() THEN RETURN END;
   problems := 0; p := packages;
@@ -789,6 +791,10 @@ BEGIN
         out.String(", installed is "); out.String(v); out.Ln; INC(problems)
       END;
       it := it.next
+    END;
+    IF (p.remote # "") & Stale(p, why) THEN  (* polpo: compiled before an interface it imports changed *)
+      out.String(p.name); out.String(": compiled before the new "); out.String(why);
+      out.String(", portia.Upgrade recompiles it"); out.Ln; INC(problems)
     END;
     set := NIL; Closure(p, set);
     it := p.sources;
