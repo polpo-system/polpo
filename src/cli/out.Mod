@@ -2,11 +2,19 @@ MODULE out;
 
 IMPORT Linux0, SYSTEM;
 
+TYPE
+  Writer* = PROCEDURE (VAR s: ARRAY OF CHAR; len: LONGINT);
+
+VAR
+  writer*: Writer;  (** where the output goes: NIL is the standard output; the desktop writes into System.Log *)
+
 PROCEDURE Char*(c: CHAR);
-VAR n: LONGINT;
+VAR n: LONGINT; s: ARRAY 2 OF CHAR;
 BEGIN
   IF c = 0DX THEN c := 0AX END;
-  n := Linux0.Write0(1, SYSTEM.ADR(c), 1)
+  IF writer # NIL THEN s[0] := c; s[1] := 0X; writer(s, 1)
+  ELSE n := Linux0.Write0(1, SYSTEM.ADR(c), 1)
+  END
 END Char;
 
 PROCEDURE String*(s: ARRAY OF CHAR);
@@ -14,7 +22,9 @@ VAR n, len: LONGINT;
 BEGIN
   len := 0;
   WHILE (len < LEN(s)) & (s[len] # 0X) DO INC(len) END;
-  n := Linux0.Write0(1, SYSTEM.ADR(s), len)
+  IF writer # NIL THEN writer(s, len)
+  ELSE n := Linux0.Write0(1, SYSTEM.ADR(s), len)
+  END
 END String;
 
 PROCEDURE Ln*;
@@ -53,4 +63,5 @@ BEGIN
   buf[j] := 0X; String(buf)
 END Hex;
 
+BEGIN writer := NIL
 END out.

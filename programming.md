@@ -129,7 +129,9 @@ after the other: blanks separate them, quotes ("...") keep blanks inside one, an
 line or a ~ ends them. Arg returns FALSE when there are no more. In the desktop, Module.Command
 args ~ written in a text calls the same command with the same parameters, so a console command
 works in both worlds. out.String, out.Int(x, width), out.Hex, out.Char and out.Ln write to the
-terminal.
+terminal, and in the desktop into System.Log: the desktop sets out.writer, the procedure that gets
+the output (NIL is the terminal), and appends it to the log a line at a time; the rest of a line
+comes when the command has ended.
 
 When the parameters are missing or wrong, print a line usage: module.Command ... that says what the
 command does. Options are words that start with a slash, after the command or after its

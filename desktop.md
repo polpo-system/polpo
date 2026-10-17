@@ -58,6 +58,9 @@ the file whose name is selected. * stands for the viewer with the star marker: F
 where the mouse is, and then, for example, Edit.Store * stores that viewer's text. Esc takes away
 the selections, the caret and the star.
 
+Commands written for the console, with out, print into System.Log in the desktop, so portia.Install
+or fs.Ls clicked in a text show their output there.
+
 Tab after a word completes it, as in the shell of loksh: the first word of a line as a command
 (Desk becomes Desktops., Desktops.Op becomes Desktops.Open), the words after it as file names, with
 directories (Edit.Open src/desk becomes src/desktop/; ~ is not known there). When several
