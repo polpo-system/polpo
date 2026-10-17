@@ -514,7 +514,7 @@ BEGIN
       RETURN
     END;
     IF res=32 THEN
-      code:= ORD(event.code) MOD 32;
+      code:= ORD(event.code) MOD 128;  (* polpo: without the bit of sent events (MOD 32 made ClientMessage 1, MappingNotify a KeyPress) *)
       detail:= ORD( event.detail);
       IF (code >= 2) & (code <= 6) THEN modState := event.f MOD 10000H END;
       IF code=2 THEN    (* KeyPress *)
@@ -653,6 +653,7 @@ BEGIN
           INC(err);
         END;
   (*      IF detail=0 THEN Kernel.Shutdown( 1) END; *)
+      ELSIF (code = 32) OR (code = 34) THEN  (* ColormapNotify, MappingNotify *)
       ELSE
         WriteSH("Event Error... ", code);
         WriteSH("Event detail... ", detail);
