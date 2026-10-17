@@ -192,6 +192,9 @@ ImageFormats = {
   Pict = PictImages.Install
   bmp = BMPImages.Install
   jpg = JPEGImages.Install
+  gif = GIFImages.Install
+  pcx = PCXImages.Install
+  psd = PSDImages.Install
 }
 
 FontFormats = {
