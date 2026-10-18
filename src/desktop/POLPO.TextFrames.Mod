@@ -72,6 +72,7 @@ MODULE TextFrames;  (** portable *) (* JG / pjm *)
     utfBuf: ARRAY 4 OF CHAR; utfLen, utfExp: INTEGER;
     utfLib: Objects.Library; utfCol, utfVoff: SHORTINT;
     W, KW: Texts.Writer; (*keyboard writer*)
+    cmplF: Frame; cmplPos: LONGINT;  (* polpo: where the last Tab completion left the caret *)
     box: Fonts.Char;
     BoxPat: ARRAY 12 OF SET;
     hintPos: LONGINT;
@@ -1183,10 +1184,28 @@ END MulDiv;
     RETURN n >= 0
   END Completed;
 
+  (* polpo: Enter right after a Tab completed Module.Command runs it, as a middle click on it *)
+  PROCEDURE RunCompleted (F: Frame): BOOLEAN;
+    VAR R: Texts.Reader; beg, i, dot: LONGINT; ch: CHAR;
+  BEGIN
+    beg := F.carloc.pos; dot := -1; i := 0;
+    LOOP
+      IF beg = 0 THEN EXIT END;
+      Texts.OpenReader(R, F.text, beg - 1); Texts.Read(R, ch);
+      IF ~(R.lib IS Fonts.Font) OR (ch <= " ") OR (ch = 22X) THEN EXIT END;
+      IF (ch = ".") & (dot < 0) THEN dot := i END;
+      DEC(beg); INC(i)
+    END;
+    IF (dot > 0) & (dot < i - 1) THEN Call(F, beg, FALSE); RETURN TRUE END;  (* a "." inside the word *)
+    RETURN FALSE
+  END RunCompleted;
+
   PROCEDURE Write* (F: Frame; ch: CHAR; lib: Objects.Library; col, voff: SHORTINT);
-  VAR pos, beg, end, time: LONGINT; keys: SET; shift, ctrl: BOOLEAN; text: Texts.Text;
+  VAR pos, beg, end, time: LONGINT; keys: SET; shift, ctrl, completed: BOOLEAN; text: Texts.Text;
   BEGIN (*F.car # 0*)
     Input.KeyState(keys); shift := Input.SHIFT IN keys; ctrl := Input.CTRL IN keys;
+    completed := (cmplF = F) & (cmplPos = F.carloc.pos); cmplF := NIL;
+    IF (ch = CR) & completed & ~shift & ~ctrl & RunCompleted(F) THEN RETURN END;
     IF ch = 02X THEN  (* polpo: Ctrl+B starts a block (a selection made with Shift becomes one), or ends it *)
       IF blockF = F THEN EndBlock
       ELSE
@@ -1250,6 +1269,7 @@ END MulDiv;
     ELSIF (ch >= 0F0X) & (ch <= 0FFX) THEN
     ELSIF (ch < " ") & (ch # CR) & (ch # 09X) & (ch # 0AX) THEN  (* other Ctrl keys *)
     ELSIF (ch = 09X) & ~shift & Completed(F, lib, col, voff) THEN
+      IF TextComplete.unique THEN cmplF := F; cmplPos := F.carloc.pos END
     ELSE
       KW.lib := lib; KW.col := col; KW.voff := voff; Texts.Write(KW, ch);
       Texts.Insert(F.text, F.carloc.pos, KW.buf);

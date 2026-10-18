@@ -9,12 +9,14 @@ IMPORT Texts, Fonts, Oberon, Complete0;
 CONST CR = 0DX;
 
 VAR LW: Texts.Writer;
+  unique*: BOOLEAN;  (** the last Word had one match: the word is complete now *)
 
 (** The number of characters inserted at pos, or -1 when there is nothing to complete (a Tab is
   wanted: no word before pos, pos inside a word, or the word is complete). *)
 PROCEDURE Word*(T: Texts.Text; pos: LONGINT; VAR W: Texts.Writer): LONGINT;
 VAR R: Texts.Reader; word, add: ARRAY 256 OF CHAR; beg, p: LONGINT; i, len: INTEGER; ch: CHAR; cmd: BOOLEAN;
 BEGIN
+  unique := FALSE;
   IF pos < T.len THEN
     Texts.OpenReader(R, T, pos); Texts.Read(R, ch);
     IF (R.lib IS Fonts.Font) & (ch > " ") THEN RETURN -1 END  (* inside a word *)
@@ -41,6 +43,7 @@ BEGIN
   IF cmd THEN Complete0.Command(word, add); IF Complete0.n = 0 THEN Complete0.Path(word, add) END
   ELSE Complete0.Path(word, add); IF Complete0.n = 0 THEN Complete0.Command(word, add) END
   END;
+  unique := Complete0.n = 1;
   IF (add = "") & (Complete0.n <= 1) THEN RETURN -1 END;
   i := 0; WHILE add[i] # 0X DO INC(i) END;
   IF i > 0 THEN Texts.WriteString(W, add); Texts.Insert(T, pos, W.buf) END;
@@ -54,5 +57,5 @@ BEGIN
   RETURN i
 END Word;
 
-BEGIN Texts.OpenWriter(LW)
+BEGIN Texts.OpenWriter(LW); unique := FALSE
 END TextComplete.
