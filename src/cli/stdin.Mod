@@ -1,7 +1,7 @@
 (* ETH Oberon, Copyright 1990-2003 Computer Systems Institute, ETH Zurich, CH-8092 Zurich.
 Refer to the license.txt file provided with this distribution. *)
 
-MODULE in; (** portable *)
+MODULE stdin; (** portable *)
 
 (** CLI stdin reader. Same interface as In (ETH Oberon) but reads from standard input
     instead of Oberon.Par.text. For commands running in UI Oberon use the In module. *)
@@ -108,4 +108,4 @@ BEGIN
   nextch    := 0X;
   readstate := pending;
   Done      := TRUE
-END in.
+END stdin.

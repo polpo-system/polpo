@@ -102,7 +102,7 @@ objects can differ in a few bytes of import keys.
   of them, compile it once with `/s` (`bin/x86/loksh compiler.Compile /s src/desktop/Viewers.Mod`),
   then run `make`.
 - **loksh cannot load its shell any more** (`shell imports incompatible version of X`, a trap
-  at start): a module the shell imports (texts, in, out, strings, Oberon0, ...) was compiled
+  at start): a module the shell imports (texts, stdin, out, oocStrings, Oberon0, ...) was compiled
   alone with a new interface. Take the old object back with `git checkout obj/x86/X.Obj`,
   then run the full build: it compiles X before the shell while loksh keeps its loaded
   modules.

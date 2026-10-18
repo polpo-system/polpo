@@ -13,7 +13,7 @@ MODULE vocsync;  (** modules shared with voc: copies with the imports of voc or 
      copied unchanged.
    vocsync.From voc-file ... polpo-dir
      modules kept in a voc repository (the tls modules of github.com/norayr/tls), copied into
-     polpo-dir with the polpo names in their IMPORT clause: Out := out, Strings := strings,
+     polpo-dir with the polpo names in their IMPORT clause: Out := out, Strings := oocStrings,
      Linux0 (for Linux0 := unixNet).
      Everything else is the same file. *)
 
@@ -78,7 +78,7 @@ BEGIN
   j := 0; WHILE path[k] # 0X DO name[j] := path[k]; INC(k); INC(j) END; name[j] := 0X
 END Base;
 
-(* the IMPORT clause of buf with the names of polpo (toPolpo: Out := out, Strings := strings, Linux0
+(* the IMPORT clause of buf with the names of polpo (toPolpo: Out := out, Strings := oocStrings, Linux0
    for Linux0 := unixNet) or of voc (Linux0 := unixNet for Linux0, Out for Out := out) *)
 PROCEDURE Convert(VAR buf: Buf; toPolpo: BOOLEAN): BOOLEAN;
 VAR imp: ARRAY 8 OF CHAR; beg, end, i, j, k: LONGINT; clause, item, res: ARRAY 2048 OF CHAR; changed: BOOLEAN;
@@ -90,7 +90,7 @@ VAR imp: ARRAY 8 OF CHAR; beg, end, i, j, k: LONGINT; clause, item, res: ARRAY 2
     b := Len(item); WHILE (b > a) & (item[b-1] <= " ") DO DEC(b) END;
     m := 0; WHILE (a + m < b) & (m < LEN(t) - 1) DO t[m] := item[a+m]; INC(m) END; t[m] := 0X;
     alias := "";
-    IF toPolpo & (t = "Out") THEN alias := "out" ELSIF toPolpo & (t = "Strings") THEN alias := "strings"
+    IF toPolpo & (t = "Out") THEN alias := "out" ELSIF toPolpo & (t = "Strings") THEN alias := "oocStrings"
     ELSIF ~toPolpo & (t = "Linux0") THEN alias := "unixNet"
     ELSIF ~toPolpo & (t = "Out := out") THEN t := "Out"; alias := "-"
     ELSIF toPolpo & (t = "Linux0 := unixNet") THEN t := "Linux0"; alias := "-"
@@ -165,12 +165,12 @@ BEGIN
 END From;
 
 BEGIN
-  polpo[0] := "IMPORT S := strTypes, Strings := strings, Out := out;  (* voc: Strings := oocStrings, Out *)";
-  voc[0] := "IMPORT S := strTypes, Strings := oocStrings, Out;  (* polpo: Strings := strings, Out := out *)";
-  polpo[1] := "IMPORT Out := out, Strings := strings;  (* voc: Out, Strings *)";
-  voc[1] := "IMPORT Out, Strings;  (* polpo: Out := out, Strings := strings *)";
-  polpo[2] := "IMPORT IntStr, Strings := strings, Files, Out := out,  (* voc: IntStr := oocIntStr, Strings, Out *)";
-  voc[2] := "IMPORT IntStr := oocIntStr, Strings, Files, Out,  (* polpo: IntStr, Strings := strings, Out := out *)";
+  polpo[0] := "IMPORT S := strTypes, Strings := oocStrings, Out := out;  (* voc: Strings := oocStrings, Out *)";
+  voc[0] := "IMPORT S := strTypes, Strings := oocStrings, Out;  (* polpo: Strings := oocStrings, Out := out *)";
+  polpo[1] := "IMPORT Out := out, Strings := oocStrings;  (* voc: Out, Strings *)";
+  voc[1] := "IMPORT Out, Strings;  (* polpo: Out := out, Strings := oocStrings *)";
+  polpo[2] := "IMPORT IntStr, Strings := oocStrings, Files, Out := out,  (* voc: IntStr := oocIntStr, Strings, Out *)";
+  voc[2] := "IMPORT IntStr := oocIntStr, Strings, Files, Out,  (* polpo: IntStr, Strings := oocStrings, Out := out *)";
   polpo[3] := "IMPORT Conv := ConvTypes;  (* voc: Conv := oocConvTypes *)";
   voc[3] := "IMPORT Conv := oocConvTypes;  (* polpo: Conv := ConvTypes *)"
 END vocsync.

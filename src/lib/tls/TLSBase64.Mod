@@ -1,5 +1,5 @@
 MODULE TLSBase64;
- IMPORT Out := out, Strings := strings, TLSBytes;
+ IMPORT Out := out, Strings := oocStrings, TLSBytes;
 VAR
   EncodingTable : ARRAY 65 OF CHAR;  (* 64 characters and 0X: with 64, COPY dropped the "/" *)
   fixToIncludeEOL*: BOOLEAN;
