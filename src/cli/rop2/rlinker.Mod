@@ -1148,14 +1148,15 @@ END MkELF64hdr;
 
   (* Print what was appended to Oberon.Log since position pos. *)
   PROCEDURE ShowLog(pos: LONGINT);
-    VAR R: Texts.Reader; ch: CHAR;
+    VAR R: Texts.Reader; ch: CHAR; end: LONGINT;
   BEGIN
-    IF Oberon.Log.len > pos THEN
+    (* polpo: in the desktop out writes into the log itself: copying would chase its own output *)
+    end := Oberon.Log.len;
+    IF (Con.writer = NIL) & (end > pos) THEN
       Texts.OpenReader(R, Oberon.Log, pos);
-      Texts.Read(R, ch);
-      WHILE ~R.eot DO
-        IF ch = 0DX THEN Con.Ln ELSE Con.Char(ch) END;
-        Texts.Read(R, ch)
+      WHILE pos < end DO
+        Texts.Read(R, ch); INC(pos);
+        IF ch = 0DX THEN Con.Ln ELSE Con.Char(ch) END
       END
     END
   END ShowLog;

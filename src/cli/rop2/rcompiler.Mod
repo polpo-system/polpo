@@ -13,6 +13,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
 
   VAR
     dir*: ARRAY 256 OF CHAR;  (** object and symbol file directory *)
+    HW: Texts.Writer;  (* see Head *)
     tag: CHAR;  (* object file tag of the target *)
     target: ARRAY 32 OF CHAR;  (* name of the target *)
     backend: ARRAY 32 OF CHAR;  (* back end module: VOPV, MOPV, AOPV *)
@@ -39,14 +40,15 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
 
   (* Print what the compiler appended to Oberon.Log since position pos. *)
   PROCEDURE ShowLog(pos: LONGINT);
-    VAR R: Texts.Reader; ch: CHAR;
+    VAR R: Texts.Reader; ch: CHAR; end: LONGINT;
   BEGIN
-    IF Oberon.Log.len > pos THEN
+    (* polpo: in the desktop out writes into the log itself: copying would chase its own output *)
+    end := Oberon.Log.len;
+    IF (Out.writer = NIL) & (end > pos) THEN
       Texts.OpenReader(R, Oberon.Log, pos);
-      Texts.Read(R, ch);
-      WHILE ~R.eot DO
-        IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END;
-        Texts.Read(R, ch)
+      WHILE pos < end DO
+        Texts.Read(R, ch); INC(pos);
+        IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END
       END
     END
   END ShowLog;
@@ -90,19 +92,26 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     OPM.LogWLn; error := ~OPM.noerr
   END Module;
 
+  (* polpo: the name of the file being compiled; in the desktop straight into the log, before what
+    the compiler writes there itself (out keeps a line until its end) *)
+  PROCEDURE Head(s: ARRAY OF CHAR);
+  BEGIN
+    IF Out.writer = NIL THEN Out.String(s) ELSE Texts.WriteString(HW, s); Texts.Append(Oberon.Log, HW.buf) END
+  END Head;
+
   PROCEDURE CompileFile(name, opt: ARRAY OF CHAR; VAR error: BOOLEAN);
     VAR t: Texts.Text; r: Texts.Reader; pos: LONGINT;
   BEGIN
     NEW(t); Texts.Open(t, name);
-    Out.String(name);
+    Head(name);
     IF t.len # 0 THEN
-      Out.String("  compiling  "); Out.String(dir);
+      Head("  compiling  "); Head(dir);
       pos := Oberon.Log.len;
       Texts.OpenReader(r, t, 0);
       Module(r, opt, error);
       ShowLog(pos)
     ELSE
-      Out.String(" not found"); Out.Ln; error := TRUE
+      Head(" not found"); Out.Ln; error := TRUE
     END;
     Oberon.Collect
   END CompileFile;
@@ -199,5 +208,5 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
   END Compile;
 
 BEGIN
-  SetHostTarget
+  Texts.OpenWriter(HW); SetHostTarget
 END rcompiler.
