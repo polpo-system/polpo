@@ -92,7 +92,7 @@ END Pwd;
 
 (* the entries of the directory path, sorted; FALSE if it is not one (res: the error) *)
 PROCEDURE Read(VAR path: ARRAY OF CHAR; all: BOOLEAN; VAR list: Entry; VAR res: LONGINT): BOOLEAN;
-VAR fd, n, i, k, rec, r: LONGINT; buf: ARRAY Block OF CHAR; e, p, q: Entry; dir: BOOLEAN;
+VAR fd, n, i, k, rec, r: LONGINT; buf: ARRAY Block OF CHAR; e, p, q: Entry; dir: BOOLEAN; len: INTEGER;
 BEGIN
   list := NIL; dir := FALSE; res := 0;
   fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), Linux0.ORDonly, 0);
@@ -103,7 +103,7 @@ BEGIN
     IF n <= 0 THEN EXIT END;
     dir := TRUE; i := 0;
     WHILE i < n DO
-      rec := ORD(buf[i + 16]) + 256 * LONG(ORD(buf[i + 17]));
+      SYSTEM.GET(SYSTEM.ADR(buf[i + 16]), len); rec := LONG(len) MOD 10000H;  (* in the byte order of the machine *)
       IF all & ~((buf[i + 19] = ".") & ((buf[i + 20] = 0X) OR (buf[i + 20] = ".") & (buf[i + 21] = 0X)))
         OR ~all & (buf[i + 19] # ".") THEN
         NEW(e); k := 0; WHILE (buf[i + 19 + k] # 0X) & (k < NameLen - 1) DO e.name[k] := buf[i + 19 + k]; INC(k) END;
