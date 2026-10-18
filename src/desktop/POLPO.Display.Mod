@@ -2048,6 +2048,8 @@ BEGIN
     Kernel.Shutdown(1);
   END;
   bdata[ 0]:= "l";  bdata[ 1]:= 0X;                    (* pad  *)
+  i:= 1; SYSTEM.GET( SYSTEM.ADR(i), bdata[ 1]);
+  IF bdata[ 1]=0X THEN bdata[ 0]:= "B" END; bdata[ 1]:= 0X;  (* polpo: the requests are words in the byte order of the machine *)
   bdata[ 2]:= 0BX;  bdata[ 3]:=0X;  (* protocol major *)
   bdata[ 4]:=0X;  bdata[ 5]:=0X;    (* ptotocol minor *)
   bdata[ 6]:=0X;  bdata[ 7]:=0X;  (* auth protocol len *)
