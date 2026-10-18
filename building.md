@@ -9,18 +9,18 @@ the installed packages.
 
 - Linux on x86 (32-bit code; it runs on x86-64 kernels too), git and make.
 - To run or test the other ports on x86: qemu user mode, `qemu-arm` (ARM and ARMv7),
-  `qemu-riscv32`, `qemu-mipsel` and `qemu-mips` (big-endian MIPS). Building them does not need
+  `qemu-riscv32`, `qemu-mipsel`, `qemu-mips` (big-endian MIPS) and `qemu-ppc`. Building them does not need
   qemu: they are cross compiled.
 
 ## The pieces
 
     bin/<arch>/loksh       the boot image of each port: Kernel, Files, the loader, the shell
     obj/<arch>/            the compiled modules (.Obj code, .Sym interface), loaded on demand
-    tools/build.Tool       the x86 recipe; arm.Tool, armv7.Tool, riscv.Tool, mips.Tool, mipsbe.Tool
-                           the others
+    tools/build.Tool       the x86 recipe; arm.Tool, armv7.Tool, riscv.Tool, mips.Tool, mipsbe.Tool,
+                           ppc.Tool the others
     tools/arm-cross.Tool   the x86-hosted ARM cross compiler and linker
     tools/rop2-cross.Tool  the x86-hosted ROP2 cross compilers (ARMv7, RISC-V, MIPS in both byte
-                           orders) and linker
+                           orders, PowerPC) and linker
 
 A recipe is an Oberon text of commands, one per line: the compilations in the order of the
 imports, then the link. `make` and its targets only feed a recipe to a loksh.
@@ -37,6 +37,7 @@ make armv7 > build-armv7.log 2>&1            # ARMv7
 make riscv > build-riscv.log 2>&1            # RISC-V (32-bit)
 make mips  > build-mips.log 2>&1             # MIPS (32-bit, little-endian)
 make mipsbe > build-mipsbe.log 2>&1          # MIPS (32-bit, big-endian)
+make ppc   > build-ppc.log 2>&1              # PowerPC (32-bit)
 grep -a "err " build-*.log                   # nothing: all compiled
 ```
 
@@ -46,8 +47,8 @@ grep -a "err " build-*.log                   # nothing: all compiled
 - The x86 build links `bin/x86/loksh2` and leaves `bin/x86/loksh` alone, because loksh is the
   program running the build; the two commands after it put the new one in place (a plain `cp`
   fails while a loksh runs). The other ports link `bin/<arch>/loksh.new` and move it over.
-- Each of `make arm`, `armv7`, `riscv`, `mips`, `mipsbe` first builds its cross compiler on x86,
-  then the port. Build ARMv7, RISC-V and the two MIPS ports one after another, never at the same
+- Each of `make arm`, `armv7`, `riscv`, `mips`, `mipsbe`, `ppc` first builds its cross compiler on
+  x86, then the port. Build ARMv7, RISC-V, the two MIPS ports and PowerPC one after another, never at the same
   time: they all compile the same ROP2 cross compiler into `obj/x86/` first. `make arm` may run
   beside one of them.
 - Build x86 first: the cross compilers of the ports run on the x86 system.
@@ -60,10 +61,12 @@ make armv7-native
 make riscv-native
 make mips-native
 make mipsbe-native
+make ppc-native
 ```
 
 This is how a port rebuilds itself on its own machine; on x86 it runs under qemu and is slow.
-The objects are the same as the cross compiled ones, except that the ARM, ARMv7 and RISC-V
+The objects are the same as the cross compiled ones (on MIPS and PowerPC to the byte, the linked
+binary too), except that the ARM, ARMv7 and RISC-V
 objects can differ in a few bytes of import keys.
 
 ## After a rebuild
@@ -80,12 +83,14 @@ objects can differ in a few bytes of import keys.
   qemu-riscv32 bin/riscv/loksh portia.Upgrade /y
   qemu-mipsel bin/mips/loksh portia.Upgrade /y
   qemu-mips bin/mipsbe/loksh portia.Upgrade /y
+  qemu-ppc bin/ppc/loksh portia.Upgrade /y
   bin/x86/loksh portia.Check                   # and the same on the other ports
   ```
 
 - **Running loksh processes** (a desktop, a shell) keep the modules they loaded before the
   build and load new ones afterwards: restart them.
-- **Trying the ports** on x86: `make arm-run` (and `armv7-run`, `riscv-run`, `mips-run`)
+- **Trying the ports** on x86: `make arm-run` (and `armv7-run`, `riscv-run`, `mips-run`,
+  `mipsbe-run`, `ppc-run`)
   starts that port's desktop under qemu, `make arm-shell` its console.
 
 ## When something goes wrong
