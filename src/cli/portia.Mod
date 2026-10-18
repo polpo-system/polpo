@@ -1486,6 +1486,10 @@ PROCEDURE Confirm(n: LONGINT; what: ARRAY OF CHAR): BOOLEAN;
 VAR t: termios.Termios; c, answer: CHAR; r: LONGINT; echo: BOOLEAN;
 BEGIN
   IF assumeYes THEN RETURN TRUE END;
+  IF out.writer # NIL THEN  (* in the desktop: the terminal is not where the user types *)
+    Pre; out.String("the desktop cannot answer questions: add /y to the command to proceed,"); out.Ln;
+    Pre; out.String("as in portia.Install /y name"); out.Ln; RETURN FALSE
+  END;
   IF termios.Get(0, t) # 0 THEN
     Pre; out.String("not asking without a terminal; add /y to proceed"); out.Ln; RETURN FALSE
   END;
@@ -1936,7 +1940,8 @@ BEGIN
   L("                              packages, nothing compiled before an interface it imports");
   L("  portia.Graph [name] > x.dot the dependencies as a Graphviz graph");
   L("");
-  L("Changing (they show what they will do and ask; /y does not ask):");
+  L("Changing (they show what they will do and ask; /y does not ask; in the desktop, which cannot");
+  L("answer, they stop after showing it: click the command again with /y):");
   L("  portia.Install [/t] name    download, check, build, link and record, with what it needs;");
   L("                              /t runs its tests and removes it again if they fail");
   L("  portia.Upgrade [name]       newer versions of installed packages, and packages compiled");
