@@ -24,7 +24,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts := texts, Con := out;
 
   CONST
-    MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5;
+    MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6;
 (*    mipstag=0F9X; mipsttag= 0FAX; armv7tag=0FBX; armv8tag=0FCX; riscvtag=0FDX;   not same as in ROP2 *)
 
     BootHeapSize = 20000H;
@@ -33,6 +33,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     OptionChar = "\";
 
     NofPtrFix = 2000;  (* < 400 used for normal OLR static core *)
+    NofRaw = 4000;  (* polpo: byte regions and 16-bit fields of the image, for big-endian targets *)
     
   ELF32hdrsz= 52;
   PHT32size= 32;  (* +12 byte padding *)
@@ -56,8 +57,14 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     dir: ARRAY 256 OF CHAR;  (* object file directory *)
     ptrFixx: LONGINT;
     arch: LONGINT;
-    archs: ARRAY TEST+1 OF ARRAY 6 OF CHAR;
-    tags: ARRAY TEST+1 OF INTEGER;
+    archs: ARRAY MIPSBE+1 OF ARRAY 7 OF CHAR;
+    tags: ARRAY MIPSBE+1 OF INTEGER;
+    (* polpo: the image is built in the byte order of the host; for a target of the other order the
+       words are swapped when it is written, except the byte regions (names, refs, constants), and
+       the 16-bit fields have their two bytes swapped *)
+    rawAdr, rawLen: ARRAY NofRaw OF LONGINT; rawx: LONGINT;
+    halfAdr: ARRAY NofRaw OF LONGINT; halfx: LONGINT;
+    hostBig: BOOLEAN;
     b64: BOOLEAN;
 
 (*    Fixup: PROCEDURE(m: Module; entry, L: LONGINT; data: BOOLEAN);*)
@@ -349,6 +356,20 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     END
   END InitKernel;
 
+  PROCEDURE Raw(adr, len: LONGINT);  (* polpo: bytes, not swapped *)
+  BEGIN
+    IF rawx < NofRaw THEN rawAdr[rawx] := adr; rawLen[rawx] := len; INC(rawx)
+    ELSE res := notEnoughSpace; Texts.WriteString(W, "Too many byte regions"); Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf)
+    END
+  END Raw;
+
+  PROCEDURE Half(adr: LONGINT);  (* polpo: a word holding a 16-bit field and its padding *)
+  BEGIN
+    IF halfx < NofRaw THEN halfAdr[halfx] := adr; INC(halfx)
+    ELSE res := notEnoughSpace; Texts.WriteString(W, "Too many 16-bit fields"); Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf)
+    END
+  END Half;
+
   PROCEDURE PTRFix( adr: LONGINT);
   BEGIN
     IF ptrFixx # -1 THEN
@@ -464,7 +485,7 @@ PROCEDURE Fixup(m: Module; entry, L: LONGINT; data: BOOLEAN);
 BEGIN
   IF tag=36FDH THEN FixupV(m, entry, L)
   ELSIF tag=36FBH THEN FixupA(m, entry, L)
-  ELSIF tag=36F9H THEN FixupM(m, entry, L, data)
+  ELSIF (tag=36F9H) OR (tag=36F8H) THEN FixupM(m, entry, L, data)
   ELSE HALT(255);
   END;
 END Fixup;
@@ -526,7 +547,7 @@ END Fixup;
       tdd.tdsize := tdsize;
       tdd.sentinel := -4;
       tdd.self := S.ADR(tdb.word[root]); PTRFix( S.ADR(tdd.self));
-      tdd.name := name;
+      tdd.name := name; Raw(S.ADR(tdd.name), LEN(tdd.name)); Raw(S.ADR(tdd.ext), 4);
       tdd.mdesc := m; PTRFix( S.ADR(tdd.mdesc));
       tdd.pvfprint := pvfp;
       i := 0;
@@ -720,7 +741,7 @@ END Fixup;
     IF lm # NIL THEN lm.next := m; PTRFix( S.ADR(lm.next)) END ;
     lastMod := S.VAL(LONGINT, m);
     IF modules = 0 THEN modules := lastMod END ;
-    m.name := modname; (*m.init := FALSE;*) m.refcnt := -1;
+    m.name := modname; (*m.init := FALSE;*) m.refcnt := -1; Raw(S.ADR(m.name), LEN(m.name));
     (* S.NEW(arrPtr, k0); *)
     arrPtr := S.VAL(ArrPtr, NewSys(k0)); PTRFix( S.ADR(arrPtr^) - 28); PTRFix( S.ADR(arrPtr^) - 4);
     IF arrPtr = NIL THEN RETURN END ;
@@ -742,11 +763,13 @@ END Fixup;
       ELSE
         Files.ReadString(R, m.exports[expnr].name); Files.ReadNum(R, m.exports[expnr].fprint);
         m.exports[expnr].mode := ORD(ch);
+        Raw(S.ADR(m.exports[expnr].name), LEN(m.exports[expnr].name)); Half(S.ADR(m.exports[expnr].mode));
         IF ch = 3X THEN Files.ReadNum(R, entry);
           m.exports[expnr].adr := m.sb+ entry; PTRFix( S.ADR(m.exports[expnr].adr))
         ELSIF ch = 4X THEN Files.ReadNum(R, entry);
           m.exports[expnr].adr := m.cb+entry*4; PTRFix( S.ADR(m.exports[expnr].adr))
         ELSIF ch = 6X THEN INC(expnr); m.exports[expnr].mode := 7;
+          Raw(S.ADR(m.exports[expnr].name), LEN(m.exports[expnr].name)); Half(S.ADR(m.exports[expnr].mode));
           m.exports[expnr].name := m.exports[expnr-1].name; Files.ReadNum(R, m.exports[expnr].fprint)  (* pvfprint *)
         END ;
         INC(expnr)
@@ -756,14 +779,14 @@ END Fixup;
   (* CmdBlk *)
     Block(83X); i := 0; t0 := m.cb;
     WHILE i < nofcom DO
-      Files.ReadString(R, m.cmds[i].name); Files.ReadNum(R, entry);
+      Files.ReadString(R, m.cmds[i].name); Files.ReadNum(R, entry); Raw(S.ADR(m.cmds[i].name), LEN(m.cmds[i].name));
       m.cmds[i].adr := t0 + 4*entry; PTRFix( S.ADR(m.cmds[i].adr)); INC(i)
     END ;
   (* PtrBlk *)
     Block(84X); i := 0; t0 := m.sb; 
     WHILE i < nofptr DO Files.ReadNum(R, k0); m.ptrTab[i] := t0 + k0; PTRFix( S.ADR(m.ptrTab[i])); INC(i) END ;
   (* ConstBlk *)
-    Block(87X); i := 0; t0:=S.ADR(m.data0^);
+    Block(87X); i := 0; t0:=S.ADR(m.data0^); Raw(t0, consize);
     WHILE i < consize DO Files.Read(R, ch); S.PUT(t0, ch); INC(t0); INC(i) END;
   (* CodeBlk *)
     Block(88X);
@@ -812,7 +835,7 @@ END Fixup;
       INC(i)
     END ;
   (* RefBlk *)
-    Block(8AX); i := 0; t0:= S.ADR(m.refs[0]);
+    Block(8AX); i := 0; t0:= S.ADR(m.refs[0]); Raw(t0, refsize);
     WHILE i < refsize DO Files.Read(R, ch); S.PUT(t0, ch); INC(t0); INC(i) END ;
   (* init types *)
     i := 0;
@@ -871,7 +894,7 @@ END Fixup;
 
     modules := 0;  lastMod := 0;  modTag := 0;
     modulesVal:=0;
-    ptrFixx := 0;
+    ptrFixx := 0; rawx := 0; halfx := 0;
     i := 0;
     WHILE i < N DO A[i] := nil; INC(i) END;
     heapAdr := S.VAL(LONGINT, heap);
@@ -986,6 +1009,57 @@ BEGIN
   eh6.pt[ 15]:= 0;
 END MkELF64hdr;
 
+  (* polpo: the image from heapAdr to end in the byte order of a target that differs from the host's *)
+  PROCEDURE SwapImage(end: LONGINT);
+    VAR kind: POINTER TO ARRAY OF CHAR; i, k, n, a: LONGINT; b: ARRAY 4 OF CHAR;
+  BEGIN
+    n := (end - heapAdr) DIV 4; NEW(kind, n);
+    i := 0; WHILE i < n DO kind[i] := 0X; INC(i) END;
+    i := 0;
+    WHILE i < rawx DO  (* the regions start at word boundaries; their last word is padded *)
+      IF rawLen[i] > 0 THEN
+        k := (rawAdr[i] - heapAdr) DIV 4;
+        WHILE (k < n) & (k*4 < rawAdr[i] + rawLen[i] - heapAdr) DO kind[k] := 1X; INC(k) END
+      END;
+      INC(i)
+    END;
+    i := 0;
+    WHILE i < halfx DO k := (halfAdr[i] - heapAdr) DIV 4; IF k < n THEN kind[k] := 2X END; INC(i) END;
+    i := 0; a := heapAdr;
+    WHILE i < n DO
+      IF kind[i] = 0X THEN
+        S.GET(a, b[0]); S.GET(a+1, b[1]); S.GET(a+2, b[2]); S.GET(a+3, b[3]);
+        S.PUT(a, b[3]); S.PUT(a+1, b[2]); S.PUT(a+2, b[1]); S.PUT(a+3, b[0])
+      ELSIF kind[i] = 2X THEN
+        S.GET(a, b[0]); S.GET(a+1, b[1]); S.GET(a+2, b[2]); S.GET(a+3, b[3]);
+        S.PUT(a, b[1]); S.PUT(a+1, b[0]); S.PUT(a+2, b[3]); S.PUT(a+3, b[2])
+      END;
+      INC(i); INC(a, 4)
+    END
+  END SwapImage;
+
+  PROCEDURE Swap4(adr: LONGINT);
+    VAR b: ARRAY 4 OF CHAR;
+  BEGIN
+    S.GET(adr, b[0]); S.GET(adr+1, b[1]); S.GET(adr+2, b[2]); S.GET(adr+3, b[3]);
+    S.PUT(adr, b[3]); S.PUT(adr+1, b[2]); S.PUT(adr+2, b[1]); S.PUT(adr+3, b[0])
+  END Swap4;
+
+  PROCEDURE Swap2(adr: LONGINT);
+    VAR b0, b1: CHAR;
+  BEGIN S.GET(adr, b0); S.GET(adr+1, b1); S.PUT(adr, b1); S.PUT(adr+1, b0)
+  END Swap2;
+
+  PROCEDURE SwapELF32;  (* the fields of eh3 in the other byte order *)
+    VAR i: LONGINT;
+  BEGIN
+    Swap2(S.ADR(eh3.eType)); Swap2(S.ADR(eh3.eMachine));
+    Swap4(S.ADR(eh3.eVersion)); Swap4(S.ADR(eh3.eEntry)); Swap4(S.ADR(eh3.ePhoff)); Swap4(S.ADR(eh3.eShoff)); Swap4(S.ADR(eh3.eFlags));
+    Swap2(S.ADR(eh3.eEhsize)); Swap2(S.ADR(eh3.ePhentsize)); Swap2(S.ADR(eh3.ePhnum));
+    Swap2(S.ADR(eh3.eShentsize)); Swap2(S.ADR(eh3.eShnum)); Swap2(S.ADR(eh3.eShstrndx));
+    i := 0; WHILE i < LEN(eh3.pt) DO Swap4(S.ADR(eh3.pt[i])); INC(i) END
+  END SwapELF32;
+
   PROCEDURE Out(VAR bootName: ARRAY OF CHAR);
     VAR end, of, r0: LONGINT;
       m: Module;  
@@ -1008,10 +1082,11 @@ END MkELF64hdr;
     Texts.WriteLn(W);
   (* output heap *)
     RelocatePtr;
+    IF (arch = MIPSBE) # hostBig THEN SwapImage(end) END;
 
   (* create bootfile with correct permissions and copy data *)
     of:= Linux0.Openat0( Linux0.ATFDCWD, S.ADR(bootName[0]), Linux0.ORDWR+Linux0.OCREAT+Linux0.OTRUNC, 1EDH);  (* mode = octal 755 *)
-    Texts.WriteString(W, " little endian heap: "); Texts.WriteInt(W, end - heapAdr, 0); Texts.WriteString(W, "  file: ");
+    IF arch = MIPSBE THEN Texts.WriteString(W, " big endian heap: ") ELSE Texts.WriteString(W, " little endian heap: ") END; Texts.WriteInt(W, end - heapAdr, 0); Texts.WriteString(W, "  file: ");
     IF b64 THEN
       (* MIPS: see https://dmz-portal.mips.com/wiki/MIPS_ELF_header_definitions ; 200H= 64 bit FP *)
       IF arch=MIPS THEN MkELF64hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF64HDR), 80000000H, 8);
@@ -1024,7 +1099,9 @@ END MkELF64hdr;
       Texts.WriteInt(W, end - heapAdr+SIZE(ELF64HDR), 0);
     ELSE
       (* ARMv7: eMachine:= 40 *)
-      IF arch=MIPS THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 70000000H, 8);
+      IF (arch=MIPS) OR (arch=MIPSBE) THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 70000000H, 8);
+        IF arch=MIPSBE THEN eh3.eIdent[ 5]:= 2X END;  (* EI_DATA= ELFDATA2MSB *)
+        IF (arch=MIPSBE) # hostBig THEN SwapELF32 END;
       ELSIF arch=RISCV THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 0, 243);
       ELSIF arch=ARMv7 THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 5000402H, 40);
       ELSE Texts.WriteString(W, "32 bit target not supported ");
@@ -1060,6 +1137,7 @@ END MkELF64hdr;
     Con.String("  /e       show module body addresses"); Con.Ln;
     Con.String("  /v       RISC-V (obj/riscv/)"); Con.Ln;
     Con.String("  /m       MIPS (obj/mips/)"); Con.Ln;
+    Con.String("  /b       MIPS big-endian (obj/mipsbe/)"); Con.Ln;
     Con.String("  /a       ARMv7 (obj/armv7/)"); Con.Ln;
     Con.String("Without /v, /m, /a the target is the host architecture."); Con.Ln;
     Con.String("  /Pdir/   object file directory"); Con.Ln
@@ -1069,13 +1147,14 @@ END MkELF64hdr;
     VAR bootName: Name; s: Texts.Scanner; m: Module; pos: LONGINT; i: INTEGER; dirSet: BOOLEAN;
   BEGIN
     pos := Oberon.Log.len; b64 := FALSE; showEntries := FALSE;
-    IF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
+    IF Linux0.ARCH = "MIPSBE" THEN arch := MIPSBE ELSIF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
     dirSet := FALSE; bootName[0] := 0X;
     Texts.OpenScanner(s, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(s);
     WHILE (s.class = Texts.Name) & ((s.s[0] = "/") OR (s.s[0] = "\")) DO
       IF s.s[1] = "e" THEN showEntries := TRUE
       ELSIF s.s[1] = "v" THEN arch := RISCV
       ELSIF s.s[1] = "m" THEN arch := MIPS
+      ELSIF s.s[1] = "b" THEN arch := MIPSBE
       ELSIF s.s[1] = "a" THEN arch := ARMv7
       ELSIF s.s[1] = "P" THEN
         i := 2; WHILE (s.s[i] # 0X) & (i-2 < LEN(dir)-1) DO dir[i-2] := s.s[i]; INC(i) END;
@@ -1086,6 +1165,7 @@ END MkELF64hdr;
     END;
     IF ~dirSet THEN
       IF arch = MIPS THEN Root.Obj("mips", dir)
+      ELSIF arch = MIPSBE THEN Root.Obj("mipsbe", dir)
       ELSIF arch = ARMv7 THEN Root.Obj("armv7", dir)
       ELSE Root.Obj("riscv", dir)
       END
@@ -1123,6 +1203,9 @@ BEGIN
   archs[ ARMv7]:="armv7"; tags[ARMv7]:= 36FBH;
   archs[ ARMv8]:="armv8"; tags[ ARMv8]:= 36FCH (*36FBH *);
   archs[ TEST]:= "mipst"; tags[TEST]:= 36FAH;
+  archs[ MIPSBE]:= "mipsbe"; tags[MIPSBE]:= 36F8H;
+  rawx := 0; halfx := 0;
+  tags[0] := 1; S.GET(S.ADR(tags[0]), modeStr[0][0]); hostBig := modeStr[0][0] = 0X; tags[0] := 0;
 END rlinker.
 
 MIPSBootLinker.Link [heapAdr] bootFileName := modName0 modName1 ... ~
