@@ -623,7 +623,7 @@ END FindMod;
       f.adr:=Linux0.Mmap20( 0, f.length, 1, Linux0.MAPPRIVATE, f.fd,  0);  (* PROT_READ=1 PROT_WRITE=2; MAP_SHARED=1, MAP_PRIVATE=2 *)
       IF f.adr MOD 1000H#0 THEN  Kernel.WriteString("Modules.Load f.adr= "); Kernel.WriteHex( f.adr, 8); Kernel.WriteLn END;
       f.adrpos:=f.adr;
-      S.GET(f.adrpos, tag); INC(f.adrpos, 2);
+      GetInt(f, tag);  (* polpo: bytewise, little endian, on big-endian machines too *)
       IF tag = Linux0.ObjTag THEN LoadModule(f, m);
       ELSE COPY(fname, importing); res := invalidObjFile; ErrMsg(res);
       END;
