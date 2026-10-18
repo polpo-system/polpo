@@ -44,6 +44,7 @@ compiler-arm 0.1.0
 compiler-rop2 0.1.0
 compiler-riscv 0.1.0
 compiler-mips 0.1.0
+compiler-ppc 0.1.0
 compiler-armv7 0.1.0
 desktop-base 0.1.0
 display-x11 0.1.0
