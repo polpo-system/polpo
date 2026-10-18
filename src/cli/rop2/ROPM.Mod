@@ -237,9 +237,12 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
   END FPrintReal;
 
   PROCEDURE FPrintLReal*(VAR fp: LONGINT; lr: LONGREAL);
-    VAR l, h: LONGINT;
+    VAR l, h: LONGINT; c: CHAR;
   BEGIN
-    SYSTEM.GET(SYSTEM.ADR(lr), l); SYSTEM.GET(SYSTEM.ADR(lr)+4, h);
+    l := 1; SYSTEM.GET(SYSTEM.ADR(l), c);  (* polpo: the same fingerprint on hosts of either byte order *)
+    IF c = 0X THEN SYSTEM.GET(SYSTEM.ADR(lr), h); SYSTEM.GET(SYSTEM.ADR(lr)+4, l)
+    ELSE SYSTEM.GET(SYSTEM.ADR(lr), l); SYSTEM.GET(SYSTEM.ADR(lr)+4, h)
+    END;
     FPrint(fp, l); FPrint(fp, h)
   END FPrintLReal;
 
