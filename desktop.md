@@ -75,6 +75,10 @@ directories (Edit.Open src/desk becomes src/desktop/; ~ is not known there). Whe
 names fit, what they have in common is added and System.Log lists them. Tab inside a word, after a
 blank or after a word that is already complete inserts a tab, as before.
 
+Enter right after Tab completed a command (Desktops.Op, Tab, Enter) runs it, as a middle click
+on it would. After a completion that leaves several choices, or a file name, Enter starts a new
+line.
+
 ## Opening, storing and closing texts
 
 Edit.Open name opens a text in the user track; a middle click with the right button on a name does
