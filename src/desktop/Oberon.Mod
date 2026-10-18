@@ -7,7 +7,7 @@ MODULE Oberon;  (** portable, except where noted *) (*JG 22.7.94*)
 scheduling of tasks, cursor handling and command execution.
 *)
 
-  IMPORT Kernel, Modules, Display, Input, Objects, Viewers, Fonts, Texts, Files, Oberon0;
+  IMPORT Kernel, Modules, Display, Input, Objects, Viewers, Fonts, Texts, Files, Oberon0, In;
 
   CONST
 
@@ -651,6 +651,7 @@ BEGIN
   Oberon0.SetOptionChar("\"); OptionChar := Oberon0.OptionChar;
   Oberon0.SetParHook(SyncPar);
   Log := Oberon0.Log; OpenText := NIL; CurTask := NIL;
+  In.selection := GetSelection; In.marked := MarkedText;  (* polpo: ^ and * for In *)
   idle := FALSE; paused := 0; resume := FALSE; Input.Pause := Pause;  (* polpo: Ctrl+Alt+P; commands run before Loop (System.InitCommands) are not idle *)
   Arrow.Fade := FlipArrow; Arrow.Draw := FlipArrow;
   Star.Fade := FlipStar; Star.Draw := FlipStar;
