@@ -1,11 +1,11 @@
-MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V, ARMv7 *)
+MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V, ARMv7, PowerPC *)
 (* after RCompiler (ROP2), RC 6.3.89 / 17.6.93, p.m. 2017-06-12 *)
   IMPORT
     OPM := ROPM, OPT := ROPT, OPP := ROPP, Modules, Linux0, Root,
     Texts := texts, Oberon := Oberon0, Out := out;
 
   CONST
-    mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX; mipsbetag* = 0F8X;
+    mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX; mipsbetag* = 0F8X; ppctag* = 0F7X;
     (* compiler options *)
     inxchk = 0; ovflchk = 1; ranchk = 2; typchk = 3; newsf = 4; ptrinit = 5;
     intprinf = 6; assert = 7; findpc = 8; extsf = 9; softdiv = 10; bigend = 11;
@@ -111,12 +111,13 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
   BEGIN
     Out.String("USAGE:"); Out.Ln;
     Out.String("  rcompiler.Compile [/v | /m | /a] [options] file1.Mod [file2.Mod ...]"); Out.Ln;
-    Out.String("  (mcompiler.Compile, rvcompiler.Compile: MIPS, RISC-V)"); Out.Ln;
+    Out.String("  (mcompiler.Compile, rvcompiler.Compile, pcompiler.Compile: MIPS, RISC-V, PowerPC)"); Out.Ln;
     Out.Ln;
     Out.String("Target (default: the host architecture):"); Out.Ln;
     Out.String("  /v       RISC-V, obj/riscv/"); Out.Ln;
     Out.String("  /m       MIPS, obj/mips/"); Out.Ln;
     Out.String("  /a       ARMv7, obj/armv7/"); Out.Ln;
+    Out.String("  /w       PowerPC (32-bit), obj/ppc/"); Out.Ln;
     Out.Ln;
     Out.String("Options (prefix with / or \, each toggles its default):"); Out.Ln;
     Out.String("  /x       index checks (on)"); Out.Ln;
@@ -140,21 +141,22 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     COPY(name, target); COPY(backendMod, backend); Root.Obj(arch, dir); tag := objTag;
     (* ARMv7: software division by default, Cortex-A8 and A9 have no divide instruction *)
     IF name = "ARMv7" THEN targetopt := {softdiv}
-    ELSIF name = "MIPSBE" THEN targetopt := {bigend}  (* polpo: MIPS, big-endian *)
+    ELSIF (name = "MIPSBE") OR (name = "PPC") THEN targetopt := {bigend}  (* polpo: big-endian *)
     ELSE targetopt := {}
     END
   END SetTarget;
 
   PROCEDURE SetHostTarget;
   BEGIN
-    IF Linux0.ARCH = "MIPSBE" THEN SetTarget("MIPSBE", "MOPV", "mipsbe", mipsbetag)
+    IF Linux0.ARCH = "PPC" THEN SetTarget("PPC", "POPV", "ppc", ppctag)
+    ELSIF Linux0.ARCH = "MIPSBE" THEN SetTarget("MIPSBE", "MOPV", "mipsbe", mipsbetag)
     ELSIF Linux0.ARCH = "MIPS" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)
     ELSIF Linux0.ARCH = "ARMv7" THEN SetTarget("ARMv7", "AOPV", "armv7", armv7tag)
     ELSE SetTarget("RISC-V", "VOPV", "riscv", riscvtag)
     END
   END SetHostTarget;
 
-  (** Compile with the target selected by SetTarget (or options /v, /m, /a). *)
+  (** Compile with the target selected by SetTarget (or options /v, /m, /a, /w). *)
   PROCEDURE CompileTarget*;
     VAR
       S: Texts.Scanner;
@@ -173,6 +175,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       ELSIF name = "/v" THEN SetTarget("RISC-V", "VOPV", "riscv", riscvtag)
       ELSIF name = "/m" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)
       ELSIF name = "/a" THEN SetTarget("ARMv7", "AOPV", "armv7", armv7tag)
+      ELSIF name = "/w" THEN SetTarget("PPC", "POPV", "ppc", ppctag)
       ELSIF ((name[0] = "/") OR (name[0] = "\")) & (name[1] = "P") THEN
         i := 2; WHILE (name[i] # 0X) & (i-2 < LEN(dir)-1) DO dir[i-2] := name[i]; INC(i) END;
         dir[i-2] := 0X
@@ -189,7 +192,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     END
   END CompileTarget;
 
-  (** Compile for the host architecture unless /v, /m or /a is given. *)
+  (** Compile for the host architecture unless /v, /m, /a or /w is given. *)
   PROCEDURE Compile*;
   BEGIN
     SetHostTarget; CompileTarget
