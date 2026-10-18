@@ -289,6 +289,9 @@ VAR
   xaProtocols, xaDelete: LONGINT;  (* the atoms WM_PROTOCOLS, WM_DELETE_WINDOW *)
   Send: PROCEDURE (id, x, y, w, h, dx, dy: LONGINT);  (* SendX11 or SendX11SHM *)
   kmsFb: LONGINT;  (* polpo: the KMS framebuffer id, for DIRTYFB *)
+  bigEndian: BOOLEAN;  (* polpo: the machine keeps the most significant byte first *)
+  swapPix: BOOLEAN;  (* polpo: the X server reads pixels in the other byte order: SendX11 swaps them *)
+  swbuf: POINTER TO ARRAY OF CHAR;  (* the swapped rows *)
 
 (* common OLR  *)
   PutImage*: PROCEDURE( x, y, w, h: LONGINT);  (* argument are in X11 display pixel, not oberon! *)
@@ -351,6 +354,71 @@ END Str2Int;
 PROCEDURE PutImageFB( x, y, w, h: LONGINT);
 END PutImageFB;
 
+(** polpo: the X11 connection uses the byte order of the machine ("l" or "B" at the setup), so the
+  fields packed into the words of requests and replies are put together and taken apart in that
+  order: on little-endian machines exactly as before *)
+PROCEDURE Req*(op, data, len: LONGINT): LONGINT;  (** the first word of a request: the opcode, a byte, the length in words *)
+BEGIN
+  IF bigEndian THEN RETURN SYSTEM.LSH(op, 24) + SYSTEM.LSH(data MOD 100H, 16) + len MOD 10000H
+  ELSE RETURN op + data*100H + len*10000H
+  END
+END Req;
+
+PROCEDURE Pair*(a, b: LONGINT): LONGINT;  (** two 16-bit fields in a word, a at the lower address *)
+BEGIN
+  IF bigEndian THEN RETURN SYSTEM.LSH(a, 16) + b MOD 10000H ELSE RETURN a + b*10000H END
+END Pair;
+
+PROCEDURE Bytes*(a, b, c, d: LONGINT): LONGINT;  (** four bytes in a word, a at the lowest address *)
+BEGIN
+  IF bigEndian THEN RETURN SYSTEM.LSH(a, 24) + SYSTEM.LSH(b MOD 100H, 16) + SYSTEM.LSH(c MOD 100H, 8) + d MOD 100H
+  ELSE RETURN a MOD 100H + SYSTEM.LSH(b MOD 100H, 8) + SYSTEM.LSH(c MOD 100H, 16) + SYSTEM.LSH(d, 24)
+  END
+END Bytes;
+
+PROCEDURE First*(w: LONGINT): LONGINT;  (** the 16-bit field at the lower address of a word *)
+BEGIN
+  IF bigEndian THEN RETURN SYSTEM.LSH(w, -16) MOD 10000H ELSE RETURN w MOD 10000H END
+END First;
+
+PROCEDURE Second*(w: LONGINT): LONGINT;  (** the 16-bit field at the higher address of a word *)
+BEGIN
+  IF bigEndian THEN RETURN w MOD 10000H ELSE RETURN SYSTEM.LSH(w, -16) MOD 10000H END
+END Second;
+
+PROCEDURE Put16(VAR s: ARRAY OF CHAR; i, v: LONGINT);  (* the 16-bit field v at s[i], s[i+1] *)
+BEGIN
+  IF bigEndian THEN s[i]:= CHR(v DIV 100H MOD 100H); s[i+1]:= CHR(v MOD 100H)
+  ELSE s[i]:= CHR(v MOD 100H); s[i+1]:= CHR(v DIV 100H MOD 100H)
+  END
+END Put16;
+
+PROCEDURE ByteOf*(w, n: LONGINT): LONGINT;  (** byte n of a word, 0 at the lowest address *)
+BEGIN
+  IF bigEndian THEN RETURN SYSTEM.LSH(w, -8*(3-n)) MOD 100H ELSE RETURN SYSTEM.LSH(w, -8*n) MOD 100H END
+END ByteOf;
+
+(* polpo: n rows of w pixels from adr (rows Width*bytes apart) into swbuf, wl bytes apart, each pixel
+   in the other byte order *)
+PROCEDURE SwapRows(adr, n, wl, w: LONGINT);
+VAR r, i, src, dst: LONGINT; c0, c1, c2, c3: CHAR;
+BEGIN
+  r:=0;
+  WHILE r<n DO
+    src:=adr+r*Width*bytes; dst:=SYSTEM.ADR(swbuf[0])+r*wl; i:=0;
+    IF bytes=2 THEN
+      WHILE i<w DO SYSTEM.GET(src, c0); SYSTEM.GET(src+1, c1); SYSTEM.PUT(dst, c1); SYSTEM.PUT(dst+1, c0); INC(src, 2); INC(dst, 2); INC(i) END
+    ELSE
+      WHILE i<w*(bytes DIV 4) DO
+        SYSTEM.GET(src, c0); SYSTEM.GET(src+1, c1); SYSTEM.GET(src+2, c2); SYSTEM.GET(src+3, c3);
+        SYSTEM.PUT(dst, c3); SYSTEM.PUT(dst+1, c2); SYSTEM.PUT(dst+2, c1); SYSTEM.PUT(dst+3, c0);
+        INC(src, 4); INC(dst, 4); INC(i)
+      END
+    END;
+    INC(r)
+  END
+END SwapRows;
+
 (* polpo: Send copies the area x, y, w, h of the buffer (in X11 pixels, from the bottom left of the
    screen; y < 0 below it) to dx, dy (from the top left) of the X11 window id *)
 PROCEDURE SendX11(id, x, y, w, h, dx, dy: LONGINT);
@@ -368,17 +436,19 @@ BEGIN
     adr:=fbadr+ (x+y*Width)*bytes;
     WHILE h>0 DO
       band:=h; IF band>rows THEN band:=rows END;
-      b[ 0]:= 72+2*100H;    (* BIG-REQUESTS *)
+      IF swapPix THEN SwapRows(adr, band, wl, w) END;
+      b[ 0]:= Req(72, 2, 0);    (* PutImage ZPixmap, BIG-REQUESTS: length 0, then the length *)
       b[ 1]:= band*wl DIV 4+7;
       b[ 2]:= id;
       b[ 3]:= gcid;
-      b[ 4]:= w+band*10000H;
-      b[ 5]:= dx+dy*10000H;
-      b[ 6]:= 0+ORD( scn.rdepth)*100H;
+      b[ 4]:= Pair(w, band);
+      b[ 5]:= Pair(dx, dy);
+      b[ 6]:= Bytes(0, ORD( scn.rdepth), 0, 0);
       xrv[0]:= SYSTEM.ADR(b); xrv[1]:=28;
       j:=2; i:=0;
       REPEAT
-        xrv[j]:= adr; INC(adr, Width*bytes);
+        IF swapPix THEN xrv[j]:= SYSTEM.ADR(swbuf[0])+i*wl ELSE xrv[j]:= adr END;
+        INC(adr, Width*bytes);
         xrv[j+1]:= wl; INC(j, 2);
         INC(i);
         IF j=2*maxv THEN res:=Linux0.Writev0( xfd, SYSTEM.ADR(xrv[0]), maxv); j:=0 END;
@@ -393,14 +463,14 @@ PROCEDURE SendX11SHM(id, x, y, w, h, dx, dy: LONGINT);
 VAR res: LONGINT;  b: ARRAY 10 OF LONGINT;
 BEGIN
   IF (w>0) & (h>0) THEN
-    b[ 0]:= ShmReqCode+3*100H+10*10000H;  (* XShmPutImage = 3 *)
+    b[ 0]:= Req(ShmReqCode, 3, 10);  (* XShmPutImage = 3 *)
     b[ 1]:= id;
     b[ 2]:= gcid;
-    b[ 3]:= Width*Zoom+(Height-winBottom)*Zoom*10000H;  (* total w h*)
-    b[ 4]:= (x+(Height*Zoom-h-y)*10000H);  (* src x y *)
-    b[ 5]:= (w+h*10000H);  (* src w h *)
-    b[ 6]:= dx+dy*10000H;  (* dst x y *)
-    b[ 7]:= ORD(scn.rdepth)+2 (* ZPixmap=2 *)*100H ;    (* depth, format, sendevent, bpad *) 
+    b[ 3]:= Pair(Width*Zoom, (Height-winBottom)*Zoom);  (* total w h*)
+    b[ 4]:= Pair(x, Height*Zoom-h-y);  (* src x y *)
+    b[ 5]:= Pair(w, h);  (* src w h *)
+    b[ 6]:= Pair(dx, dy);  (* dst x y *)
+    b[ 7]:= Bytes(ORD(scn.rdepth), 2 (* ZPixmap=2 *), 0, 0);    (* depth, format, sendevent, bpad *) 
     b[ 8]:= shmseg;    (* shmseg *)
     b[ 9]:= 0H;    (* offset *)
     res:=Linux0.Write0( xfd, SYSTEM.ADR(b), 40);
@@ -1306,17 +1376,17 @@ PROCEDURE QueryExtensionX11( name: ARRAY OF CHAR; VAR opcode: LONGINT);
 VAR xr: ARRAY 32 OF CHAR; i, res:LONGINT; b: ARRAY 8 OF LONGINT;
 BEGIN;
   xr[0]:= 62X; xr[1]:= 0X;  (* 62X=98D *)
-  xr[2]:= CHR((LEN( name)+2) DIV 4+2); xr[3]:= 0X;
-  xr[4]:= CHR(LEN( name)-1); xr[5]:= 0X;
+  Put16(xr, 2, (LEN( name)+2) DIV 4+2);
+  Put16(xr, 4, LEN( name)-1);
   xr[6]:= 0X; xr[7]:= 0X;
   i:=0;
   REPEAT
     xr[8+i]:= name[i];
     INC(i);
   UNTIL i=LEN(name);
-  res:=Linux0.Write0( xfd, SYSTEM.ADR(xr), ORD(xr[2])*4);
+  res:=Linux0.Write0( xfd, SYSTEM.ADR(xr), ((LEN( name)+2) DIV 4+2)*4);
   res:=Linux0.Read0( xfd, SYSTEM.ADR(b), 32);
-  opcode:= b[2] DIV 256 MOD 256;
+  opcode:= ByteOf(b[2], 1);  (* major-opcode *)
   IF TRUE THEN
     Kernel.WriteHex(opcode, 8); Kernel.WriteString( " "); Kernel.WriteString( name);
     IF opcode=0 THEN WriteString( " failed");
@@ -1331,13 +1401,13 @@ VAR xr: ARRAY 64 OF CHAR; n, i, len, res: LONGINT; b: ARRAY 8 OF LONGINT;
 BEGIN
   n:=0; WHILE (n<LEN(name)) & (name[n]#0X) DO INC(n) END;
   len:=2+(n+3) DIV 4;
-  xr[0]:=10X; xr[1]:=0X; xr[2]:=CHR(len); xr[3]:=0X;  (* InternAtom = 16, only-if-exists FALSE *)
-  xr[4]:=CHR(n); xr[5]:=0X; xr[6]:=0X; xr[7]:=0X;
+  xr[0]:=10X; xr[1]:=0X; Put16(xr, 2, len);  (* InternAtom = 16, only-if-exists FALSE *)
+  Put16(xr, 4, n); xr[6]:=0X; xr[7]:=0X;
   i:=0; WHILE i<n DO xr[8+i]:=name[i]; INC(i) END;
   WHILE 8+i<len*4 DO xr[8+i]:=0X; INC(i) END;
   res:=Linux0.Write0(xfd, SYSTEM.ADR(xr), len*4);
   res:=Linux0.Read0(xfd, SYSTEM.ADR(b), 32);
-  IF b[0] MOD 100H=1 THEN RETURN b[2] ELSE RETURN 0 END
+  IF ByteOf(b[0], 0)=1 THEN RETURN b[2] ELSE RETURN 0 END
 END InternAtomX11;
 
 PROCEDURE OpenWindowX11;
@@ -1351,7 +1421,7 @@ BEGIN
   QueryExtensionX11("BIG-REQUESTS", BigReqCode);
   BigReqSize:=65535;
   IF BigReqCode#0 THEN
-    b[ 0]:= BigReqCode+0*100H+1*10000H;
+    b[ 0]:= Req(BigReqCode, 0, 1);
     res:=Linux0.Write0( xfd, SYSTEM.ADR(b), 4);
     res:=Linux0.Read0( xfd, SYSTEM.ADR(b), 32);
     BigReqSize:=b[2];  (* maximum request length, after OLR 2017 *)
@@ -1361,27 +1431,27 @@ BEGIN
   winBottom:=-Height;  (* polpo: the area of the windows of their own *)
 
 (* needed create win for cursor pixmap *)
-  b[ 0]:= 1+0*100H+8*10000H;
+  b[ 0]:= Req(1, 0, 8);
   b[ 1]:= iwid;
   b[ 2]:= scn.root;
-  b[ 3]:= 0+0*10000H;
-  b[ 4]:= 1+1*10000H;
-  b[ 5]:= 0+2*10000H;
+  b[ 3]:= Pair(0, 0);
+  b[ 4]:= Pair(1, 1);
+  b[ 5]:= Pair(0, 2);
   b[ 6]:= 0;
   b[ 7]:= 0;
   res:=Linux0.Write0(  xfd, SYSTEM.ADR(b), 32);
   X11Err(1);
 
 (* needed create pixmap for cursor *)
-  b[ 0]:=53+ 1*100H+4*10000H;
+  b[ 0]:= Req(53, 1, 4);
   b[ 1]:= pid;
   b[ 2]:= iwid;
-  b[ 3]:= 1+1*10000H;
+  b[ 3]:= Pair(1, 1);
   res:=Linux0.Write0( xfd, SYSTEM.ADR(b), 16);
   X11Err(2);
 (*
 (* create gc for cursor pixmap *)
-  b[ 0]:= 55+4*10000H;
+  b[ 0]:= Req(55, 0, 4);
   b[ 1]:= gcpid;
   b[ 2]:= iwid;
   b[ 3]:= 0;
@@ -1389,15 +1459,15 @@ BEGIN
   WriteSH("create gc ", res);
 
 (* ClearArea, draw cursor *)
-  b[ 0]:= 61+4*10000H;
+  b[ 0]:= Req(61, 0, 4);
   b[ 1]:= iwid;
-  b[ 2]:= 0+0*10000H;
-  b[ 3]:= 1+1*10000H;
+  b[ 2]:= Pair(0, 0);
+  b[ 3]:= Pair(1, 1);
   res:=Linux0.Write0( xfd, SYSTEM.ADR(b), 16);
   WriteSH("create dc ", res);
 *)
 (* needed create cursor *)
-  b[ 0]:= 93+8*10000H;
+  b[ 0]:= Req(93, 0, 8);
   b[ 1]:= cid;
   b[ 2]:= pid;
   b[ 3]:= pid;
@@ -1409,12 +1479,12 @@ BEGIN
   X11Err(3);
 
 (* CreateWindow *)
-  b[ 0]:= 1+ORD(scn.rdepth)*100H+10*10000H;
+  b[ 0]:= Req(1, ORD(scn.rdepth), 10);
   b[ 1]:= wid;
   b[ 2]:= scn.root;
   b[ 3]:= 0;  (* x+y*10000H;*)
-  b[ 4]:= (Width+LONG(Height)*10000H)*Zoom;
-  b[ 5]:= 1+0*10000H;
+  b[ 4]:= Pair(Width*Zoom, LONG(Height)*Zoom);
+  b[ 5]:= Pair(1, 0);  (* border 1, class CopyFromParent *)
   b[ 6]:= 0;      (*visual, was 0*)
   b[ 7]:= 4800H;  (* value-mask: was 4800H, Cursor=4000H, Event Mask=800H ToDo: AddBackgroundPixmap??*)
 (*  b[ 8]:= 40804FH;  (* was 804FH  todo: EventMask *)*)
@@ -1424,11 +1494,11 @@ BEGIN
   X11Err(4);
 
 (* ChangeProperty name Window *)
-  b[ 0]:= 18+0*100H+13*10000H;
+  b[ 0]:= Req(18, 0, 13);
   b[ 1]:= wid;
   b[ 2]:= 39;  (* WM_NAME *)
   b[ 3]:= 31;  (* String *)
-  b[ 4]:= 8;
+  b[ 4]:= Bytes(8, 0, 0, 0);  (* format *)
   b[ 5]:= 25;
   SYSTEM.MOVE( SYSTEM.ADR( Kernel.version), SYSTEM.ADR(b[ 6]), 19);
   SYSTEM.MOVE( SYSTEM.ADR( Linux0.ARCH), SYSTEM.ADR(b[ 10])+3, 6);
@@ -1445,11 +1515,11 @@ BEGIN
   X11Err(5);
 
 (* Change Property disable resize *)
-  b[ 0]:= 18+0*100H+24*10000H;
+  b[ 0]:= Req(18, 0, 24);
   b[ 1]:= wid;
   b[ 2]:= 40;  (* WM_Normal_Hints=40 *)
   b[ 3]:= 41;  (* WM_SIZE_Hints=41 *)
-  b[ 4]:= 32;
+  b[ 4]:= Bytes(32, 0, 0, 0);  (* format *)
   b[ 5]:= 18;
   b[ 6]:= 038H; (* location, programm specified size, minsize, maxsize *)
   b[ 7]:= 0;  (* b[7]..b[ 10] is ignored *)
@@ -1473,7 +1543,7 @@ BEGIN
   X11Err(6);
 
 (* CreateGC *)
-  b[ 0]:= 55+4*10000H;
+  b[ 0]:= Req(55, 0, 4);
   b[ 1]:= gcid;
   b[ 2]:= wid;
   b[ 3]:= 0;
@@ -1482,12 +1552,13 @@ BEGIN
 
 (* use MIT-SHM if available *)
   Kernel.GetConfig("OSHM", str);
-  IF (str#"NO") & ( tcp=0) THEN QueryExtensionX11("MIT-SHM", ShmReqCode) END;
+  swapPix:= (r1data.imgbyteorder=1X) # bigEndian;  (* polpo: MSBFirst = 1 *)
+  IF (str#"NO") & ( tcp=0) & ~swapPix THEN QueryExtensionX11("MIT-SHM", ShmReqCode) END;
   IF ShmReqCode#0 THEN
     shmid:= Linux0.Shmget0( 0, (Height-winBottom)* Width*bytes*Zoom, 3FFH);
     fbadr:= Linux0.Shmat0(shmid, 0, 0);  
     IF trace THEN WriteSH("shmid= ",  shmid); WriteSH("fbadr= ",  fbadr) END;
-    b[ 0]:= ShmReqCode+1*100H+4*10000H;  (* X_ShmAttach = 1 *)
+    b[ 0]:= Req(ShmReqCode, 1, 4);  (* X_ShmAttach = 1 *)
     b[ 1]:= shmseg; (*ShmSeg;*)
     b[ 2]:= shmid;
     b[ 3]:= 0;
@@ -1497,6 +1568,7 @@ BEGIN
   ELSE
     NEW( xrv, (Height+1)*2);
     NEW( fbuf, (Height-winBottom)* LONG(Width)*bytes*Zoom);  (* rows are linelength*Zoom apart, as with MIT-SHM *)
+    IF swapPix THEN NEW( swbuf, (Height-winBottom)* LONG(Width)*bytes*Zoom) END;
     fbadr:=SYSTEM.ADR( fbuf[0]);
     Send:=SendX11;
   END;
@@ -1511,7 +1583,7 @@ PROCEDURE ShowMain*;
 VAR b: ARRAY 2 OF LONGINT; res: LONGINT;
 BEGIN
   IF winBottom#0 THEN
-    b[ 0]:= 8+2*10000H;  (* MapWindow, it generates an Expose event *)
+    b[ 0]:= Req(8, 0, 2);  (* MapWindow, it generates an Expose event *)
     b[ 1]:= wid;
     res:=Linux0.Write0( xfd, SYSTEM.ADR(b),  8)
   END
@@ -1545,26 +1617,26 @@ BEGIN
   id:=r1data.ridbase+12000H+n;
   win[n].x:=0; win[n].y:=top-H; win[n].w:=W; win[n].h:=H; win[n].close:=FALSE; win[n].id:=id;
   (* CreateWindow, with the events of the main window and the cursor of the screen *)
-  b[0]:=1+ORD(scn.rdepth)*100H+9*10000H; b[1]:=id; b[2]:=scn.root; b[3]:=0;
-  b[4]:=(W+LONG(H)*10000H)*Zoom; b[5]:=1; b[6]:=0; b[7]:=800H; b[8]:=0804FH;
+  b[0]:=Req(1, ORD(scn.rdepth), 9); b[1]:=id; b[2]:=scn.root; b[3]:=0;
+  b[4]:=Pair(W*Zoom, LONG(H)*Zoom); b[5]:=Pair(1, 0); b[6]:=0; b[7]:=800H; b[8]:=0804FH;
   res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 36);
   (* WM_NAME *)
   len:=0; WHILE (len<LEN(title)) & (title[len]#0X) & (len<200) DO INC(len) END;
   i:=6; WHILE i<6+(len+3) DIV 4 DO b[i]:=0; INC(i) END;
-  b[0]:=18+(6+(len+3) DIV 4)*10000H; b[1]:=id; b[2]:=39; b[3]:=31; b[4]:=8; b[5]:=len;
+  b[0]:=Req(18, 0, 6+(len+3) DIV 4); b[1]:=id; b[2]:=39; b[3]:=31; b[4]:=Bytes(8, 0, 0, 0); b[5]:=len;
   SYSTEM.MOVE(SYSTEM.ADR(title), SYSTEM.ADR(b[6]), len);
   res:=Linux0.Write0(xfd, SYSTEM.ADR(b), (6+(len+3) DIV 4)*4);
   (* WM_NORMAL_HINTS: the size is fixed *)
   i:=0; WHILE i<24 DO b[i]:=0; INC(i) END;
-  b[0]:=18+24*10000H; b[1]:=id; b[2]:=40; b[3]:=41; b[4]:=32; b[5]:=18;
+  b[0]:=Req(18, 0, 24); b[1]:=id; b[2]:=40; b[3]:=41; b[4]:=Bytes(32, 0, 0, 0); b[5]:=18;
   b[6]:=038H; b[9]:=W*Zoom; b[10]:=H*Zoom; b[11]:=b[9]; b[12]:=b[10]; b[13]:=b[9]; b[14]:=b[10];
   res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 96);
   (* WM_PROTOCOLS: WM_DELETE_WINDOW, the close button sends a ClientMessage *)
   IF xaDelete#0 THEN
-    b[0]:=18+7*10000H; b[1]:=id; b[2]:=xaProtocols; b[3]:=4; b[4]:=32; b[5]:=1; b[6]:=xaDelete;
+    b[0]:=Req(18, 0, 7); b[1]:=id; b[2]:=xaProtocols; b[3]:=4; b[4]:=Bytes(32, 0, 0, 0); b[5]:=1; b[6]:=xaDelete;
     res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 28)
   END;
-  b[0]:=8+2*10000H; b[1]:=id;  (* MapWindow *)
+  b[0]:=Req(8, 0, 2); b[1]:=id;  (* MapWindow *)
   res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 8);
   X:=0; Y:=SHORT(win[n].y);
   RETURN SHORT(n)
@@ -1575,7 +1647,7 @@ PROCEDURE CloseWindow*(n: INTEGER);
 VAR b: ARRAY 2 OF LONGINT; res: LONGINT;
 BEGIN
   IF (n>=0) & (n<MaxWin) & (win[n].id#0) THEN
-    b[0]:=4+2*10000H; b[1]:=win[n].id;  (* DestroyWindow *)
+    b[0]:=Req(4, 0, 2); b[1]:=win[n].id;  (* DestroyWindow *)
     res:=Linux0.Write0(xfd, SYSTEM.ADR(b), 8);
     win[n].id:=0
   END
@@ -1626,10 +1698,10 @@ VAR b: ARRAY 2 OF LONGINT;
   res: LONGINT;
 BEGIN
 (* Bell *)  
-  b[ 0]:= 104+ 1*100H+1*10000H;
+  b[ 0]:= Req(104, 1, 1);
   res:=Linux0.Write0( xfd, SYSTEM.ADR(b),  4);
 (* unmap *)
-  b[0]:= 10+2*10000H;
+  b[0]:= Req(10, 0, 2);
   b[1]:= wid;
   res:=Linux0.Write0(  xfd, SYSTEM.ADR(b), 8);
   WriteString("Closing Display");
@@ -1677,7 +1749,7 @@ BEGIN
   IF y<0 THEN INC(h, y); y:=0 END;
   IF (w>0) & (h>0) THEN
     y:=Height-y-h;  (* from the top *)
-    clip[0]:=x+y*10000H; clip[1]:=(x+w)+(y+h)*10000H;  (* drm_clip_rect: x1, y1, x2, y2 *)
+    clip[0]:=Pair(x, y); clip[1]:=Pair(x+w, y+h);  (* drm_clip_rect: x1, y1, x2, y2 *)
     cmd[0]:=kmsFb; cmd[1]:=0; cmd[2]:=0; cmd[3]:=1; cmd[4]:=SYSTEM.ADR(clip); cmd[5]:=0;
     res:=DrmIoctl(xfd, 0B1H, 24, SYSTEM.ADR(cmd))  (* DIRTYFB *)
   END
@@ -1873,19 +1945,19 @@ VAR b: ARRAY 8 OF LONGINT;
   res: LONGINT;
   i, j: LONGINT;
 BEGIN
-  b[ 0]:= 101+2*10000H;
-  b[ 1]:= ORD(r1data.minkeycode)+(ORD(r1data.maxkeycode)-ORD(r1data.minkeycode))*100H;
+  b[ 0]:= Req(101, 0, 2);
+  b[ 1]:= Bytes(ORD(r1data.minkeycode), ORD(r1data.maxkeycode)-ORD(r1data.minkeycode), 0, 0);
 (*  res:= Kernel.Write0( dfd, SYSTEM.ADR(b[0]), 8);*)
 WHILE Avail({xfd}, 0) DO
   res:= Linux0.Read0( xfd, SYSTEM.ADR(b[0]), 32);
 END;
 
-  b[ 0]:= 101+2*10000H;
-  b[ 1]:= ORD(r1data.minkeycode)+(ORD(r1data.maxkeycode)-ORD(r1data.minkeycode))*100H;
+  b[ 0]:= Req(101, 0, 2);
+  b[ 1]:= Bytes(ORD(r1data.minkeycode), ORD(r1data.maxkeycode)-ORD(r1data.minkeycode), 0, 0);
   res:= Linux0.Write0( xfd, SYSTEM.ADR(b[0]), 8);
   res:= Linux0.Read0( xfd, SYSTEM.ADR(b[0]), 32);
 
-  xkspkc:= (b[0] DIV 100H) MOD 100H;
+  xkspkc:= ByteOf(b[0], 1);
   IF b[1] DIV 10000H #0 THEN
     WriteErr("Internal X11 server error, exiting");
     Kernel.Shutdown( 1)
@@ -1910,7 +1982,7 @@ VAR i, res: LONGINT;
 BEGIN
   WriteString("Closing Display.");
   IF ShmReqCode#0 THEN
-    b[0]:=ShmReqCode+2*100H+2*10000H;  (* X_ShmDetach = 2 *)
+    b[0]:=Req(ShmReqCode, 2, 2);  (* X_ShmDetach = 2 *)
     b[1]:= shmseg; (*ShmSeg;*)
     res:=Linux0.Write0(xfd, SYSTEM.ADR(b),  8);
 
@@ -2002,7 +2074,7 @@ BEGIN
 END SocketPath;
 
 PROCEDURE InitX11*(): LONGINT;
-VAR  i, w, h, res, lw: LONGINT;
+VAR  i, w, h, res, lw: LONGINT; auth: BOOLEAN;
   sa1: Linux0.SockAddrUn;
   r0data: SetupRes0;
   format: Format;
@@ -2055,7 +2127,11 @@ BEGIN
   bdata[ 6]:=0X;  bdata[ 7]:=0X;  (* auth protocol len *)
   bdata[ 8]:=0X;  bdata[ 9]:=0X;  (* auth prot data len *)
   bdata[ 10]:=0X;  bdata[ 11]:=0X;  (* pad *)
-  IF GetAuth(bdata) THEN
+  auth:=GetAuth(bdata);
+  IF bdata[0]="B" THEN  (* polpo: the four 16-bit fields of the request in the order said *)
+    i:=2; WHILE i<10 DO bdata[11]:=bdata[i]; bdata[i]:=bdata[i+1]; bdata[i+1]:=bdata[11]; INC(i, 2) END; bdata[11]:=0X
+  END;
+  IF auth THEN
     res:=Linux0.Write0( xfd, SYSTEM.ADR(bdata), 48);
   ELSE
     res:=Linux0.Write0( xfd, SYSTEM.ADR(bdata), 12);
@@ -2151,9 +2227,10 @@ BEGIN
 END InitX11;
 
 PROCEDURE InitWin;  (* polpo: no windows of their own yet *)
-VAR i: LONGINT;
+VAR i: LONGINT; c: CHAR;
 BEGIN
-  winBottom := 0; xaProtocols := 0; xaDelete := 0; Send := NIL;
+  i := 1; SYSTEM.GET(SYSTEM.ADR(i), c); bigEndian := c = 0X;
+  winBottom := 0; xaProtocols := 0; xaDelete := 0; Send := NIL; swapPix := FALSE;
   i := 0; WHILE i < MaxWin DO win[i].id := 0; INC(i) END
 END InitWin;
 

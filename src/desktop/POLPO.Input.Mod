@@ -318,7 +318,7 @@ VAR c: LONGINT;
 BEGIN
   LOOP
     IF ~ReadFull(SYSTEM.ADR(b[0]), 32) THEN RETURN FALSE END;
-    c := b[0] MOD 100H;
+    c := Display.ByteOf(b[0], 0);
     IF c = 1 THEN RETURN TRUE ELSIF c = 0 THEN RETURN FALSE END;
     IF npend < LEN(pend) THEN SYSTEM.MOVE(SYSTEM.ADR(b[0]), SYSTEM.ADR(pend[npend]), 32); INC(npend) END
   END
@@ -328,8 +328,8 @@ PROCEDURE InternAtom(name: ARRAY OF CHAR): LONGINT;
 VAR b: ARRAY 16 OF LONGINT; res, n: LONGINT;
 BEGIN
   n:=0; WHILE (n < LEN(name)) & (name[n] # 0X) & (n < 48) DO INC(n) END;
-  b[0]:=16+ (2+(n+3) DIV 4)*10000H;
-  b[1]:= n;
+  b[0]:=Display.Req(16, 0, 2+(n+3) DIV 4);
+  b[1]:= Display.Pair(n, 0);
   SYSTEM.MOVE( SYSTEM.ADR( name[0]), SYSTEM.ADR(b[ 2]), n);
   res:=Linux0.Write0(dfd, SYSTEM.ADR(b),  8+(n+3) DIV 4*4);
   IF ~ReadReply(b) THEN b[2] := 0 END;
@@ -348,7 +348,7 @@ BEGIN
     Kernel.WriteHex( event.b, 9  );
     Kernel.WriteHex( event.c, 9  ); Kernel.WriteLn;
   END;
-  b[0]:=20+6*10000H;    (* GetProperty *)
+  b[0]:=Display.Req(20, 0, 6);    (* GetProperty *)
   b[1]:= Display.wid;
   b[2]:= myProperty;    (* property *)
   b[3]:= 0;  (* any type *)
@@ -369,7 +369,7 @@ PROCEDURE Copy*;
 VAR b: ARRAY 4 OF LONGINT; res: LONGINT;
 BEGIN
   IF x11 THEN
-    b[0]:=22+4*10000H;  (* SetSelectionOwner *)
+    b[0]:=Display.Req(22, 0, 4);  (* SetSelectionOwner *)
     b[1]:=Display.wid;
     b[2]:=XAPRIMARY;
     b[3]:=CURRENTTIME;
@@ -385,7 +385,7 @@ BEGIN
   IF n <= 0 THEN RETURN END;
   NEW(board, n); i := 0; WHILE i < n DO board[i] := s[i]; INC(i) END;
   IF x11 THEN
-    b[0]:=22+4*10000H;  (* SetSelectionOwner *)
+    b[0]:=Display.Req(22, 0, 4);  (* SetSelectionOwner *)
     b[1]:=Display.wid;
     b[2]:=xaClipboard;
     b[3]:=CURRENTTIME;
@@ -400,7 +400,7 @@ PROCEDURE RequestClipboard*(): BOOLEAN;
 VAR b: ARRAY 6 OF LONGINT; res: LONGINT;
 BEGIN
   IF ~x11 OR boardOwned OR (PasteClip = NIL) THEN RETURN FALSE END;
-  b[0]:=24+6*10000H;  (* ConvertSelection *)
+  b[0]:=Display.Req(24, 0, 6);  (* ConvertSelection *)
   b[1]:=Display.wid;
   b[2]:=xaClipboard;
   b[3]:=xaUtf8;
@@ -413,7 +413,7 @@ END RequestClipboard;
 PROCEDURE GetSelectionOwner(): LONGINT;
 VAR b: ARRAY 8 OF LONGINT; res: LONGINT;
 BEGIN
-  b[0]:=23+2*10000H;
+  b[0]:=Display.Req(23, 0, 2);
   b[1]:=XAPRIMARY;
   res:=Linux0.Write0(dfd, SYSTEM.ADR(b),  8);
   IF ~ReadReply(b) THEN b[2] := 0 END;
@@ -424,7 +424,7 @@ PROCEDURE Paste*;
 VAR b: ARRAY 6 OF LONGINT; res: LONGINT;
 BEGIN
   IF x11 THEN
-    b[0]:=24+6*10000H;  (* ConvertSelection *)
+    b[0]:=Display.Req(24, 0, 6);  (* ConvertSelection *)
     b[1]:=Display.wid;
     b[2]:=XAPRIMARY;
     b[3]:=XASTRING;
@@ -444,12 +444,12 @@ BEGIN
     WriteString("SendSelection: no data!");
     RETURN
   END;
-  prop := event.ex MOD 10000H + 10000H*event.ey;
+  SYSTEM.GET(SYSTEM.ADR(event.ex), prop);  (* the property, a 32-bit field *)
   IF prop = 0 THEN prop := event.d END;  (* obsolete clients: the target as property *)
-  e[0]:=  25+11*10000H;  (* SendEvent *)
+  e[0]:=  Display.Req(25, 0, 11);  (* SendEvent *)
   e[1]:=  event.b; (*Display.scn.root;*)
   e[2]:=  0;
-  e[0+3]:= 31; (* SelectionNotify *)
+  e[0+3]:= Display.Bytes(31, 0, 0, 0); (* SelectionNotify *)
   e[1+3]:= event.time;
   e[2+3]:= event.b;  (*requestor *)
   e[3+3]:= event.c;  (* selection *)
@@ -457,18 +457,18 @@ BEGIN
   IF event.d = xaTargets THEN  (* polpo: the formats offered *)
     e[5+3] := prop;
     t[0] := xaTargets; t[1] := xaUtf8; t[2] := XASTRING;
-    p[0]:=18+0*100H+(6+3)*10000H;  (* ChangeProperty *)
-    p[1]:= event.b; p[2]:= prop; p[3]:= 4 (* ATOM *); p[4]:= 32; p[5]:= 3;
+    p[0]:=Display.Req(18, 0, 6+3);  (* ChangeProperty *)
+    p[1]:= event.b; p[2]:= prop; p[3]:= 4 (* ATOM *); p[4]:= Display.Bytes(32, 0, 0, 0); p[5]:= 3;
     res:=Linux0.Write0(dfd, SYSTEM.ADR(p),  6*4);
     res:=Linux0.Write0(dfd, SYSTEM.ADR(t),  3*4);
   ELSIF (event.d = XASTRING) OR (event.d = xaUtf8) THEN
     e[5+3] := prop;
     n := LEN(data^);
-    p[0]:=18+0*100H+(6+(n+3) DIV 4)*10000H;  (* ChangeProperty *)
+    p[0]:=Display.Req(18, 0, 6+(n+3) DIV 4);  (* ChangeProperty *)
     p[1]:= event.b;  (*requestor*)
     p[2]:= prop;  (*property*)
     p[3]:= event.d; (* target*)
-    p[4]:= 8;  (* format (bits) *)
+    p[4]:= Display.Bytes(8, 0, 0, 0);  (* format (bits) *)
     p[5]:= n;
     res:=Linux0.Write0(dfd, SYSTEM.ADR(p),  6*4);
     res:=Linux0.Write0(dfd, SYSTEM.ADR(data^),  (n+3) DIV 4*4);
@@ -479,7 +479,7 @@ BEGIN
   IF trace THEN
     WriteString("SelectionRequest: "); WriteSH( "Time: ",event.time);
     WriteSH( "owner: ",event.a);   WriteSH( "requestor: ",event.b);   WriteSH( "selection: ",event.c);
-    WriteSH( "target: ", event.d);  WriteSH( "property: ",event.ex+10000H*event.ey);
+    WriteSH( "target: ", event.d);  WriteSH( "property: ", event.ex);
   END;
   res:=Linux0.Write0(dfd, SYSTEM.ADR(e),  44);
 END SendSelection;
@@ -489,7 +489,7 @@ BEGIN
   IF trace THEN
     WriteString("SelectionNotify: "); WriteSH( "Time: ", event.time);
     WriteSH( "owner: ",event.a);   WriteSH( "requestor: ",event.b);   WriteSH( "selection: ",event.c);
-    WriteSH( "target: ", event.d);  WriteSH( "property: ",event.ex+10000H*event.ey);
+    WriteSH( "target: ", event.d);  WriteSH( "property: ", event.ex);
   END;
   IF ((event.b = XAPRIMARY) OR (event.b = xaClipboard)) & (event.d=myProperty) THEN
     GetProperty(event);
@@ -517,12 +517,12 @@ BEGIN
     IF res=32 THEN
       code:= ORD(event.code) MOD 128;  (* polpo: without the bit of sent events (MOD 32 made ClientMessage 1, MappingNotify a KeyPress) *)
       detail:= ORD( event.detail);
-      IF (code >= 2) & (code <= 6) THEN modState := event.f MOD 10000H END;
+      IF (code >= 2) & (code <= 6) THEN modState := Display.First(event.f) END;
       IF (code >= 4) & (code <= 6) THEN  (* polpo: a window of its own (Display.OpenWindow) or the main one *)
         inWin := (event.b # Display.wid) & Display.ThisWindow(event.b, event.ex, event.ey, winX, winY)
       END;
       IF code=2 THEN    (* KeyPress *)
-        state:=event.f MOD 10000H;
+        state:=Display.First(event.f);
         grp := state DIV 2000H MOD 4; state := state MOD 2000H;
         IF ODD(state DIV 4) THEN DEC(state, 4) END;  (* polpo: Control does not change the symbol *)
         IF ODD(state DIV 80H) THEN state:=2 + state MOD 2;
@@ -535,7 +535,7 @@ BEGIN
         sym:=Display.X11GetSym(detail, state);
         (* polpo: Ctrl+Pause/Break and Ctrl+Alt+C interrupt the running command (trap 13), as Ctrl+C
            in the terminal of loksh does *)
-        st := event.f MOD 10000H;
+        st := Display.First(event.f);
         brk := ODD(st DIV 4) & ((sym = 0FF13H) OR (sym = 0FF6BH) OR ODD(st DIV 8) & (CAP(CHR(sym MOD 100H)) = "C") & (sym < 100H));
         pz := ODD(st DIV 4) & ODD(st DIV 8) & (CAP(CHR(sym MOD 100H)) = "P") & (sym < 100H);  (* Ctrl+Alt+P: pause *)
         IF trace THEN
@@ -594,7 +594,7 @@ BEGIN
         END;
 
         (* polpo: Ctrl+letter gives the control character, Ctrl+C = 03X *)
-        IF ODD(event.f MOD 10000H DIV 4) & (CAP(c) >= "A") & (CAP(c) <= "Z") THEN c := CHR(ORD(CAP(c)) - 40H) END;
+        IF ODD(Display.First(event.f) DIV 4) & (CAP(c) >= "A") & (CAP(c) <= "Z") THEN c := CHR(ORD(CAP(c)) - 40H) END;
         IF brk THEN Linux0.break := TRUE
         ELSIF pz THEN pauseReq := TRUE
         ELSIF sym=0AFEH THEN Paste;  (* ctrl-v *)
@@ -621,13 +621,13 @@ BEGIN
       ELSIF code = 11 THEN  (* KeymapNotify*)
         WriteString("KeymapNotify");
       ELSIF (code = 12) & (event.time # Display.wid) THEN  (* polpo: Expose of a window of its own *)
-        Display.ExposeWindow(event.time, event.a MOD 10000H, event.a DIV 10000H MOD 10000H, event.b MOD 10000H, event.b DIV 10000H MOD 10000H)
+        Display.ExposeWindow(event.time, Display.First(event.a), Display.Second(event.a), Display.First(event.b), Display.Second(event.b))
       ELSIF code= 12 THEN  (* Expose *)
-        w:= (event.b)  MOD 10000H;
-        h:= (event.b DIV 10000H) MOD 10000H;
+        w:= Display.First(event.b);
+        h:= Display.Second(event.b);
         IF w> Display.Width*Display.Zoom THEN w:= Display.Width*Display.Zoom END;
         IF h> Display.Height*Display.Zoom THEN h:= Display.Height*Display.Zoom END;
-        Display.PutImage( event.a MOD 10000H, Display.Height*Display.Zoom-h-(event.a DIV 10000H), w , h);
+        Display.PutImage( Display.First(event.a), Display.Height*Display.Zoom-h-Display.Second(event.a), w , h);
       ELSIF code = 33 THEN  (* polpo: ClientMessage, the close button of a window of its own *)
         Display.ClientMessage(event.time, event.b)
       ELSIF code=15 THEN   (* VisibilityChange *)
