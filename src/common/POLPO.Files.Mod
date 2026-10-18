@@ -89,6 +89,7 @@ TYPE
 
 VAR
   trace: BOOLEAN;
+  bigEndian: BOOLEAN;  (* polpo: the machine keeps the most significant byte of a word first *)
 (* Check a file name. *)
   sysfd, wrkfd: LONGINT;
   epoch: LONGINT;  (* polpo: counts Reset *)
@@ -503,19 +504,36 @@ END Read;
 Portable routines to read the standard Oberon types.
 *)
 
-PROCEDURE ReadInt*(VAR r: Rider; VAR x: INTEGER);
+(* polpo: the numbers of Oberon files have their least significant byte first, on every machine;
+   they are put together from their bytes, so that big-endian machines read them right *)
+PROCEDURE InitOrder;  (* bigEndian: is the first byte of the word 1 a 0? *)
+VAR w: LONGINT; c: CHAR;
+BEGIN w := 1; SYSTEM.GET(SYSTEM.ADR(w), c); bigEndian := c = 0X
+END InitOrder;
+
+PROCEDURE ReadWord(VAR r: Rider; n: INTEGER): LONGINT;  (* n bytes, least significant first *)
+VAR i: INTEGER; ch: CHAR; x: LONGINT;
 BEGIN
-  ReadBytes(r, SYSTEM.VAL(Bytes2, x), 2)
+  x := 0; i := 0;
+  WHILE i < n DO Read(r, ch); x := x + SYSTEM.LSH(LONG(ORD(ch)), 8*i); INC(i) END;
+  RETURN x
+END ReadWord;
+
+PROCEDURE ReadInt*(VAR r: Rider; VAR x: INTEGER);
+VAR v: LONGINT;
+BEGIN
+  v := ReadWord(r, 2); IF v >= 8000H THEN DEC(v, 10000H) END;
+  x := SHORT(v)
 END ReadInt;
 
 PROCEDURE ReadLInt*(VAR r: Rider; VAR x: LONGINT);
 BEGIN
-  ReadBytes(r, SYSTEM.VAL(Bytes4, x), 4)
+  x := ReadWord(r, 4)
 END ReadLInt;
 
 PROCEDURE ReadSet*(VAR r: Rider; VAR x: SET);
 BEGIN
-  ReadBytes(r, SYSTEM.VAL(Bytes4, x), 4)
+  x := SYSTEM.VAL(SET, ReadWord(r, 4))
 END ReadSet;
 
 PROCEDURE ReadBool*(VAR r: Rider; VAR x: BOOLEAN);
@@ -526,12 +544,16 @@ END ReadBool;
 
 PROCEDURE ReadReal*(VAR r: Rider; VAR x: REAL);
 BEGIN
-  ReadBytes(r, SYSTEM.VAL(Bytes4, x), 4)
+  x := SYSTEM.VAL(REAL, ReadWord(r, 4))
 END ReadReal;
 
-PROCEDURE ReadLReal*(VAR r: Rider; VAR x: LONGREAL);
+PROCEDURE ReadLReal*(VAR r: Rider; VAR x: LONGREAL);  (* the low word first, as on little-endian machines *)
+VAR lo, hi: LONGINT;
 BEGIN
-  ReadBytes(r, SYSTEM.VAL(Bytes8, x), 8)
+  lo := ReadWord(r, 4); hi := ReadWord(r, 4);
+  IF bigEndian THEN SYSTEM.PUT(SYSTEM.ADR(x), hi); SYSTEM.PUT(SYSTEM.ADR(x) + 4, lo)
+  ELSE SYSTEM.PUT(SYSTEM.ADR(x), lo); SYSTEM.PUT(SYSTEM.ADR(x) + 4, hi)
+  END
 END ReadLReal;
 
 PROCEDURE ReadString*(VAR r: Rider; VAR x: ARRAY OF CHAR);
@@ -601,19 +623,26 @@ END Write;
 Portable routines to write the standard Oberon types.
 *)
 
+PROCEDURE WriteWord(VAR r: Rider; x: LONGINT; n: INTEGER);  (* n bytes of x, least significant first *)
+VAR i: INTEGER;
+BEGIN
+  i := 0;
+  WHILE i < n DO Write(r, CHR(SYSTEM.LSH(x, -8*i) MOD 100H)); INC(i) END
+END WriteWord;
+
 PROCEDURE WriteInt*(VAR r: Rider; x: INTEGER);
 BEGIN
-  WriteBytes(r, SYSTEM.VAL(Bytes2, x), 2)
+  WriteWord(r, x, 2)
 END WriteInt;
 
 PROCEDURE WriteLInt*(VAR r: Rider; x: LONGINT);
 BEGIN
-  WriteBytes(r, SYSTEM.VAL(Bytes4, x), 4)
+  WriteWord(r, x, 4)
 END WriteLInt;
 
 PROCEDURE WriteSet*(VAR r: Rider; x: SET);
 BEGIN
-  WriteBytes(r, SYSTEM.VAL(Bytes4, x), 4)
+  WriteWord(r, SYSTEM.VAL(LONGINT, x), 4)
 END WriteSet;
 
 PROCEDURE WriteBool*(VAR r: Rider; x: BOOLEAN);
@@ -623,12 +652,16 @@ END WriteBool;
 
 PROCEDURE WriteReal*(VAR r: Rider; x: REAL);
 BEGIN
-  WriteBytes(r, SYSTEM.VAL(Bytes4, x), 4)
+  WriteWord(r, SYSTEM.VAL(LONGINT, x), 4)
 END WriteReal;
 
-PROCEDURE WriteLReal*(VAR r: Rider; x: LONGREAL);
+PROCEDURE WriteLReal*(VAR r: Rider; x: LONGREAL);  (* the low word first *)
+VAR lo, hi: LONGINT;
 BEGIN
-  WriteBytes(r, SYSTEM.VAL(Bytes8, x), 8)
+  SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  IF bigEndian THEN WriteWord(r, hi, 4); WriteWord(r, lo, 4)
+  ELSE WriteWord(r, lo, 4); WriteWord(r, hi, 4)
+  END
 END WriteLReal;
 
 PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR);
@@ -765,6 +798,7 @@ END GetName;
 
 BEGIN
   trace:= Kernel.trace="Files";
+  InitOrder;
   SetSYS(".");
   SetWRK("");
   (* polpo: plain names are also looked up in the polpo root and its share/, tools/, fonts/ *)
