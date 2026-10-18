@@ -745,7 +745,7 @@ BEGIN
     Texts.Write(W, 9X);  ch := refs[i];  INC(i);
     WHILE ch # 0X DO Texts.Write(W, ch);  ch := refs[i];  INC(i) END;
     Texts.WriteString(W, " = ");
-IF Linux0.ARCH=MIPS THEN  Texts.WriteString(W, "?");
+IF (Linux0.ARCH=MIPS) OR (Linux0.ARCH="MIPSBE") THEN  Texts.WriteString(W, "?");
 ELSIF Linux0.ARCH=RISCV THEN  Texts.WriteString(W, "??");
 ELSE
     INC(adr, base);
