@@ -24,10 +24,10 @@ IMPORT S := SYSTEM;
 CONST
 	e* = 2.7182818284590452354D0;
 	pi* = 3.14159265358979323846D0;
-		(* little-endian: *) L = 0; H = 4;
-		(* big-endian: *) (* H = 0; L = 4; *)
 
 VAR
+	L, H: LONGINT;	(* polpo: the offsets of the low and high words of a LONGREAL, set at load for the byte order *)
+	c0: CHAR;
 		(* sqrt: *) c11, p10: LONGREAL;
 		(* exp: *) c21, p22, p21, p20, q21, q20: LONGREAL;
 		(* ln: *) c42, p42, p41, p40, q42, q41, q40: LONGREAL;
@@ -130,6 +130,8 @@ BEGIN
 END exp;
 
 BEGIN 
+	L := 1; S.GET(S.ADR(L), c0);	(* polpo: little-endian L = 0, H = 4; big-endian H = 0, L = 4 *)
+	IF c0 = 0X THEN H := 0; L := 4 ELSE L := 0; H := 4 END;
 	S.PUT(S.ADR(c11)+L, 0667F3BCDH); S.PUT(S.ADR(c11)+H, 03FE6A09EH);	(* 1/sqrt(2) *)
 	S.PUT(S.ADR(p10)+L, 08F2FCF79H); S.PUT(S.ADR(p10)+H, 03FE2E29BH);
 	S.PUT(S.ADR(c21)+L, 0652B82FEH); S.PUT(S.ADR(c21)+H, 03FF71547H);	(* 1/ln(2) *)
