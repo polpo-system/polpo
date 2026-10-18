@@ -87,11 +87,11 @@ END CopyBlock;
 
 (** Copy the pattern pat in color col to position x, y using mode. *)
 PROCEDURE CopyPattern* (P:Picture;col:INTEGER;pat:LONGINT;X,Y,mode: INTEGER);
-VAR w, h: INTEGER;
+VAR w, h: INTEGER; c: CHAR;
 BEGIN
   IF InBoundaries(X, Y, P.width, P.height) THEN
-    w := 0;  h := 0;  SYSTEM.GET(pat, SYSTEM.VAL(CHAR, w));
-    SYSTEM.GET(pat+1, SYSTEM.VAL(CHAR, h));
+    SYSTEM.GET(pat, c); w := ORD(c);  (* polpo: through a CHAR, not into the first byte of w (big-endian) *)
+    SYSTEM.GET(pat+1, c); h := ORD(c);
     IF InBoundaries(X+w-1, Y+h-1, P.width, P.height) THEN
       Bitmaps.CopyPattern(P.bitmap,col,pat,X, Y, mode)
     END
