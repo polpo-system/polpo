@@ -2014,7 +2014,7 @@ PROCEDURE Init;
 VAR S: Texts.Scanner; i: LONGINT;
 BEGIN
   IF Linux0.ARCH = "X86" THEN hostArch := "x86" ELSIF Linux0.ARCH = "ARM" THEN hostArch := "arm"
-  ELSIF Linux0.ARCH = "RISC-V" THEN hostArch := "riscv" ELSIF Linux0.ARCH = "MIPS" THEN hostArch := "mips"
+  ELSIF Linux0.ARCH = "RISC-V" THEN hostArch := "riscv" ELSIF Linux0.ARCH = "MIPS" THEN hostArch := "mips" ELSIF Linux0.ARCH = "MIPSBE" THEN hostArch := "mipsbe"
   ELSE hostArch := "armv7"
   END;
   COPY(hostArch, arch);

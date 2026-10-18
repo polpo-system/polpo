@@ -29,6 +29,14 @@ else
 MIPS = qemu-mipsel bin/mips/loksh
 endif
 
+# uname -m says mips for both byte orders: "ab" as a 16-bit word tells them apart
+HOSTORDER := $(shell printf ab | od -An -tx2 | tr -d ' ')
+ifeq ($(HOSTARCH)$(HOSTORDER),mips6162)
+MIPSBE = bin/mipsbe/loksh
+else
+MIPSBE = qemu-mips bin/mipsbe/loksh
+endif
+
 # ---- x86 ----
 
 fast:
@@ -139,6 +147,26 @@ mips-sixel:
 mips-x11:
 		$(X86) portia.Build /mips /y display-x11
 
+# ---- MIPS big-endian (32-bit) ----
+
+# cross compile the big-endian MIPS system on x86
+mipsbe:
+		$(X86) < tools/rop2-cross.Tool
+		$(X86) < tools/mipsbe.Tool
+		mv bin/mipsbe/loksh.new bin/mipsbe/loksh
+
+# build it with its own compiler: natively on big-endian MIPS, under qemu-mips elsewhere
+mipsbe-native:
+		$(MIPSBE) < tools/mipsbe.Tool
+		mv bin/mipsbe/loksh.new bin/mipsbe/loksh
+
+# start the desktop / console (qemu-mips unless this machine is big-endian MIPS)
+mipsbe-run:
+		$(MIPSBE) System.Init
+
+mipsbe-shell:
+		$(MIPSBE)
+
 # ---- ARMv7 (OP2 compiler; make arm is for older ARM processors) ----
 
 # cross compile the ARMv7 system on x86
@@ -166,7 +194,7 @@ armv7-sixel:
 armv7-x11:
 		$(X86) portia.Build /armv7 /y display-x11
 
-.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
+.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 mipsbe mipsbe-native mipsbe-run mipsbe-shell armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
 
 # make release V=0.2.0: VERSION gets the version and today's date (UTC), shown when the desktop
 # starts; it is committed and tagged v0.2.0. Push with: git push origin main v0.2.0 (and codeberg)

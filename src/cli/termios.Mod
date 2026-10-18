@@ -128,7 +128,7 @@ END WinSize;
 
 BEGIN
   cbreak := FALSE;
-  IF Linux0.ARCH = "MIPS" THEN
+  IF (Linux0.ARCH = "MIPS") OR (Linux0.ARCH = "MIPSBE") THEN
     getReq := 540DH; setReq := 540EH; winReq := 40087468H; vmin := 4; vtime := 5; iexten := 8
   ELSE
     getReq := TCGETS; setReq := TCSETS; winReq := 5413H; vmin := VMIN; vtime := VTIME; iexten := IEXTEN

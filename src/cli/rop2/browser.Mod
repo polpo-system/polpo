@@ -292,7 +292,7 @@ MODULE browser;
 
   PROCEDURE Arch(VAR a: ARRAY OF CHAR);  (* the directory name of this port *)
   BEGIN
-    IF Linux0.ARCH = "MIPS" THEN COPY("mips", a) ELSIF Linux0.ARCH = "ARMv7" THEN COPY("armv7", a) ELSE COPY("riscv", a) END
+    IF Linux0.ARCH = "MIPS" THEN COPY("mips", a) ELSIF Linux0.ARCH = "MIPSBE" THEN COPY("mipsbe", a) ELSIF Linux0.ARCH = "ARMv7" THEN COPY("armv7", a) ELSE COPY("riscv", a) END
   END Arch;
 
   (** the definition of the module name into T (the desktop's RBrowser uses it too); detail: with
@@ -359,7 +359,7 @@ MODULE browser;
   END Help;
 
 BEGIN
-  IF Linux0.ARCH="MIPS" THEN m:=Modules.ThisMod("MOPV");
+  IF (Linux0.ARCH="MIPS") OR (Linux0.ARCH="MIPSBE") THEN m:=Modules.ThisMod("MOPV");
   ELSIF Linux0.ARCH="RISC-V" THEN m:=Modules.ThisMod("VOPV");
   ELSIF Linux0.ARCH="ARMv7" THEN m:=Modules.ThisMod("AOPV");
   END;  (* the back end of this port: it sets OPT.typSize *)

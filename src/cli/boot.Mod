@@ -39,7 +39,7 @@ BEGIN
   fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR("/dev/tty1"), Linux0.ORDWR, 0);  (* 0 *)
   res := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR("/dev/tty1"), Linux0.ORDWR, 0);  (* 1 *)
   res := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR("/dev/tty1"), Linux0.ORDWR, 0);  (* 2 *)
-  IF Linux0.ARCH = "MIPS" THEN ctty := 5480H ELSE ctty := 540EH END;  (* TIOCSCTTY *)
+  IF (Linux0.ARCH = "MIPS") OR (Linux0.ARCH = "MIPSBE") THEN ctty := 5480H ELSE ctty := 540EH END;  (* TIOCSCTTY *)
   IF fd >= 0 THEN res := Linux0.IOCtl0(fd, ctty, 0) END
 END Console;
 

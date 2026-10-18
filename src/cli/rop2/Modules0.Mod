@@ -720,7 +720,8 @@ BEGIN  (* entry of boot file, must not return *)
 (*  Test;*)
   Kernel.Static:=FALSE;
   (* polpo: obj/<arch>/ of the current directory at each load (fs.Cd), then the root's *)
-  IF Linux0.ARCH = "MIPS" THEN objPath := "obj/mips/"; Root.RootObj("mips", rootPath)
+  IF Linux0.ARCH = "MIPSBE" THEN objPath := "obj/mipsbe/"; Root.RootObj("mipsbe", rootPath)
+  ELSIF Linux0.ARCH = "MIPS" THEN objPath := "obj/mips/"; Root.RootObj("mips", rootPath)
   ELSIF Linux0.ARCH = "RISC-V" THEN objPath := "obj/riscv/"; Root.RootObj("riscv", rootPath)
   ELSE objPath := "obj/armv7/"; Root.RootObj("armv7", rootPath)
   END
