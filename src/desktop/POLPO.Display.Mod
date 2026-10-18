@@ -288,6 +288,7 @@ VAR
   win: ARRAY MaxWin OF Win;
   xaProtocols, xaDelete: LONGINT;  (* the atoms WM_PROTOCOLS, WM_DELETE_WINDOW *)
   Send: PROCEDURE (id, x, y, w, h, dx, dy: LONGINT);  (* SendX11 or SendX11SHM *)
+  kmsFb: LONGINT;  (* polpo: the KMS framebuffer id, for DIRTYFB *)
 
 (* common OLR  *)
   PutImage*: PROCEDURE( x, y, w, h: LONGINT);  (* argument are in X11 display pixel, not oberon! *)
@@ -1657,6 +1658,114 @@ BEGIN
   END
 END MaskShift;
 
+(* polpo: KMS, when there is no /dev/fb0 (kernels without CONFIG_FB_DEVICE): a dumb buffer of the DRM
+   device /dev/dri/card0 shown on the first connected output in its preferred mode. The structures
+   of drm.h and drm_mode.h are arrays of words here (u64 = two words, little endian); their sizes are
+   in the ioctl numbers, _IOWR('d', nr, size). *)
+PROCEDURE DrmIoctl(fd, nr, size, adr: LONGINT): LONGINT;
+BEGIN RETURN Linux0.IOCtl0(fd, -40000000H + size*10000H + 6400H + nr, adr)
+END DrmIoctl;
+
+PROCEDURE U16(adr: LONGINT): LONGINT;  (* an unsigned 16-bit field *)
+VAR lo, hi: CHAR;
+BEGIN SYSTEM.GET(adr, lo); SYSTEM.GET(adr+1, hi); RETURN LONG(ORD(lo)) + 256*LONG(ORD(hi))
+END U16;
+
+PROCEDURE PutImageKMS(x, y, w, h: LONGINT);  (* drivers that copy the buffer to the screen want to know what changed *)
+VAR cmd: ARRAY 6 OF LONGINT; clip: ARRAY 2 OF LONGINT; res: LONGINT;
+BEGIN
+  IF y<0 THEN INC(h, y); y:=0 END;
+  IF (w>0) & (h>0) THEN
+    y:=Height-y-h;  (* from the top *)
+    clip[0]:=x+y*10000H; clip[1]:=(x+w)+(y+h)*10000H;  (* drm_clip_rect: x1, y1, x2, y2 *)
+    cmd[0]:=kmsFb; cmd[1]:=0; cmd[2]:=0; cmd[3]:=1; cmd[4]:=SYSTEM.ADR(clip); cmd[5]:=0;
+    res:=DrmIoctl(xfd, 0B1H, 24, SYSTEM.ADR(cmd))  (* DIRTYFB *)
+  END
+END PutImageKMS;
+
+PROCEDURE InitKMS(): LONGINT;
+TYPE Words = POINTER TO ARRAY OF LONGINT;
+VAR fd, res, i, n, conn, nmodes, best, enc, crtc, w, h, pitch, size, handle, fb, lo, hi: LONGINT;
+  r: ARRAY 16 OF LONGINT;  (* drm_mode_card_res *)
+  c: ARRAY 20 OF LONGINT;  (* drm_mode_get_connector *)
+  e: ARRAY 5 OF LONGINT;  (* drm_mode_get_encoder *)
+  d: ARRAY 8 OF LONGINT;  (* drm_mode_create_dumb *)
+  a: ARRAY 7 OF LONGINT;  (* drm_mode_fb_cmd *)
+  m: ARRAY 4 OF LONGINT;  (* drm_mode_map_dumb *)
+  sc: ARRAY 26 OF LONGINT;  (* drm_mode_crtc *)
+  fbs, crtcs, conns, encs, modes, props, vals, cencs: Words;
+  connId: ARRAY 1 OF LONGINT;
+BEGIN
+  fd:=Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR("/dev/dri/card0"), Linux0.ORDWR, 0);
+  IF fd<=0 THEN WriteErr("Can't open '/dev/fb0' nor '/dev/dri/card0'"); RETURN -1 END;
+  i:=0; WHILE i<16 DO r[i]:=0; INC(i) END;
+  res:=DrmIoctl(fd, 0A0H, 64, SYSTEM.ADR(r));  (* GETRESOURCES: the counts *)
+  IF res#0 THEN WriteSH("KMS: GETRESOURCES failed ", res); RETURN -1 END;
+  NEW(fbs, r[8]+1); NEW(crtcs, r[9]+1); NEW(conns, r[10]+1); NEW(encs, r[11]+1);
+  r[0]:=SYSTEM.ADR(fbs[0]); r[1]:=0; r[2]:=SYSTEM.ADR(crtcs[0]); r[3]:=0;
+  r[4]:=SYSTEM.ADR(conns[0]); r[5]:=0; r[6]:=SYSTEM.ADR(encs[0]); r[7]:=0;
+  res:=DrmIoctl(fd, 0A0H, 64, SYSTEM.ADR(r));  (* the ids *)
+  (* the first connected connector with modes *)
+  conn:=-1; n:=0;
+  WHILE (conn<0) & (n<r[10]) DO
+    i:=0; WHILE i<20 DO c[i]:=0; INC(i) END;
+    c[12]:=conns[n];
+    res:=DrmIoctl(fd, 0A7H, 80, SYSTEM.ADR(c));  (* GETCONNECTOR: the counts, probes the modes *)
+    IF (res=0) & (c[15]=1) & (c[8]>0) THEN
+      nmodes:=c[8]; NEW(modes, 17*nmodes); NEW(props, c[9]+1); NEW(vals, 2*c[9]+2); NEW(cencs, c[10]+1);
+      c[0]:=SYSTEM.ADR(cencs[0]); c[1]:=0; c[2]:=SYSTEM.ADR(modes[0]); c[3]:=0;
+      c[4]:=SYSTEM.ADR(props[0]); c[5]:=0; c[6]:=SYSTEM.ADR(vals[0]); c[7]:=0;
+      res:=DrmIoctl(fd, 0A7H, 80, SYSTEM.ADR(c));
+      IF (res=0) & (c[8]>0) & (c[8]<=nmodes) THEN conn:=conns[n] END
+    END;
+    INC(n)
+  END;
+  IF conn<0 THEN WriteErr("KMS: no connected output"); RETURN -1 END;
+  nmodes:=c[8]; best:=0; i:=0;  (* the preferred mode (DRM_MODE_TYPE_PREFERRED), else the first *)
+  WHILE i<nmodes DO IF ODD(modes[17*i+8] DIV 8) THEN best:=i; i:=nmodes ELSE INC(i) END END;
+  w:=U16(SYSTEM.ADR(modes[17*best])+4); h:=U16(SYSTEM.ADR(modes[17*best])+14);
+  IF c[16]>0 THEN DPI:=SHORT(w*254 DIV (c[16]*10)) END;  (* mm_width *)
+  (* the CRTC: of the encoder in use, else one the encoder can drive *)
+  enc:=c[11]; IF (enc=0) & (c[10]>0) THEN enc:=cencs[0] END;
+  e[0]:=enc; e[1]:=0; e[2]:=0; e[3]:=0; e[4]:=0;
+  res:=DrmIoctl(fd, 0A6H, 20, SYSTEM.ADR(e));  (* GETENCODER *)
+  crtc:=e[2];
+  IF crtc=0 THEN
+    i:=0; WHILE (i<r[9]) & ~ODD(SYSTEM.LSH(e[3], -i)) DO INC(i) END;
+    IF i<r[9] THEN crtc:=crtcs[i] END
+  END;
+  IF crtc=0 THEN WriteErr("KMS: no CRTC for the output"); RETURN -1 END;
+  d[0]:=h; d[1]:=w; d[2]:=32; d[3]:=0; d[4]:=0; d[5]:=0; d[6]:=0; d[7]:=0;
+  res:=DrmIoctl(fd, 0B2H, 32, SYSTEM.ADR(d));  (* CREATE_DUMB *)
+  IF res#0 THEN WriteSH("KMS: CREATE_DUMB failed ", res); RETURN -1 END;
+  handle:=d[4]; pitch:=d[5]; size:=d[6];
+  a[0]:=0; a[1]:=w; a[2]:=h; a[3]:=pitch; a[4]:=32; a[5]:=24; a[6]:=handle;
+  res:=DrmIoctl(fd, 0AEH, 28, SYSTEM.ADR(a));  (* ADDFB *)
+  IF res#0 THEN WriteSH("KMS: ADDFB failed ", res); RETURN -1 END;
+  fb:=a[0];
+  m[0]:=handle; m[1]:=0; m[2]:=0; m[3]:=0;
+  res:=DrmIoctl(fd, 0B3H, 16, SYSTEM.ADR(m));  (* MAP_DUMB: the offset for mmap *)
+  IF res#0 THEN WriteSH("KMS: MAP_DUMB failed ", res); RETURN -1 END;
+  lo:=m[2]; hi:=m[3];
+  fbadr:=Linux0.Mmap20(0, size, 3, Linux0.MAPSHARED, fd, SYSTEM.LSH(lo, -12) + hi*100000H);  (* mmap2: pages *)
+  IF (fbadr>-4096) & (fbadr<0) THEN WriteSH("KMS: can't mmap the buffer ", -fbadr); RETURN -1 END;
+  connId[0]:=conn;
+  sc[0]:=SYSTEM.ADR(connId[0]); sc[1]:=0; sc[2]:=1; sc[3]:=crtc; sc[4]:=fb; sc[5]:=0; sc[6]:=0; sc[7]:=0; sc[8]:=1;
+  i:=0; WHILE i<17 DO sc[9+i]:=modes[17*best+i]; INC(i) END;
+  res:=DrmIoctl(fd, 0A2H, 104, SYSTEM.ADR(sc));  (* SETCRTC *)
+  IF res#0 THEN WriteSH("KMS: SETCRTC failed (another program shows the screen?) ", res); RETURN -1 END;
+  Width:=SHORT(w); Height:=SHORT(h); UBottom:=0;
+  displayFormat:=color8888; bytes:=4; DrawPattern:=DrawPattern32;
+  rmr:=16; rmw:=8; gmr:=8; gmw:=8; bmr:=0; bmw:=8;  (* XRGB8888 *)
+  linelength:=pitch DIV bytes;
+  kmsFb:=fb; xfd:=fd;
+  i:=0; WHILE i<6 DO r[i]:=0; INC(i) END;  (* drivers without DIRTYFB (most) show the buffer itself *)
+  r[0]:=fb; r[3]:=0;
+  IF DrmIoctl(fd, 0B1H, 24, SYSTEM.ADR(r))=0 THEN PutImage:=PutImageKMS END;
+  IF trace THEN WriteSH("KMS width ", w); WriteSH("KMS height ", h); WriteSH("KMS pitch ", pitch) END;
+  RETURN fd
+END InitKMS;
+
 PROCEDURE InitFB*(): LONGINT;
 CONST 
   FBIOGETVSCREENINFO= 4600H;
@@ -1686,9 +1795,11 @@ TYPE
 VAR res: LONGINT; v: fbvarscreeninfo; f: fbfixscreeninfo;
 BEGIN
   xfd:=Linux0.Openat0( Linux0.ATFDCWD, SYSTEM.ADR("/dev/fb0"), Linux0.ORDWR, 0);
-  IF xfd<=0 THEN
-    WriteErr("Can't open '/dev/fb0'"); WriteSH("xfd: ",xfd);
-    Kernel.Shutdown(0); RETURN 0
+  IF xfd<=0 THEN  (* polpo: no fbdev, KMS then *)
+    xfd:=InitKMS();
+    IF xfd<=0 THEN Kernel.Shutdown(0); RETURN 0 END;
+    Kernel.InstallTermHandler( CloseFB);
+    RETURN xfd
   END;
   Kernel.InstallTermHandler( CloseFB);
   res:=Linux0.IOCtl0( xfd, FBIOGETFSCREENINFO, SYSTEM.ADR( f));

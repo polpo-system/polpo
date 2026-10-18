@@ -14,6 +14,13 @@ System.Init and so on. The desktop can also draw itself inside an xterm with six
 without X11: make sixel switches to that, and run.vt.sh opens a suitable xterm (the readme has the
 details).
 
+Without X11 and without a terminal, on the Linux console: started there (TERM is linux), the
+desktop draws on the whole screen itself, through /dev/fb0 when the kernel has it, else through
+KMS (/dev/dri/card0, the kernel's graphics driver, in the preferred mode of the first connected
+screen). It reads the keyboard from the console and the mouse from /dev/input/mice. No other
+program may be showing the screen then (an X server or Wayland on that console); switch to a free
+console with Ctrl+Alt+F2 first.
+
 loksh loads modules from obj/<arch>/ of the directory it is started in before those of polpo, so
 a project with objects of its own starts the desktop in its directory. Oberon.Text is the
 configuration (fonts, and System.InitCommands, the commands run at the start).
