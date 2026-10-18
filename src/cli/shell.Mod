@@ -374,7 +374,7 @@ BEGIN
     END;
     (* reading a line: Ctrl+C is a key (cancel the line); running a command: Ctrl+C stops the
        command (a trap) and the shell goes on, as after any trap in a command *)
-    r := nTermios.Get(0, running); reading := running; EXCL(reading.lflag, nTermios.ISIG);
+    r := nTermios.Get(0, running); reading := running; EXCL(reading.lflag, nTermios.isig);
     Kernel.InstallLoop(Interactive);
     Interactive
   END

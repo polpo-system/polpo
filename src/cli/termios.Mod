@@ -44,8 +44,9 @@ TYPE
 VAR
   savedTerminal: Termios;
   cbreak: BOOLEAN;
-  (* polpo: MIPS numbers ioctls, VMIN/VTIME and IEXTEN differently *)
-  getReq, setReq, winReq, vmin, vtime, iexten: LONGINT;
+  (* polpo: MIPS and PowerPC number ioctls, VMIN/VTIME and some flags differently *)
+  getReq, setReq, winReq, vmin, vtime, iexten, icanon, ixon: LONGINT;
+  isig*: LONGINT;  (** the bit of ISIG in lflag on this machine *)
 
 (* Read terminal settings for file descriptor fd into t.
    Returns 0 on success, negative errno on failure. *)
@@ -78,7 +79,7 @@ BEGIN
   r := Get(fd, saved);
   IF r = 0 THEN
     t := saved;
-    EXCL(t.lflag, ICANON);  (* no line buffering *)
+    EXCL(t.lflag, icanon);  (* no line buffering *)
     EXCL(t.lflag, ECHO);    (* no automatic echo *)
     t.cc[vmin]  := 1X;      (* return after every character *)
     t.cc[vtime] := 0X;      (* no read timeout *)
@@ -111,8 +112,8 @@ END Timeout;
   ^S, ^Q, ^V are keys), Enter is CR, one character at a time *)
 PROCEDURE MakeRaw*(VAR t: Termios);
 BEGIN
-  EXCL(t.lflag, ICANON); EXCL(t.lflag, ECHO); EXCL(t.lflag, ISIG); EXCL(t.lflag, iexten);
-  EXCL(t.iflag, 10 (* IXON *)); EXCL(t.iflag, 8 (* ICRNL *));
+  EXCL(t.lflag, icanon); EXCL(t.lflag, ECHO); EXCL(t.lflag, isig); EXCL(t.lflag, iexten);
+  EXCL(t.iflag, ixon); EXCL(t.iflag, 8 (* ICRNL *));
   t.cc[vmin] := 1X; t.cc[vtime] := 0X
 END MakeRaw;
 
@@ -128,8 +129,12 @@ END WinSize;
 
 BEGIN
   cbreak := FALSE;
+  icanon := ICANON; isig := ISIG; ixon := 10;
   IF (Linux0.ARCH = "MIPS") OR (Linux0.ARCH = "MIPSBE") THEN
     getReq := 540DH; setReq := 540EH; winReq := 40087468H; vmin := 4; vtime := 5; iexten := 8
+  ELSIF Linux0.ARCH = "PPC" THEN  (* c_cc starts at offset 16, in line: VMIN 5, VTIME 7 are cc[4], cc[6] *)
+    getReq := 402C7413H; setReq := 802C7414H; winReq := 40087468H; vmin := 4; vtime := 6;
+    iexten := 10; icanon := 8; isig := 7; ixon := 9
   ELSE
     getReq := TCGETS; setReq := TCSETS; winReq := 5413H; vmin := VMIN; vtime := VTIME; iexten := IEXTEN
   END
