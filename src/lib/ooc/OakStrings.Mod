@@ -33,7 +33,7 @@ PROCEDURE Length* (s: ARRAY OF CHAR): INTEGER;
     i: INTEGER;
   BEGIN
     i := 0;
-    WHILE (s[i] # 0X) DO
+    WHILE (i < LEN(s)) & (s[i] # 0X) DO  (* polpo: stops at the end of a string without 0X, as oocStrings *)
       INC (i)
     END;
     RETURN i
