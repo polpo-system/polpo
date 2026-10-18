@@ -14,7 +14,7 @@ MODULE genarden;  (** the recipes of the base system of polpo for the package tr
 IMPORT Kernel, Files, FATFiles, Root, Texts := Texts0, Oberon := Oberon0, texts, TOML, out;
 
 CONST
-  NameLen = 256; MaxArchs = 6; MaxLine = 1024;
+  NameLen = 256; MaxArchs = 7; MaxLine = 1024;
   Version = "0.1.0";
 
 TYPE
@@ -456,7 +456,7 @@ BEGIN
   i := 0; WHILE i < MaxArchs DO links[i] := ""; INC(i) END;
   Recipe("build", 0, TRUE); Recipe("arm-cross", 0, FALSE); Recipe("rop2-cross", 0, FALSE);
   Recipe("arm", 1, TRUE); Recipe("riscv", 2, TRUE); Recipe("mips", 3, TRUE); Recipe("armv7", 4, TRUE);
-  Recipe("mipsbe", 5, TRUE);
+  Recipe("mipsbe", 5, TRUE); Recipe("ppc", 6, TRUE);
   p := packages;  (* sources not in the recipes, on every architecture *)
   WHILE p # NIL DO
     it := Items(p.sec, "extra");
@@ -486,5 +486,5 @@ END Run;
 
 BEGIN
   archs[0] := "x86"; archs[1] := "arm"; archs[2] := "riscv"; archs[3] := "mips"; archs[4] := "armv7";
-  archs[5] := "mipsbe"
+  archs[5] := "mipsbe"; archs[6] := "ppc"
 END genarden.

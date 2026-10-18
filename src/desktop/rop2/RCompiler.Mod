@@ -15,6 +15,7 @@ MODULE RCompiler;  (* RC 6.3.89 / 17.6.93 *)  (* object model 19.1.94 *)
   CONST
     mipstag=0F9X; mipsttag= 0FAX; armv7tag=0FBX; armv8tag=0FCX; riscvtag=0FDX;  (* same as in RBootLinker *)
     mipsbetag=0F8X;  (* polpo: MIPS big-endian *)
+    ppctag=0F7X;  (* polpo: PowerPC *)
     OptionChar = "\";
     SignOnMessage = "ROP2 Compiler  RC  10.2.94; p.m. 2016-11-22";
 
@@ -139,7 +140,7 @@ END SetOpt;
   BEGIN
     error := FALSE;  globopt:= defopt;
     IF OPM.OFtag = armv7tag THEN INCL(globopt, softdiv) END;  (* polpo: ARMv7 software division by default, as rcompiler *)
-    IF OPM.OFtag = mipsbetag THEN INCL(globopt, bigend) END;
+    IF (OPM.OFtag = mipsbetag) OR (OPM.OFtag = ppctag) THEN INCL(globopt, bigend) END;
     Texts.OpenScanner(S, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(S);
     IF (S.class = Texts.Char) & (S.c # OptionChar) THEN
       IF S.c = "*" THEN
@@ -216,7 +217,8 @@ END CompileV;
 
 PROCEDURE Compile*;
 BEGIN
-  IF Linux0.ARCH="MIPSBE" THEN Compile1("MOPV", "mipsbe", mipsbetag);
+  IF Linux0.ARCH="PPC" THEN Compile1("POPV", "ppc", ppctag);
+  ELSIF Linux0.ARCH="MIPSBE" THEN Compile1("MOPV", "mipsbe", mipsbetag);
   ELSIF Linux0.ARCH="MIPS" THEN Compile1("MOPV", "mips", mipstag);
   ELSIF  Linux0.ARCH="RISC-V" THEN Compile1("VOPV", "riscv", riscvtag);
   ELSE Compile1("AOPV", "armv7", armv7tag)
