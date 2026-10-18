@@ -142,7 +142,7 @@ END Bits;
 (** x := the integer of the decimal digits dig[0..n-1] times 10^e, correctly rounded. sticky: digits
    after these were left out, not all 0. underflow and overflow give 0 *)
 PROCEDURE Long*(VAR dig: ARRAY OF CHAR; n: LONGINT; sticky: BOOLEAN; e: LONGINT; VAR x: LONGREAL): INTEGER;
-VAR m: Big; ex, lo, hi, res: LONGINT;
+VAR m: Big; ex, lo, hi, res, w: LONGINT; c: CHAR;
 BEGIN
   res := Round(dig, n, sticky, e, 53, -1022, 1023, m, ex);
   lo := 0; hi := 0;
@@ -150,7 +150,10 @@ BEGIN
     lo := Bits(m, 0, 32); hi := Bits(m, 32, 52);
     IF BitLen(m) = 53 THEN INC(hi, ASH(ex + 1023, 20)) END  (* else a denormal number: exponent field 0 *)
   END;
-  SYSTEM.PUT(SYSTEM.ADR(x), lo); SYSTEM.PUT(SYSTEM.ADR(x) + 4, hi);
+  w := 1; SYSTEM.GET(SYSTEM.ADR(w), c);  (* the high word first on big-endian machines *)
+  IF c = 0X THEN SYSTEM.PUT(SYSTEM.ADR(x), hi); SYSTEM.PUT(SYSTEM.ADR(x) + 4, lo)
+  ELSE SYSTEM.PUT(SYSTEM.ADR(x), lo); SYSTEM.PUT(SYSTEM.ADR(x) + 4, hi)
+  END;
   RETURN SHORT(res)
 END Long;
 
