@@ -8,10 +8,20 @@ IMPORT SYSTEM, DecReal, out;
 
 VAR fails, checks: LONGINT;
 
+(* the high and low words of x, in the byte order of the machine *)
+PROCEDURE Words(VAR x: LONGREAL; VAR hi, lo: LONGINT);
+VAR w: LONGINT; c: CHAR;
+BEGIN
+  w := 1; SYSTEM.GET(SYSTEM.ADR(w), c);
+  IF c = 0X THEN SYSTEM.GET(SYSTEM.ADR(x), hi); SYSTEM.GET(SYSTEM.ADR(x) + 4, lo)
+  ELSE SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi)
+  END
+END Words;
+
 PROCEDURE L(dig: ARRAY OF CHAR; e, hi, lo: LONGINT; res: INTEGER);
 VAR x: LONGREAL; h, l: LONGINT; r, n: INTEGER;
 BEGIN n := 0; WHILE dig[n] # 0X DO INC(n) END;
-  r := DecReal.Long(dig, n, FALSE, e, x); SYSTEM.GET(SYSTEM.ADR(x), l); SYSTEM.GET(SYSTEM.ADR(x) + 4, h); INC(checks);
+  r := DecReal.Long(dig, n, FALSE, e, x); Words(x, h, l); INC(checks);
   IF (h # hi) OR (l # lo) OR (r # res) THEN INC(fails);
     out.String("FAIL Long "); out.String(dig); out.String("E"); out.Int(e, 0); out.String(": ");
     out.Hex(h, 8); out.Hex(l, 8); out.Int(r, 2); out.String(", expected "); out.Hex(hi, 8); out.Hex(lo, 8); out.Int(res, 2); out.Ln

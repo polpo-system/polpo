@@ -280,14 +280,24 @@ BEGIN x := 0.1D0; r := SHORT(x); y := LONG(SHORT(x));
 END ShortReal;
 
 (* real literals, correctly rounded, also at the ends of the range *)
+(* the high and low words of x, in the byte order of the machine *)
+PROCEDURE Words(VAR x: LONGREAL; VAR hi, lo: LONGINT);
+VAR w: LONGINT; c: CHAR;
+BEGIN
+  w := 1; SYSTEM.GET(SYSTEM.ADR(w), c);
+  IF c = 0X THEN SYSTEM.GET(SYSTEM.ADR(x), hi); SYSTEM.GET(SYSTEM.ADR(x) + 4, lo)
+  ELSE SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi)
+  END
+END Words;
+
 PROCEDURE Literals(): BOOLEAN;
 VAR x: LONGREAL; r: REAL; lo, hi, b: LONGINT; ok: BOOLEAN;
 BEGIN
-  x := 1.0D23; SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  x := 1.0D23; Words(x, hi, lo);
   ok := (hi = 44B52D02H) & (lo = 0C7E14AF6H);
-  x := 4.9406564584124654D-324; SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  x := 4.9406564584124654D-324; Words(x, hi, lo);
   ok := ok & (hi = 0) & (lo = 1);
-  x := 1.7976931348623157D308; SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
+  x := 1.7976931348623157D308; Words(x, hi, lo);
   ok := ok & (hi = 7FEFFFFFH) & (lo = -1);
   r := 3.4E38; SYSTEM.GET(SYSTEM.ADR(r), b); ok := ok & (b = 7F7FC99EH);
   r := 1.4E-45; SYSTEM.GET(SYSTEM.ADR(r), b); ok := ok & (b = 1);
