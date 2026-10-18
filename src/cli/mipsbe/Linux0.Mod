@@ -738,7 +738,7 @@ BEGIN
   REPEAT
     INC(j, 4);
     sc:= SYSTEM.VAL( SigContext, sp+j);
-  UNTIL (sc.regs[28*2]=1236H) OR (j>1000H);
+  UNTIL (sc.regs[28*2+RegOff]=1236H) OR (j>1000H);
   WriteDist( j);
   Exit0(1);
 *)
@@ -751,7 +751,7 @@ BEGIN
   j:=0;
   REPEAT
     IF j MOD 8 =0 THEN i:=Write0(0, SYSTEM.ADR(ch), 1) END;
-    WriteHex(sc.regs[ j*2]);
+    WriteHex(sc.regs[ j*2+RegOff]);
     INC( j);
   UNTIL j>=32;
   i:=Write0(0, SYSTEM.ADR(ch), 1);
@@ -761,15 +761,15 @@ BEGIN
       IF trap=1023 THEN trap:=MAX(INTEGER) END;
     END;
   END;  (* only for MIPS *)
-  LReg:=sc.regs[ LR*2]; FPtr:=sc.regs[ FP*2];
-  IF (defaulttraphandler # NIL) THEN defaulttraphandler( trap, sc.regs[SP*2], sc.pc, si.adr ) END;
+  LReg:=sc.regs[ LR*2+RegOff]; FPtr:=sc.regs[ FP*2+RegOff];
+  IF (defaulttraphandler # NIL) THEN defaulttraphandler( trap, sc.regs[SP*2+RegOff], sc.pc, si.adr ) END;
   IF inGC THEN  (* Halt("Trap in GC", trap); *) Exit0(1) END;
-  FPtr:=sc.regs[FP*2];
-  IF (traphandler # NIL) & (traphandler#defaulttraphandler)THEN traphandler( trap, sc.regs[SP*2], sc.pc, si.adr ) END;   (*was: handler |trap 16: Disk full *)
+  FPtr:=sc.regs[FP*2+RegOff];
+  IF (traphandler # NIL) & (traphandler#defaulttraphandler)THEN traphandler( trap, sc.regs[SP*2+RegOff], sc.pc, si.adr ) END;   (*was: handler |trap 16: Disk full *)
   IF trap=MAX(INTEGER) THEN INC(sc.pc, 4);  (* ! *)
   ELSE
-    sc.regs[SP*2]:= StackOrg;
-    sc.regs[FP*2]:= StackOrg;
+    sc.regs[SP*2+RegOff]:= StackOrg;
+    sc.regs[FP*2+RegOff]:= StackOrg;
     sc.pc:=SYSTEM.VAL( LONGINT, loop);
     IF loop=NIL THEN Exit0( 1) END;
   END;
@@ -783,7 +783,7 @@ BEGIN
   i:=32;
   REPEAT
     DEC(i);
-    Regs[i]:=sc.regs[i*2];
+    Regs[i]:=sc.regs[i*2+RegOff];
     FRegs[i]:=sc.fpregs[i];
     FRegs[i+32]:=sc.fpregs[i+32];
   UNTIL i=0;
