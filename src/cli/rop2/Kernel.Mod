@@ -71,6 +71,7 @@ CONST
   ARMv7="ARMv7";
   RISCV="RISC-V";
   MIPS="MIPS";
+  MIPSBE="MIPSBE";  (* polpo: MIPS big-endian, treated as MIPS *)
 
   NEWrecord= 0; NEWarray= 1; SYSTEMNEW= 2;
   deallocRECORD= 3; deallocARRAY= 4; deallocSYSBLK= 5;
@@ -519,7 +520,7 @@ BEGIN
     SYSTEM.GETREG( Linux0.ARI+2, SC);  (* sigcontext is 3rd parameter of handler *)
   END;
   INC( siglevel);
-  IF Linux0.ARCH=MIPS THEN adr:=sinfo.adr ELSE adr:=0 END;
+  IF (Linux0.ARCH=MIPS) OR (Linux0.ARCH=MIPSBE) THEN adr:=sinfo.adr ELSE adr:=0 END;
   WriteHex( trap, 6);    trap:=SigTab[ trap];  WriteHex( trap, 9);
   WriteHex( SYSTEM.VAL( LONGINT, SC), 9);  WriteHex( SC.pc, 9);
 
@@ -545,7 +546,7 @@ BEGIN
   WriteHex(SC.pc, 9); WriteLn;
 
   IF (trap= 13) & inGC THEN Linux0.break:=TRUE; DEC( siglevel); RETURN END;  (* ctrl-c from terminal  *)
-  IF Linux0.ARCH=MIPS THEN
+  IF (Linux0.ARCH=MIPS) OR (Linux0.ARCH=MIPSBE) THEN
     IF (trap=-Linux0.SIGTRAP) THEN SYSTEM.GET( SC.pc, trap);  (* Traps only for MIPS *)
       IF trap DIV 8 MOD 8 = 6 THEN trap:=ASH(trap, -6) MOD 1024;
         IF trap=1023 THEN trap:=MAX(INTEGER) END;
