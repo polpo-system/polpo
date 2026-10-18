@@ -39,7 +39,9 @@ The desktop shows the release when it starts (`POLPO Oberon 0.1.0, 2026-10-11`),
 `VERSION`. `make release V=0.2.0` writes it with the version and the date of the day, commits it and
 tags the commit `v0.2.0`; then push the commit and the tag (`git push origin main v0.2.0`).
 
-New to Oberon? Start with [a gentle introduction to polpo](gentle-introduction.md).
+New to Oberon? Start with [a gentle introduction to polpo](gentle-introduction.md). Writing programs with gadgets
+(panels, buttons, gadgets of your own, Linux programs of their own): [a gentle introduction to
+gadgets](gentle-gadgets.md).
 
 To use the desktop (the mouse, commands in texts, editing, fonts, stopping and pausing commands),
 read [desktop.md](desktop.md). To write your own modules and commands, read

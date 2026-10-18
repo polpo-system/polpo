@@ -473,7 +473,8 @@ That is usually harmless, and System.Free unloads the module if you want it fres
 
 Read the sources. That is not a joke: Oberon was written to be read, and polpo has all of it, the
 compilers included. Open src/cli/out.Mod or src/cli/fs.Mod and see how small a useful module can be.
-Then read programming.md before you write commands of your own, and desktop.md for the desktop.
+Then read programming.md before you write commands of your own, and desktop.md for the desktop. For
+programs with panels, buttons and gadgets of your own, read gentle-gadgets.md.
 
 The books listed at the beginning explain the ideas behind what you have seen here far better than I
 can in a short note. Reiser's User Guide is still the best way into the desktop, and Project Oberon
