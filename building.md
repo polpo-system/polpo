@@ -9,15 +9,18 @@ the installed packages.
 
 - Linux on x86 (32-bit code; it runs on x86-64 kernels too), git and make.
 - To run or test the other ports on x86: qemu user mode, `qemu-arm` (ARM and ARMv7),
-  `qemu-riscv32` and `qemu-mipsel`. Building them does not need qemu: they are cross compiled.
+  `qemu-riscv32`, `qemu-mipsel` and `qemu-mips` (big-endian MIPS). Building them does not need
+  qemu: they are cross compiled.
 
 ## The pieces
 
     bin/<arch>/loksh       the boot image of each port: Kernel, Files, the loader, the shell
     obj/<arch>/            the compiled modules (.Obj code, .Sym interface), loaded on demand
-    tools/build.Tool       the x86 recipe; arm.Tool, armv7.Tool, riscv.Tool, mips.Tool the others
+    tools/build.Tool       the x86 recipe; arm.Tool, armv7.Tool, riscv.Tool, mips.Tool, mipsbe.Tool
+                           the others
     tools/arm-cross.Tool   the x86-hosted ARM cross compiler and linker
-    tools/rop2-cross.Tool  the x86-hosted ROP2 cross compilers (ARMv7, RISC-V, MIPS) and linker
+    tools/rop2-cross.Tool  the x86-hosted ROP2 cross compilers (ARMv7, RISC-V, MIPS in both byte
+                           orders) and linker
 
 A recipe is an Oberon text of commands, one per line: the compilations in the order of the
 imports, then the link. `make` and its targets only feed a recipe to a loksh.
@@ -33,6 +36,7 @@ make arm   > build-arm.log 2>&1              # ARM (the Oberon-1 compiler, older
 make armv7 > build-armv7.log 2>&1            # ARMv7
 make riscv > build-riscv.log 2>&1            # RISC-V (32-bit)
 make mips  > build-mips.log 2>&1             # MIPS (32-bit, little-endian)
+make mipsbe > build-mipsbe.log 2>&1          # MIPS (32-bit, big-endian)
 grep -a "err " build-*.log                   # nothing: all compiled
 ```
 
@@ -42,10 +46,10 @@ grep -a "err " build-*.log                   # nothing: all compiled
 - The x86 build links `bin/x86/loksh2` and leaves `bin/x86/loksh` alone, because loksh is the
   program running the build; the two commands after it put the new one in place (a plain `cp`
   fails while a loksh runs). The other ports link `bin/<arch>/loksh.new` and move it over.
-- Each of `make arm`, `armv7`, `riscv`, `mips` first builds its cross compiler on x86, then the
-  port. Build ARMv7, RISC-V and MIPS one after another, never at the same time: all three
-  compile the same ROP2 cross compiler into `obj/x86/` first. `make arm` may run beside one of
-  them.
+- Each of `make arm`, `armv7`, `riscv`, `mips`, `mipsbe` first builds its cross compiler on x86,
+  then the port. Build ARMv7, RISC-V and the two MIPS ports one after another, never at the same
+  time: they all compile the same ROP2 cross compiler into `obj/x86/` first. `make arm` may run
+  beside one of them.
 - Build x86 first: the cross compilers of the ports run on the x86 system.
 
 ## Rebuilding a port with its own compiler
@@ -55,6 +59,7 @@ make arm-native        # ARM, with the ARM compiler: natively on ARM, on x86 und
 make armv7-native
 make riscv-native
 make mips-native
+make mipsbe-native
 ```
 
 This is how a port rebuilds itself on its own machine; on x86 it runs under qemu and is slow.
@@ -74,6 +79,7 @@ objects can differ in a few bytes of import keys.
   qemu-arm bin/armv7/loksh portia.Upgrade /y
   qemu-riscv32 bin/riscv/loksh portia.Upgrade /y
   qemu-mipsel bin/mips/loksh portia.Upgrade /y
+  qemu-mips bin/mipsbe/loksh portia.Upgrade /y
   bin/x86/loksh portia.Check                   # and the same on the other ports
   ```
 

@@ -507,6 +507,26 @@ On MIPS, `compiler.Compile` and `linker.Link` are the MIPS compiler and boot
 linker. The compiler avoids misaligned word accesses (it uses LWL/LWR and
 SWL/SWR where alignment is unknown), so no kernel fixups are needed.
 
+### MIPS big-endian
+
+The same ROP2 MIPS compiler also produces code for big-endian MIPS (routers and other embedded
+machines, and the SGI and other workstations of old). Object files are in `obj/mipsbe/`, the
+static executable is `bin/mipsbe/loksh`.
+
+```
+make mipsbe         # on x86: cross compile the big-endian MIPS system
+make mipsbe-native  # rebuild it with its own compiler (on x86: under qemu-mips)
+make mipsbe-run     # start the desktop (System.Init); on x86 through qemu-mips
+make mipsbe-shell   # console
+```
+
+`mbcompiler.Compile` is the cross compiler on x86, `compiler.Compile` the native one, and
+`rlinker.Link /b` links the executable. Oberon files keep their little-endian numbers on every
+machine (Files reads and writes them byte by byte), so object files, texts, fonts and pictures are
+the same on both byte orders. The desktop talks to the X server in the byte order of the machine,
+and swaps pixels when the server reads them in the other order (a big-endian machine showing its
+desktop on a little-endian one).
+
 ### ARMv7
 
 Besides the Oberon-1 ARM compiler for older ARM processors (`make arm`, `obj/arm/`),
