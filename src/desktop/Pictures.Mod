@@ -164,21 +164,21 @@ END GetColor;
 PROCEDURE StoreCT(VAR R: Files.Rider; ct: ColorTable; depth: INTEGER);
 VAR i: INTEGER;
 BEGIN
-  Files.WriteBytes(R,depth,2); depth := ABS(depth);
+  Files.WriteInt(R,depth); depth := ABS(depth);
   i := 0;
   WHILE i < ASH(1,depth) DO
-    Files.WriteBytes(R,ct[i].red,1);Files.WriteBytes(R,ct[i].green,1);Files.WriteBytes(R,ct[i].blue,1);
+    Files.Write(R,CHR(ct[i].red MOD 256));Files.Write(R,CHR(ct[i].green MOD 256));Files.Write(R,CHR(ct[i].blue MOD 256));
     INC(i)
   END
 END StoreCT;
 
 PROCEDURE LoadCT(VAR R: Files.Rider; ct: ColorTable; depth: INTEGER);
-VAR i: INTEGER;
+VAR i: INTEGER; c: CHAR;
 BEGIN
   i := 0;
   WHILE i < ASH(1,depth) DO
     ct[i].red := 0; ct[i].green := 0; ct[i].blue := 0;
-    Files.ReadBytes(R,ct[i].red,1);Files.ReadBytes(R,ct[i].green,1);Files.ReadBytes(R,ct[i].blue,1);
+    Files.Read(R,c); ct[i].red := ORD(c); Files.Read(R,c); ct[i].green := ORD(c); Files.Read(R,c); ct[i].blue := ORD(c);  (* polpo: through a CHAR (big-endian) *)
     INC(i)
   END
 END LoadCT;
@@ -286,8 +286,8 @@ PROCEDURE Store* (P: Picture; F : Files.File; pos: LONGINT; VAR len: LONGINT);
       help: BOOLEAN;
 BEGIN
   Files.Set(R, F, pos);
-  j := PictFileId; Files.WriteBytes(R,j,2);
-  Files.WriteBytes(R,P.width,2); Files.WriteBytes(R,P.height,2); StoreCT(R,P.ct,P.depth);
+  j := PictFileId; Files.WriteInt(R,j);
+  Files.WriteInt(R,P.width); Files.WriteInt(R,P.height); StoreCT(R,P.ct,P.depth);
   d := P.depth;
   wth := SHORT(P.wth);
   IF d=1 THEN wth := SHORT((P.wth+7) DIV 8)
@@ -360,11 +360,11 @@ PROCEDURE Load*(P: Picture; F : Files.File; pos: LONGINT; VAR len: LONGINT);
       (* buf: ARRAY MaxWth OF CHAR; *) err: ARRAY 32 OF CHAR;
       size,p,adr,n: LONGINT; rle: BOOLEAN;
 BEGIN
-  Files.Set(R,F,pos-2); Files.ReadBytes(R,id,2);
+  Files.Set(R,F,pos-2); Files.ReadInt(R,id);
   IF id = PictFileId THEN
-    Files.ReadBytes(R,P.width,2);
-    Files.ReadBytes(R,P.height,2);
-    Files.ReadBytes(R,P.depth,2);
+    Files.ReadInt(R,P.width);
+    Files.ReadInt(R,P.height);
+    Files.ReadInt(R,P.depth);
     NEW(P.ct);
     LoadCT(R,P.ct,P.depth);
     P.wth := P.width;
