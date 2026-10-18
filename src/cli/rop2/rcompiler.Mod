@@ -5,10 +5,10 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     Texts := texts, Oberon := Oberon0, Out := out;
 
   CONST
-    mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX;
+    mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX; mipsbetag* = 0F8X;
     (* compiler options *)
     inxchk = 0; ovflchk = 1; ranchk = 2; typchk = 3; newsf = 4; ptrinit = 5;
-    intprinf = 6; assert = 7; findpc = 8; extsf = 9; softdiv = 10;
+    intprinf = 6; assert = 7; findpc = 8; extsf = 9; softdiv = 10; bigend = 11;
     defopt = {inxchk, typchk, ptrinit, assert};
 
   VAR
@@ -139,12 +139,16 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
   BEGIN
     COPY(name, target); COPY(backendMod, backend); Root.Obj(arch, dir); tag := objTag;
     (* ARMv7: software division by default, Cortex-A8 and A9 have no divide instruction *)
-    IF name = "ARMv7" THEN targetopt := {softdiv} ELSE targetopt := {} END
+    IF name = "ARMv7" THEN targetopt := {softdiv}
+    ELSIF name = "MIPSBE" THEN targetopt := {bigend}  (* polpo: MIPS, big-endian *)
+    ELSE targetopt := {}
+    END
   END SetTarget;
 
   PROCEDURE SetHostTarget;
   BEGIN
-    IF Linux0.ARCH = "MIPS" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)
+    IF Linux0.ARCH = "MIPSBE" THEN SetTarget("MIPSBE", "MOPV", "mipsbe", mipsbetag)
+    ELSIF Linux0.ARCH = "MIPS" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)
     ELSIF Linux0.ARCH = "ARMv7" THEN SetTarget("ARMv7", "AOPV", "armv7", armv7tag)
     ELSE SetTarget("RISC-V", "VOPV", "riscv", riscvtag)
     END

@@ -741,7 +741,7 @@ MODULE MOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
   PROCEDURE LdW(base, rt, off: LONGINT; unaligned: BOOLEAN; VAR n: LONGINT);
   BEGIN
     IF unaligned THEN
-      OPL.Put(LWR*OP + base*RS + rt*RT + off MOD IMM); OPL.Put(LWL*OP + base*RS + rt*RT + (off + 3) MOD IMM); INC(n, 2)
+      OPL.Put(LWR*OP + base*RS + rt*RT + (off + OPL.ROffset) MOD IMM); OPL.Put(LWL*OP + base*RS + rt*RT + (off + OPL.LOffset) MOD IMM); INC(n, 2)
     ELSE OPL.Put(LW*OP + base*RS + rt*RT + off MOD IMM); INC(n)
     END
   END LdW;
@@ -750,7 +750,7 @@ MODULE MOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
   PROCEDURE StW(base, rt, off: LONGINT; unaligned: BOOLEAN; VAR n: LONGINT);
   BEGIN
     IF unaligned THEN
-      OPL.Put(SWR*OP + base*RS + rt*RT + off MOD IMM); OPL.Put(SWL*OP + base*RS + rt*RT + (off + 3) MOD IMM); INC(n, 2)
+      OPL.Put(SWR*OP + base*RS + rt*RT + (off + OPL.ROffset) MOD IMM); OPL.Put(SWL*OP + base*RS + rt*RT + (off + OPL.LOffset) MOD IMM); INC(n, 2)
     ELSE OPL.Put(SW*OP + base*RS + rt*RT + off MOD IMM); INC(n)
     END
   END StW;
@@ -1000,10 +1000,10 @@ MODULE MOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
       OPL.Move(yadr, y, LInt);
       until := OPL.PutSPC(ADDU, -1, yadr, z); 
       (* polpo: the source (any open array actual, e.g. a string constant) need not be 8-byte
-         aligned; copy words with the unaligned load pair LWR/LWL (little endian) instead of
+         aligned; copy words with the unaligned load pair LWR/LWL (offsets for the byte order) instead of
          LDC1/SDC1, which trap when misaligned and need an FPU. x (the stack) is aligned. *)
-      (* loop0: *) OPL.Put(LWR*OP + T2*RS + T0*RT );
-      OPL.Put(LWL*OP + T2*RS + T0*RT + 3);
+      (* loop0: *) OPL.Put(LWR*OP + T2*RS + T0*RT + OPL.ROffset);
+      OPL.Put(LWL*OP + T2*RS + T0*RT + OPL.LOffset);
       OPL.Put(ADDIU*OP + T2*(RS + RT) + 4);
       OPL.Put(ADDIU*OP + T1*(RS + RT) + 4);
       OPL.Put(BNE*OP + T2*RS + until*RT + (-5) MOD IMM);  (* loop0 *)

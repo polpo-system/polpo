@@ -101,6 +101,9 @@ field descmode is the mode of an open array descriptor, reg2 -> reg, Tjmp -> off
     defaultCalleeUsed*: RegSet;
     dynArrCopied*, LeafProc*: BOOLEAN;
     KNewRec*, KNewSys*, KNewArr*, GlobData*: OPT.Object;
+    bigEndian*: BOOLEAN;  (* polpo: the target keeps the most significant byte first (option bigend) *)
+    LOffset*, ROffset*: LONGINT;  (* polpo: offsets of LWL/SWL and LWR/SWR in an unaligned word access *)
+    hostBig: BOOLEAN;  (* the compiler runs on a big-endian machine *)
     
   CONST
     (* structure forms *)
@@ -251,12 +254,23 @@ END PutTrap;
   BEGIN AllocConst(S.ADR(s[0]), SHORT(len), adr, 4)
   END AllocString;
 
+  (* polpo: n bytes at adr in the byte order of the target: reversed when it differs from the host's *)
+  PROCEDURE AllocNumber(adr, n: LONGINT; VAR cadr: LONGINT);
+  VAR b: ARRAY 8 OF CHAR; i: LONGINT;
+  BEGIN
+    IF bigEndian # hostBig THEN
+      i := 0; WHILE i < n DO S.GET(adr + n - 1 - i, b[i]); INC(i) END;
+      AllocConst(S.ADR(b[0]), n, cadr, SHORT(SHORT(n)))
+    ELSE AllocConst(adr, n, cadr, SHORT(SHORT(n)))
+    END
+  END AllocNumber;
+
   PROCEDURE AllocReal*(r: REAL; VAR adr: LONGINT);
-  BEGIN AllocConst(S.ADR( r), 4, adr, 4)
+  BEGIN AllocNumber(S.ADR(r), 4, adr)
   END AllocReal;
 
   PROCEDURE AllocLReal*(r: LONGREAL; VAR adr: LONGINT);
-  BEGIN AllocConst(S.ADR( r), 8, adr, 8)
+  BEGIN AllocNumber(S.ADR(r), 8, adr)
   END AllocLReal;
 
   PROCEDURE AllocTypDesc*(typ: OPT.Struct);   (* typ^.comp = Record *)
@@ -1328,9 +1342,13 @@ END PutTrap;
   END OutCode;
 
   PROCEDURE Init*(opt: SET);
-    CONST intprinf = 6; cendian = 10;
+    CONST intprinf = 6; bigend = 11;
+    VAR w: LONGINT; c: CHAR;
   BEGIN
     InterProcInf := intprinf IN opt;
+    bigEndian := bigend IN opt;  (* polpo: MIPS big-endian (mbcompiler) *)
+    IF bigEndian THEN LOffset := 0; ROffset := 3 ELSE LOffset := 3; ROffset := 0 END;
+    w := 1; S.GET(S.ADR(w), c); hostBig := c = 0X;
     pc := 0; level := 0; sb := 0; conx := 0; shiftx := 0; curshiftx := NoShift;
     IF NEWDATA THEN conx:=LEN(constant) END;
     CodeOvF := FALSE; RegsSaved := FALSE; stackExt := 0;
