@@ -24,7 +24,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts := texts, Con := out;
 
   CONST
-    MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6;
+    MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6; PPC=7;
 (*    mipstag=0F9X; mipsttag= 0FAX; armv7tag=0FBX; armv8tag=0FCX; riscvtag=0FDX;   not same as in ROP2 *)
 
     BootHeapSize = 20000H;
@@ -57,8 +57,9 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     dir: ARRAY 256 OF CHAR;  (* object file directory *)
     ptrFixx: LONGINT;
     arch: LONGINT;
-    archs: ARRAY MIPSBE+1 OF ARRAY 7 OF CHAR;
-    tags: ARRAY MIPSBE+1 OF INTEGER;
+    archs: ARRAY PPC+1 OF ARRAY 7 OF CHAR;
+    tags: ARRAY PPC+1 OF INTEGER;
+    big: BOOLEAN;  (* polpo: the target is big-endian *)
     (* polpo: the image is built in the byte order of the host; for a target of the other order the
        words are swapped when it is written, except the byte regions (names, refs, constants), and
        the 16-bit fields have their two bytes swapped *)
@@ -481,9 +482,37 @@ BEGIN
   END
 END FixupA;
 
+(* polpo: Linux0.Fixup of PowerPC, see POPL *)
+PROCEDURE FixupP(m: Module; entry, L: LONGINT);
+CONST T2=12; ADDIS=3C000000H; ADDI=38000000H; MTCTR=7C0903A6H; BCTRL=4E800421H;
+VAR L1, c1, c2, a, d: LONGINT;
+BEGIN
+  IF (entry#0) & (L # 0) THEN
+    INC( entry, shift0);
+    REPEAT
+      L1 := L; S.GET( m.cb+L1*4, c1);
+      IF c1 DIV 4000000H MOD 64 = 18 THEN  (* bl: a call into another module *)
+        d := c1 MOD 4000000H DIV 4; IF d >= 800000H THEN DEC(d, 1000000H) END;
+        L := L1 + d + 1; a := entry;
+        S.PUT( m.cb+L1*4, ADDIS + ASH(T2, 21) + ASH(a + 8000H, -16) MOD 10000H);
+        S.PUT( m.cb+L1*4+4, ADDI + ASH(T2, 21) + ASH(T2, 16) + a MOD 10000H);
+        S.PUT( m.cb+L1*4+8, MTCTR + ASH(T2, 21));
+        S.PUT( m.cb+L1*4+12, BCTRL)
+      ELSE  (* load, store, addi with the offset in the next word *)
+        d := c1 MOD 10000H; IF d >= 8000H THEN DEC(d, 10000H) END;
+        L := L1 + d + 1;
+        S.GET( m.cb+L1*4+4, c2); a := entry + c2;
+        S.PUT( m.cb+L1*4, ADDIS + ASH(T2, 21) + ASH(a + 8000H, -16) MOD 10000H);
+        S.PUT( m.cb+L1*4+4, c1 - c1 MOD 200000H + ASH(T2, 16) + a MOD 10000H)
+      END
+    UNTIL L = L1
+  END
+END FixupP;
+
 PROCEDURE Fixup(m: Module; entry, L: LONGINT; data: BOOLEAN);
 BEGIN
   IF tag=36FDH THEN FixupV(m, entry, L)
+  ELSIF tag=36F7H THEN FixupP(m, entry, L)
   ELSIF tag=36FBH THEN FixupA(m, entry, L)
   ELSIF (tag=36F9H) OR (tag=36F8H) THEN FixupM(m, entry, L, data)
   ELSE HALT(255);
@@ -1082,11 +1111,12 @@ END MkELF64hdr;
     Texts.WriteLn(W);
   (* output heap *)
     RelocatePtr;
-    IF (arch = MIPSBE) # hostBig THEN SwapImage(end) END;
+    big := (arch = MIPSBE) OR (arch = PPC);
+    IF big # hostBig THEN SwapImage(end) END;
 
   (* create bootfile with correct permissions and copy data *)
     of:= Linux0.Openat0( Linux0.ATFDCWD, S.ADR(bootName[0]), Linux0.ORDWR+Linux0.OCREAT+Linux0.OTRUNC, 1EDH);  (* mode = octal 755 *)
-    IF arch = MIPSBE THEN Texts.WriteString(W, " big endian heap: ") ELSE Texts.WriteString(W, " little endian heap: ") END; Texts.WriteInt(W, end - heapAdr, 0); Texts.WriteString(W, "  file: ");
+    IF big THEN Texts.WriteString(W, " big endian heap: ") ELSE Texts.WriteString(W, " little endian heap: ") END; Texts.WriteInt(W, end - heapAdr, 0); Texts.WriteString(W, "  file: ");
     IF b64 THEN
       (* MIPS: see https://dmz-portal.mips.com/wiki/MIPS_ELF_header_definitions ; 200H= 64 bit FP *)
       IF arch=MIPS THEN MkELF64hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF64HDR), 80000000H, 8);
@@ -1103,6 +1133,9 @@ END MkELF64hdr;
         IF arch=MIPSBE THEN eh3.eIdent[ 5]:= 2X END;  (* EI_DATA= ELFDATA2MSB *)
         IF (arch=MIPSBE) # hostBig THEN SwapELF32 END;
       ELSIF arch=RISCV THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 0, 243);
+      ELSIF arch=PPC THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 0, 20);  (* EM_PPC *)
+        eh3.eIdent[ 5]:= 2X;  (* EI_DATA= ELFDATA2MSB *)
+        IF ~hostBig THEN SwapELF32 END;
       ELSIF arch=ARMv7 THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 5000402H, 40);
       ELSE Texts.WriteString(W, "32 bit target not supported ");
       END;
@@ -1130,7 +1163,7 @@ END MkELF64hdr;
   PROCEDURE Help*;
   BEGIN
     Con.String("USAGE:"); Con.Ln;
-    Con.String("  rlinker.Link [/e] [/v | /m | /a] [/Pdir/] image Module0 Module1 ..."); Con.Ln;
+    Con.String("  rlinker.Link [/e] [/v | /m | /b | /a | /w] [/Pdir/] image Module0 Module1 ..."); Con.Ln;
     Con.Ln;
     Con.String("Links the modules, listed in import order, from dir (default obj/<arch>/)"); Con.Ln;
     Con.String("into the static executable image; module bodies run in that order."); Con.Ln;
@@ -1139,7 +1172,8 @@ END MkELF64hdr;
     Con.String("  /m       MIPS (obj/mips/)"); Con.Ln;
     Con.String("  /b       MIPS big-endian (obj/mipsbe/)"); Con.Ln;
     Con.String("  /a       ARMv7 (obj/armv7/)"); Con.Ln;
-    Con.String("Without /v, /m, /a the target is the host architecture."); Con.Ln;
+    Con.String("  /w       PowerPC, 32-bit (obj/ppc/)"); Con.Ln;
+    Con.String("Without one of them the target is the host architecture."); Con.Ln;
     Con.String("  /Pdir/   object file directory"); Con.Ln
   END Help;
 
@@ -1147,7 +1181,7 @@ END MkELF64hdr;
     VAR bootName: Name; s: Texts.Scanner; m: Module; pos: LONGINT; i: INTEGER; dirSet: BOOLEAN;
   BEGIN
     pos := Oberon.Log.len; b64 := FALSE; showEntries := FALSE;
-    IF Linux0.ARCH = "MIPSBE" THEN arch := MIPSBE ELSIF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
+    IF Linux0.ARCH = "PPC" THEN arch := PPC ELSIF Linux0.ARCH = "MIPSBE" THEN arch := MIPSBE ELSIF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
     dirSet := FALSE; bootName[0] := 0X;
     Texts.OpenScanner(s, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(s);
     WHILE (s.class = Texts.Name) & ((s.s[0] = "/") OR (s.s[0] = "\")) DO
@@ -1156,6 +1190,7 @@ END MkELF64hdr;
       ELSIF s.s[1] = "m" THEN arch := MIPS
       ELSIF s.s[1] = "b" THEN arch := MIPSBE
       ELSIF s.s[1] = "a" THEN arch := ARMv7
+      ELSIF s.s[1] = "w" THEN arch := PPC
       ELSIF s.s[1] = "P" THEN
         i := 2; WHILE (s.s[i] # 0X) & (i-2 < LEN(dir)-1) DO dir[i-2] := s.s[i]; INC(i) END;
         dir[i-2] := 0X; dirSet := TRUE
@@ -1166,6 +1201,7 @@ END MkELF64hdr;
     IF ~dirSet THEN
       IF arch = MIPS THEN Root.Obj("mips", dir)
       ELSIF arch = MIPSBE THEN Root.Obj("mipsbe", dir)
+      ELSIF arch = PPC THEN Root.Obj("ppc", dir)
       ELSIF arch = ARMv7 THEN Root.Obj("armv7", dir)
       ELSE Root.Obj("riscv", dir)
       END
@@ -1204,6 +1240,7 @@ BEGIN
   archs[ ARMv8]:="armv8"; tags[ ARMv8]:= 36FCH (*36FBH *);
   archs[ TEST]:= "mipst"; tags[TEST]:= 36FAH;
   archs[ MIPSBE]:= "mipsbe"; tags[MIPSBE]:= 36F8H;
+  archs[ PPC]:= "ppc"; tags[PPC]:= 36F7H;
   rawx := 0; halfx := 0;
   tags[0] := 1; S.GET(S.ADR(tags[0]), modeStr[0][0]); hostBig := modeStr[0][0] = 0X; tags[0] := 0;
 END rlinker.
