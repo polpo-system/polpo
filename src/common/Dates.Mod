@@ -3,7 +3,7 @@ Refer to the license.txt file provided with this distribution. *)
 
 MODULE Dates;  (** portable *) (* PS *)
 
-IMPORT Oberon, Texts;
+IMPORT Oberon := Oberon0, Texts := Texts0;  (* polpo: console and desktop *)
 
 CONST
   minute* = 60; hour* = 60*minute; day* = 24*hour; week*= 7* day;
