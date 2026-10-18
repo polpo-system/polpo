@@ -1,6 +1,7 @@
 MODULE portia;  (** polpo's package manager; reads the package tree arden *)
 
-(* portia.List [category]   the packages, of a category: linux, system, devel, apps, games, lib
+(* portia.Help             what the commands do, with examples
+   portia.List [category]   the packages, of a category: linux, system, devel, apps, games, lib
    portia.Info name         a package: description, dependencies, provides, conflicts
    portia.Files name        the files of a package on this architecture
    portia.Owner file        the package a file belongs to (sources, objects, data)
@@ -1912,6 +1913,51 @@ BEGIN
   END;
   SetArch(hostArch)
 END Fetch;
+
+(** portia.Help -- what the commands do, with examples *)
+PROCEDURE Help*;
+
+  PROCEDURE L(s: ARRAY OF CHAR);
+  BEGIN out.String(s); out.Ln
+  END L;
+
+BEGIN
+  L("portia, polpo's package manager: the packages of the tree arden (portia.Sync gets it)");
+  L("");
+  L("Looking:");
+  L("  portia.List [category]      the packages; i installed, u newer in the tree, r remote,");
+  L("                              s sources downloaded only; categories: linux system devel apps");
+  L("                              games gadgets lib");
+  L("  portia.Info name            a package: description, dependencies, modules, installed or not");
+  L("  portia.Files name           its files here (objects, sources, data); - before missing ones");
+  L("  portia.Owner file           the package a file belongs to");
+  L("  portia.Check                every file present, every import satisfied, no file in two");
+  L("                              packages, nothing compiled before an interface it imports");
+  L("  portia.Graph [name] > x.dot the dependencies as a Graphviz graph");
+  L("");
+  L("Changing (they show what they will do and ask; /y does not ask):");
+  L("  portia.Install [/t] name    download, check, build, link and record, with what it needs;");
+  L("                              /t runs its tests and removes it again if they fail");
+  L("  portia.Upgrade [name]       newer versions of installed packages, and packages compiled");
+  L("                              before an interface they import changed (after git pull)");
+  L("  portia.Remove [/deps] name  delete its objects and files; /deps: what needs it too;");
+  L("                              /src the downloaded sources only, /all both");
+  L("  portia.Build [name]         compile again in dependency order (all installed: no name)");
+  L("  portia.Test name            run the tests of an installed package");
+  L("  portia.Sync                 the newest package tree from github.com/polpo-system/arden");
+  L("");
+  L("Other ports: /arm /armv7 /riscv /mips after the command (portia.Build /arm xxs) builds");
+  L("for that port, cross compiled on x86. The record: portia.base.<arch> (comes with polpo) and");
+  L("portia.world.<arch> (what you added); portia.Record rebuilds it from the files present,");
+  L("portia.Mark name and portia.Unmark name set one package. For package authors:");
+  L("portia.Fetch name downloads sources, portia.Sums name [dir] prints the [SUMS] section.");
+  L("");
+  L("Examples:");
+  L("  portia.List gadgets");
+  L("  portia.Install /t gadgets-hpcalc");
+  L("  portia.Files gadgets-hpcalc");
+  L("  portia.Upgrade /y");
+END Help;
 
 (** portia.Sums name [dir] -- the [SUMS] section of a remote package for its recipe: the SHA-256
   of its files in dir (a checkout of its repository; default src/pkg/<name>/) *)
