@@ -21,7 +21,7 @@ MODULE System; (** portable, except where noted *) (* pjm *)
 (* contributions: JG 3.10.90 / NW 26.11.91 / ARD 4. 2. 93 / nm / jm / ejz *)
 
 IMPORT SYSTEM, Linux0, Kernel, Files, FileDir, Modules, Objects, Display, Input, Fonts, 
-  Viewers, Reals, Texts, Oberon, Oberon0, TextFrames, out;
+  Viewers, Reals, Texts, Oberon, Oberon0, TextFrames, out, Out;
 
 CONST
   CR = 0DX; LF = 0AX;
@@ -37,6 +37,7 @@ CONST
 VAR
   W: Texts.Writer;
   OW: Texts.Writer;  (* polpo: the output of out, see LogOut *)
+  outT: Texts.Text;  (* where it goes: Oberon.Log, or the viewer of Out.Open *)
   outTask: Oberon.Task;
   trapped: SHORTINT; 
   ch: CHAR;
@@ -1114,13 +1115,27 @@ BEGIN
     END;
     INC(i)
   END;
-  IF ln THEN Texts.Append(Oberon.Log, OW.buf) END
+  IF ln THEN Texts.Append(outT, OW.buf) END
 END LogOut;
 
 PROCEDURE FlushOut(me: Oberon.Task);
 BEGIN
-  IF OW.buf.len > 0 THEN Texts.Append(Oberon.Log, OW.buf) END
+  IF OW.buf.len > 0 THEN Texts.Append(outT, OW.buf) END
 END FlushOut;
+
+(* polpo: Out.Open and Out.Close: the output of out (and Out) into a viewer of its own, and back *)
+PROCEDURE OpenOut;
+BEGIN
+  IF OW.buf.len > 0 THEN Texts.Append(outT, OW.buf) END;
+  IF outT = Oberon.Log THEN NEW(outT); Texts.Open(outT, "") END;
+  Oberon.OpenText("Out.Text", outT, 400, 200)
+END OpenOut;
+
+PROCEDURE CloseOut;
+BEGIN
+  IF OW.buf.len > 0 THEN Texts.Append(outT, OW.buf) END;
+  outT := Oberon.Log
+END CloseOut;
 
 PROCEDURE Init*;  (** non-portable, for internal use *)  (* called from Oberon init, when Oberon Text is ready *)
 VAR
@@ -1130,7 +1145,7 @@ BEGIN
   IF ~init THEN
     init := TRUE;  (* avoid user call *)
     Display.ShowMain;  (* polpo: the screen of the desktop; programs in windows of their own do without *)
-    out.writer := LogOut;
+    outT := Oberon.Log; out.writer := LogOut; Out.open := OpenOut; Out.close := CloseOut;
     NEW(outTask); outTask.safe := TRUE; outTask.handle := FlushOut; Oberon.Install(outTask);
     Texts.OpenWriter(Wt);
     (* polpo: font scale from System.FontScale in Oberon.Text, unless OFONTSCALE is set *)
