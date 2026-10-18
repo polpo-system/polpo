@@ -564,6 +564,43 @@ BEGIN
   SYSTEM.CODE( JALR);
 END IOCtl0;
 
+(* polpo: for loksh as the first process (boot.Init): mount, load kernel modules, take a console, power off *)
+PROCEDURE Mount0*( src, target, type, flags, data: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 40);
+  SYSTEM.CODE( LWr14);  (* the fifth argument, from the stack *)
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Mount0;
+
+PROCEDURE FinitModule0*( fd, params, flags: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 273);
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END FinitModule0;
+
+PROCEDURE Setsid0*(): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 157);
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Setsid0;
+
+PROCEDURE Sync0*(): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 81);
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Sync0;
+
+PROCEDURE Reboot0*( magic1, magic2, cmd, arg: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( NRR, 142);
+  SYSTEM.CODE( ECALL);
+  SYSTEM.CODE( JALR);
+END Reboot0;
+
 PROCEDURE Select0*( n, readfds, writefds, execptfds, timeout: LONGINT): LONGINT;
 VAR ts: Timespec64; usec, p: LONGINT;
 BEGIN

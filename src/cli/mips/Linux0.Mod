@@ -607,6 +607,57 @@ BEGIN
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
 END IOCtl0;
 
+(* polpo: for loksh as the first process (boot.Init): mount, load kernel modules, take a console, power off *)
+PROCEDURE Mount0*( src, target, type, flags, data: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( 2, 4021);        (* Syscall nr to R2 *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END Mount0;
+
+PROCEDURE FinitModule0*( fd, params, flags: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( 2, 4348);        (* Syscall nr to R2 *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END FinitModule0;
+
+PROCEDURE Setsid0*(): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( 2, 4066);        (* Syscall nr to R2 *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END Setsid0;
+
+PROCEDURE Sync0*(): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( 2, 4036);        (* Syscall nr to R2 *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END Sync0;
+
+PROCEDURE Reboot0*( magic1, magic2, cmd, arg: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( 2, 4088);        (* Syscall nr to R2 *)
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END Reboot0;
+
 PROCEDURE Select0*( n, reafds, writefds, execptfds, timeout: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( 2, 4142);        (* Syscall nr to R2 *)

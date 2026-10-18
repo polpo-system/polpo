@@ -699,6 +699,49 @@ CODE {SYSTEM.i386}
   INT  80H
 END IOCtl0;
 
+(* polpo: for loksh as the first process (boot.Init): mount, load kernel modules, take a console, power off *)
+PROCEDURE Mount0*( src, target, type, flags, data: LONGINT): LONGINT;
+CODE {SYSTEM.i386}
+  MOV  EAX, 21
+  MOV  EBX, src[ EBP]
+  MOV  ECX, target[ EBP]
+  MOV  EDX, type[ EBP]
+  MOV  ESI, flags[ EBP]
+  MOV  EDI, data[ EBP]
+  INT  80H
+END Mount0;
+
+PROCEDURE FinitModule0*( fd, params, flags: LONGINT): LONGINT;
+CODE {SYSTEM.i386}
+  MOV  EAX, 350
+  MOV  EBX, fd[ EBP]
+  MOV  ECX, params[ EBP]
+  MOV  EDX, flags[ EBP]
+  INT  80H
+END FinitModule0;
+
+PROCEDURE Setsid0*(): LONGINT;
+CODE {SYSTEM.i386}
+  MOV  EAX, 66
+  INT  80H
+END Setsid0;
+
+PROCEDURE Sync0*(): LONGINT;
+CODE {SYSTEM.i386}
+  MOV  EAX, 36
+  INT  80H
+END Sync0;
+
+PROCEDURE Reboot0*( magic1, magic2, cmd, arg: LONGINT): LONGINT;
+CODE {SYSTEM.i386}
+  MOV  EAX, 88
+  MOV  EBX, magic1[ EBP]
+  MOV  ECX, magic2[ EBP]
+  MOV  EDX, cmd[ EBP]
+  MOV  ESI, arg[ EBP]
+  INT  80H
+END Reboot0;
+
 (*
 PROCEDURE SIGProcMask( how: LONGINT; set: SET; VAR oldset: SET):LONGINT;
 CONST SIGPROCMASK= 126;

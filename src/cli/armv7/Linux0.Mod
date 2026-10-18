@@ -716,6 +716,45 @@ BEGIN
   SYSTEM.CODE(BX);  (* E1A0F00E  MOV PC,LR *)
 END IOCtl0;
 
+(* polpo: for loksh as the first process (boot.Init): mount, load kernel modules, take a console, power off *)
+PROCEDURE Mount0*( src, target, type, flags, data: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA5);
+  SYSTEM.PUTREG(7, 21);
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Mount0;
+
+PROCEDURE FinitModule0*( fd, params, flags: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA3);
+  SYSTEM.PUTREG(7, 379);
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END FinitModule0;
+
+PROCEDURE Setsid0*(): LONGINT;
+BEGIN
+  SYSTEM.PUTREG(7, 66);
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Setsid0;
+
+PROCEDURE Sync0*(): LONGINT;
+BEGIN
+  SYSTEM.PUTREG(7, 36);
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Sync0;
+
+PROCEDURE Reboot0*( magic1, magic2, cmd, arg: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.CODE(LDMIA4);
+  SYSTEM.PUTREG(7, 88);
+  SYSTEM.CODE(SVC);
+  SYSTEM.CODE(BX);
+END Reboot0;
+
 PROCEDURE Select0*( n, reafds, writefds, execptfds, timeout: LONGINT): LONGINT;
 BEGIN
   SYSTEM.CODE(LDMIA5);  (*LDMIA   SP, {R0 R1 R2 } *)

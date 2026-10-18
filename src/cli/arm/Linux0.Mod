@@ -590,6 +590,55 @@ CODE
   MOV  PC, LR
 END IOCtl0;
 
+(* polpo: for loksh as the first process (boot.Init): mount, load kernel modules, take a console, power off *)
+PROCEDURE Mount0*( src, target, type, flags, data: LONGINT): LONGINT;
+CODE
+  LDR  R4, [SP],4
+  LDR  R3, [SP],4
+  LDR  R2, [SP],4
+  LDR  R1, [SP],4
+  LDR  R0, [SP],4
+  MOV  R7, 21
+  SWI  0
+  MOV  PC, LR
+END Mount0;
+
+PROCEDURE FinitModule0*( fd, params, flags: LONGINT): LONGINT;
+CODE
+  LDR  R2, [SP],4
+  LDR  R1, [SP],4
+  LDR  R0, [SP],4
+  MOV  R7, 178H    (* finit_module=17BH *)
+  ADD  R7, R7, 3
+  SWI  0
+  MOV  PC, LR
+END FinitModule0;
+
+PROCEDURE Setsid0*(): LONGINT;
+CODE
+  MOV  R7, 66
+  SWI  0
+  MOV  PC, LR
+END Setsid0;
+
+PROCEDURE Sync0*(): LONGINT;
+CODE
+  MOV  R7, 36
+  SWI  0
+  MOV  PC, LR
+END Sync0;
+
+PROCEDURE Reboot0*( magic1, magic2, cmd, arg: LONGINT): LONGINT;
+CODE
+  LDR  R3, [SP],4
+  LDR  R2, [SP],4
+  LDR  R1, [SP],4
+  LDR  R0, [SP],4
+  MOV  R7, 88
+  SWI  0
+  MOV  PC, LR
+END Reboot0;
+
 PROCEDURE GetTimeOfDay*(tv, tz: LONGINT): LONGINT;
 CODE
   LDR  R1, [SP],4
