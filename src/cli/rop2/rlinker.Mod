@@ -21,7 +21,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     by default the host architecture (Linux0.ARCH) and obj/<arch>/.
     
 *)
-  IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts := texts, Con := out;
+  IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts := texts, Con := out, logs;
 
   CONST
     MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6; PPC=7;
@@ -1146,20 +1146,6 @@ END MkELF64hdr;
     r0:=Linux0.Close0( of);
   END Out;
 
-  (* Print what was appended to Oberon.Log since position pos. *)
-  PROCEDURE ShowLog(pos: LONGINT);
-    VAR R: Texts.Reader; ch: CHAR; end: LONGINT;
-  BEGIN
-    (* polpo: in the desktop out writes into the log itself: copying would chase its own output *)
-    end := Oberon.Log.len;
-    IF (Con.writer = NIL) & (end > pos) THEN
-      Texts.OpenReader(R, Oberon.Log, pos);
-      WHILE pos < end DO
-        Texts.Read(R, ch); INC(pos);
-        IF ch = 0DX THEN Con.Ln ELSE Con.Char(ch) END
-      END
-    END
-  END ShowLog;
 
   PROCEDURE Help*;
   BEGIN
@@ -1221,7 +1207,7 @@ END MkELF64hdr;
     REPEAT Load(s.s, m); Texts.Scan(s) UNTIL (s.class # Texts.Name) OR (res # done);
     IF res = done THEN Out(bootName) ELSE Texts.WriteString(W, "failed") END;
     Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf);
-    ShowLog(pos);
+    logs.Show(pos);
     Oberon.Collect
   END Link;
 

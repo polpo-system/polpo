@@ -2,7 +2,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
 (* after RCompiler (ROP2), RC 6.3.89 / 17.6.93, p.m. 2017-06-12 *)
   IMPORT
     OPM := ROPM, OPT := ROPT, OPP := ROPP, Modules, Linux0, Root,
-    Texts := texts, Oberon := Oberon0, Out := out;
+    Texts := texts, Oberon := Oberon0, Out := out, logs;
 
   CONST
     mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX; mipsbetag* = 0F8X; ppctag* = 0F7X;
@@ -38,20 +38,6 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     RETURN TRUE
   END LoadBackend;
 
-  (* Print what the compiler appended to Oberon.Log since position pos. *)
-  PROCEDURE ShowLog(pos: LONGINT);
-    VAR R: Texts.Reader; ch: CHAR; end: LONGINT;
-  BEGIN
-    (* polpo: in the desktop out writes into the log itself: copying would chase its own output *)
-    end := Oberon.Log.len;
-    IF (Out.writer = NIL) & (end > pos) THEN
-      Texts.OpenReader(R, Oberon.Log, pos);
-      WHILE pos < end DO
-        Texts.Read(R, ch); INC(pos);
-        IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END
-      END
-    END
-  END ShowLog;
 
   (** Compile the text read by source with the option characters in options. *)
   PROCEDURE Module*(VAR source: Texts.Reader; options: ARRAY OF CHAR; VAR error: BOOLEAN);
@@ -109,7 +95,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       pos := Oberon.Log.len;
       Texts.OpenReader(r, t, 0);
       Module(r, opt, error);
-      ShowLog(pos)
+      logs.Show(pos)
     ELSE
       Head(" not found"); Out.Ln; error := TRUE
     END;

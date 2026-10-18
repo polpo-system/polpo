@@ -1,6 +1,6 @@
 MODULE acompiler;  (** command-line frontend of the ARM compiler *)
   IMPORT
-    OBS, OBP, OC := OBM, Texts := texts, Oberon := Oberon0, Out := out;
+    OBS, OBP, OC := OBM, Texts := texts, Oberon := Oberon0, Out := out, logs;
 
   VAR HW: Texts.Writer;  (* see Head *)
 
@@ -9,20 +9,6 @@ MODULE acompiler;  (** command-line frontend of the ARM compiler *)
     Out.String("ARM Compiler  NW 14.12.93 / as 2.12.98 / prk 09.12.99 / pm / polpo"); Out.Ln
   END SignOn;
 
-  (* Print what the compiler appended to Oberon.Log since position pos. *)
-  PROCEDURE ShowLog(pos: LONGINT);
-    VAR R: Texts.Reader; ch: CHAR; end: LONGINT;
-  BEGIN
-    (* polpo: in the desktop out writes into the log itself: copying would chase its own output *)
-    end := Oberon.Log.len;
-    IF (Out.writer = NIL) & (end > pos) THEN
-      Texts.OpenReader(R, Oberon.Log, pos);
-      WHILE pos < end DO
-        Texts.Read(R, ch); INC(pos);
-        IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END
-      END
-    END
-  END ShowLog;
 
   (* polpo: the name of the file being compiled; in the desktop straight into the log, before what
     the compiler writes there itself (out keeps a line until its end) *)
@@ -40,7 +26,7 @@ MODULE acompiler;  (** command-line frontend of the ARM compiler *)
       OBP.SetDefaults; OBP.ParseOptions(opt);
       pos := Oberon.Log.len;
       OBP.CompilationUnit(t, 0);
-      ShowLog(pos);
+      logs.Show(pos);
       error := OBS.scanerr
     ELSE
       Head(" not found"); Out.Ln;
