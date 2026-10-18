@@ -360,7 +360,7 @@ END FStat0;
 
 PROCEDURE Mmap20*( addr, len, prot, flags, fd, off: LONGINT):LONGINT;
 BEGIN
-  SYSTEM.PUTREG( 2, 4090);        (* Syscall nr to R2 mmap64: 4210, mmap: 4090*)
+  SYSTEM.PUTREG( 2, 4210);        (* polpo: mmap2 (4210), the offset in pages as on the other ports; mmap (4090) takes bytes *)
   SYSTEM.CODE( 12);              (* SYSCALL *)
   SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
   SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
