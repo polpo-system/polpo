@@ -65,8 +65,11 @@ of characters, each character being a pattern and and metric data.
     SYSTEM.PUT(a, CHR(y)); SYSTEM.PUT(a+1,CHR(y DIV 256)); INC(a,2);
   END Put2;
    
-  PROCEDURE Put4 (VAR a: LONGINT; x: LONGINT);
+  PROCEDURE Put4 (VAR a: LONGINT; x: LONGINT);  (* polpo: a word of the index, read back with SYSTEM.GET: in the order of the machine *)
+  VAR w: LONGINT; c: CHAR;
   BEGIN
+    w := 1; SYSTEM.GET(SYSTEM.ADR(w), c);
+    IF c = 0X THEN SYSTEM.PUT(a, CHR(SYSTEM.LSH(x, -24))); SYSTEM.PUT(a+1, CHR(SYSTEM.LSH(x, -16) MOD 256)); SYSTEM.PUT(a+2, CHR(SYSTEM.LSH(x, -8) MOD 256)); SYSTEM.PUT(a+3, CHR(x MOD 256)); INC(a, 4); RETURN END;
     SYSTEM.PUT(a, CHR(x)); x:=x DIV 256;
     SYSTEM.PUT(a+1, CHR(x)); x:=x DIV 256;
     SYSTEM.PUT(a+2, CHR(x)); x:=x DIV 256;
