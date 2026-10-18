@@ -37,6 +37,12 @@ else
 MIPSBE = qemu-mips bin/mipsbe/loksh
 endif
 
+ifneq ($(filter ppc,$(HOSTARCH)),)
+PPC = bin/ppc/loksh
+else
+PPC = qemu-ppc bin/ppc/loksh
+endif
+
 # ---- x86 ----
 
 fast:
@@ -167,6 +173,26 @@ mipsbe-run:
 mipsbe-shell:
 		$(MIPSBE)
 
+# ---- PowerPC (32-bit, big-endian) ----
+
+# cross compile the PowerPC system on x86
+ppc:
+		$(X86) < tools/rop2-cross.Tool
+		$(X86) < tools/ppc.Tool
+		mv bin/ppc/loksh.new bin/ppc/loksh
+
+# build it with its own compiler: natively on PowerPC, under qemu-ppc elsewhere
+ppc-native:
+		$(PPC) < tools/ppc.Tool
+		mv bin/ppc/loksh.new bin/ppc/loksh
+
+# start the desktop / console (qemu-ppc unless this machine is a PowerPC)
+ppc-run:
+		$(PPC) System.Init
+
+ppc-shell:
+		$(PPC)
+
 # ---- ARMv7 (OP2 compiler; make arm is for older ARM processors) ----
 
 # cross compile the ARMv7 system on x86
@@ -194,7 +220,7 @@ armv7-sixel:
 armv7-x11:
 		$(X86) portia.Build /armv7 /y display-x11
 
-.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 mipsbe mipsbe-native mipsbe-run mipsbe-shell armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
+.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 mipsbe mipsbe-native mipsbe-run mipsbe-shell ppc ppc-native ppc-run ppc-shell armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
 
 # make release V=0.2.0: VERSION gets the version and today's date (UTC), shown when the desktop
 # starts; it is committed and tagged v0.2.0. Push with: git push origin main v0.2.0 (and codeberg)

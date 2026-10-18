@@ -72,6 +72,7 @@ CONST
   RISCV="RISC-V";
   MIPS="MIPS";
   MIPSBE="MIPSBE";  (* polpo: MIPS big-endian, treated as MIPS *)
+  PPC="PPC";  (* polpo: PowerPC, 32-bit *)
 
   NEWrecord= 0; NEWarray= 1; SYSTEMNEW= 2;
   deallocRECORD= 3; deallocARRAY= 4; deallocSYSBLK= 5;
@@ -466,6 +467,11 @@ BEGIN
       IF ODD(ASH(saver, -i)) THEN SYSTEM.GET( adr, Linux0.Regs[ i]); INC(adr, 4); END;
       INC(i);
     UNTIL i=15;
+  ELSIF Linux0.ARCH=PPC THEN  (* polpo: POPL.SaveRegs, the floating point registers first, then r0 (the return address) up *)
+    i:=0;
+    REPEAT IF ODD(ASH(savef, -i)) THEN INC(adr, 8) END; INC(i) UNTIL i=32;
+    i:=0;
+    REPEAT IF ODD(ASH(saver, -i)) THEN SYSTEM.GET( adr, Linux0.Regs[ i]); INC(adr, 4) END; INC(i) UNTIL i=32;
   ELSE i:=31;  (* MIPS, only MOPL.CalleeSavedR *)
     adr:=fp-fsize+carea;
     REPEAT
@@ -552,6 +558,8 @@ BEGIN
         IF trap=1023 THEN trap:=MAX(INTEGER) END;
       END;
     END;
+  ELSIF (Linux0.ARCH=PPC) & (trap=-Linux0.SIGTRAP) THEN SYSTEM.GET( SC.pc, j);  (* polpo: twi 31, r0, nr *)
+    IF j DIV 10000H = Linux0.XTRAP DIV 10000H THEN trap:= j MOD 10000H END;
   ELSIF trap= 28 THEN SYSTEM.GET(SC.pc, j);  (* Invalid instruction used as TRAP *)
     WriteHex( j, 9); WriteLn;
     IF Linux0.ARCH=ARMv7 THEN
