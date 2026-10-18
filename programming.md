@@ -133,6 +133,17 @@ terminal, and in the desktop into System.Log: the desktop sets out.writer, the p
 the output (NIL is the terminal), and appends it to the log a line at a time; the rest of a line
 comes when the command has ended.
 
+The modules of ETH Oberon for the same work behave the same way. Out (Out.String, Out.Int(x, n),
+Out.Real, Out.LongRealFix and the others) writes through out, so to the terminal or into System.Log;
+in the desktop Out.Open sends the output to a viewer of its own until Out.Close. In reads the
+parameters of the command (In.Open, then In.Int, In.Name, In.String, In.Real, and In.Done to see
+whether they were there), in the console from the command line and in the desktop from the text
+after the command; ^ instead of the parameters takes the latest selection, * the marked viewer,
+both only in the desktop. Strings (conversions between numbers, dates and strings) works in both
+too. A program that uses out or Out, texts.Arg or In, and asks no questions runs unchanged in the
+console and in the desktop. Reading the terminal itself (stdin, as the shell does) and writing to
+it directly work only in the console.
+
 When the parameters are missing or wrong, print a line usage: module.Command ... that says what the
 command does. Options are words that start with a slash, after the command or after its
 parameters, as in compiler.Compile /s file, portia.Install /y name, browser.ShowDef Oberon0 /e or
