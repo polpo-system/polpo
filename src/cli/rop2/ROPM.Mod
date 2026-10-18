@@ -388,9 +388,10 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
   END RegisterRefObj;
 
   PROCEDURE InitHost;
-    VAR patL, patH: LONGINT; L, H: SHORTINT;
+    VAR patL, patH: LONGINT; L, H: SHORTINT; c: CHAR;
   BEGIN
-    L := 0; H := 4;
+    patL := 1; SYSTEM.GET(SYSTEM.ADR(patL), c);  (* polpo: the high word first on big-endian hosts *)
+    IF c = 0X THEN L := 4; H := 0 ELSE L := 0; H := 4 END;
     patL := MinRealPat; SYSTEM.PUT(SYSTEM.ADR(MinReal), patL);
     patL := MaxRealPat; SYSTEM.PUT(SYSTEM.ADR(MaxReal), patL);
     patL := MinLRealPatL; patH := MinLRealPatH;
