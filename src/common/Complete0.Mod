@@ -136,7 +136,7 @@ BEGIN
   RETURN nofCmds
 END ArmSeekCmds;
 
-(* Position rider at start of CmdBlk of a ROP2 object file (ARMv7 FBX, RISC-V FDX, MIPS F9X,
+(* Position rider at start of CmdBlk of a ROP2 object file (ARMv7 FBX, RISC-V FDX, MIPS F9X and F8X, PowerPC F7X,
    after the tag), as Modules0.LoadModule of src/cli/rop2 reads it; returns nofCmds, or -1. *)
 PROCEDURE Rop2SeekCmds(VAR R: Files.Rider): INTEGER;
 VAR
@@ -178,7 +178,8 @@ BEGIN
 END Rop2SeekCmds;
 
 (* Position rider at start of CmdBlk; returns nofCmds, or -1 on error.
-   Understands x86 (BBX AFX), ARM (F5X "0") and ROP2 (F9X, FBX, FDX "6") object files. *)
+   Understands x86 (BBX AFX), ARM (F5X "0") and ROP2 (F7X PowerPC, F8X MIPS big-endian, F9X, FBX,
+   FDX "6") object files. *)
 PROCEDURE ObjSeekCmds(VAR R: Files.Rider): INTEGER;
 VAR
   tag: CHAR;
@@ -189,7 +190,7 @@ VAR
 BEGIN
   Files.Read(R, tag);
   IF tag = 0F5X THEN RETURN ArmSeekCmds(R) END;
-  IF (tag = 0F9X) OR (tag = 0FAX) OR (tag = 0FBX) OR (tag = 0FDX) THEN RETURN Rop2SeekCmds(R) END;
+  IF (tag = 0F7X) OR (tag = 0F8X) OR (tag = 0F9X) OR (tag = 0FAX) OR (tag = 0FBX) OR (tag = 0FDX) THEN RETURN Rop2SeekCmds(R) END;
   IF tag # 0BBX THEN RETURN -1 END;
   Files.Read(R, tag); IF tag # 0AFX THEN RETURN -1 END;
   cmdAdrSize := 2;
