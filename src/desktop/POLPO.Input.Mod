@@ -62,7 +62,7 @@ TYPE
   TermIOs= RECORD
     ciflags, coflags, ccflags, clflags: SET;
     d: CHAR;
-    ccc: ARRAY 23 OF CHAR;
+    ccc: ARRAY 31 OF CHAR;  (* polpo: room for every port's struct termios: PowerPC's has 44 bytes *)
   END;
 
   InputEvent=RECORD
@@ -935,9 +935,9 @@ BEGIN
     dfd:=Display.InitFB();
     InitMouseFB;
     InitKbdFB;
+    Kernel.InstallTermHandler( CloseFB);  (* before the checks: the console is in graphics mode *)
     RequireSelectable(kbdfd); RequireSelectable(mfd);
     fdset:={kbdfd, mfd};
-    Kernel.InstallTermHandler( CloseFB);
   END;
 END Init;
 

@@ -65,7 +65,7 @@ TYPE
   TermIOs= RECORD
     ciflags, coflags, ccflags, clflags: SET;
     d: CHAR;
-    ccc: ARRAY 23 OF CHAR;
+    ccc: ARRAY 31 OF CHAR;  (* polpo: room for every port's struct termios: PowerPC's has 44 bytes *)
   END;
 
   InputEvent=RECORD
