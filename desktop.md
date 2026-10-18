@@ -19,7 +19,8 @@ desktop draws on the whole screen itself, through /dev/fb0 when the kernel has i
 KMS (/dev/dri/card0, the kernel's graphics driver, in the preferred mode of the first connected
 screen). It reads the keyboard from the console and the mouse from /dev/input/mice. No other
 program may be showing the screen then (an X server or Wayland on that console); switch to a free
-console with Ctrl+Alt+F2 first.
+console with Ctrl+Alt+F2 first. booting.md starts a machine with polpo as its only program, the desktop
+on the whole screen from the start.
 
 loksh loads modules from obj/<arch>/ of the directory it is started in before those of polpo, so
 a project with objects of its own starts the desktop in its directory. Oberon.Text is the

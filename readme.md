@@ -33,7 +33,8 @@ in packages with repositories of their own (the servers agena and cobweb, games,
 formats, ...), which portia downloads, checks and compiles: `bin/x86/loksh portia.Install
 agena` (see portia below). After `make`, `bin/x86/loksh portia.Upgrade` compiles installed
 packages again whose imports changed. building.md describes the whole rebuild, all ports included, the
-checks after it and what to do when it goes wrong.
+checks after it and what to do when it goes wrong. booting.md makes polpo the whole user space of a
+machine: a kernel, an initramfs with polpo, and the desktop on the screen.
 
 The desktop shows the release when it starts (`POLPO Oberon 0.1.0, 2026-10-11`), from the file
 `VERSION`. `make release V=0.2.0` writes it with the version and the date of the day, commits it and
