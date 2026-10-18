@@ -853,10 +853,27 @@ BEGIN
   IF err#0 THEN WriteSH("Input.tcgetattr:", err) END;
 END TTYtcGetAttr;
 
+(* polpo: the console in raw mode: no line buffering and echo, one character at a time; all: also
+   no signals, flow control, CR translation and output processing. PowerPC numbers the flags
+   differently and keeps c_cc from offset 16 (ccc[k-1] is c_cc[k]) *)
+PROCEDURE RawTerm(VAR t: TermIOs; all: BOOLEAN);
+VAR icanon, echo, isig, iexten, ixon, icrnl, opost, vmin, vtime: LONGINT;
+BEGIN
+  echo := 8H; icrnl := 100H; opost := 1H;
+  IF Linux0.ARCH = "PPC" THEN icanon := 100H; isig := 80H; iexten := 400H; ixon := 200H; vmin := 4; vtime := 6
+  ELSE icanon := 2H; isig := 1H; iexten := 8000H; ixon := 400H; vmin := Linux0.VMIN; vtime := 5
+  END;
+  IF all THEN
+    t.clflags := t.clflags - SYSTEM.VAL(SET, icanon + echo + isig + iexten);
+    t.ciflags := t.ciflags - SYSTEM.VAL(SET, ixon + icrnl);
+    t.coflags := t.coflags - SYSTEM.VAL(SET, opost)
+  ELSE t.clflags := t.clflags - SYSTEM.VAL(SET, icanon + echo)
+  END;
+  t.ccc[vmin] := 1X; t.ccc[vtime] := 0X
+END RawTerm;
+
 PROCEDURE InitKbdFB;
-CONST (*x86, ARM: VMIN=6; MIPS: 4*)
-  VTIME=5;
-  ICANON= 2H;  ECHO= 8H;
+CONST
   VTGETMODE=5601H;
   VTSETMODE=5602H;
   KDGETMODE=4B3BH;
@@ -876,9 +893,7 @@ BEGIN
   res:=Linux0.IOCtl0( kbdfd, KDSETMODE, 1);   (* graphics mode =1 *)
   TTYtcGetAttr( oldtermios);
   kbdtermios:=oldtermios;
-  kbdtermios.clflags := kbdtermios.clflags - SYSTEM.VAL( SET, ICANON + ECHO );
-  kbdtermios.ccc[Linux0.VMIN] := 1X;
-  kbdtermios.ccc[VTIME] := 0X;
+  RawTerm(kbdtermios, FALSE);
   TTYtcSetAttr( kbdtermios);
   res:=Linux0.IOCtl0( kbdfd, VTGETMODE, SYSTEM.ADR( m));
   IF res#0 THEN WriteSH("Display.InitKbd: res= ", res) END;

@@ -60,7 +60,7 @@ CONST
   MAPSHARED*=1; MAPPRIVATE*=2; MAPANONYMOUS*=20H;
 
   (* Termios used in Input (FB): the PowerPC numbers; c_cc starts at offset 16 *)
-  VMIN*=5;
+  VMIN*=4;  (* the index of c_cc[VMIN] (5) in the c_cc of TermIOs records, which have c_line first *)
   TCGETS*= 402C7413H;
   TCSETSF*=802C7416H;
 
