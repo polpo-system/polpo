@@ -790,6 +790,7 @@ BEGIN
     WriteString("switching to con");
     fdset:={};
     Display.SetClip( 0, 0, 0, 0);
+    Display.ReleaseScreen;  (* KMS: DRM master *)
     res:=Linux0.IOCtl0( kbdfd, KDSETMODE, 0);   (* text mode =0 *)
     res:=Linux0.IOCtl0( kbdfd, VTRELDISP, VTPROCESS);
     onoberon:=FALSE;
@@ -798,6 +799,7 @@ BEGIN
     (* ack switch back, mmap framebuffer, restore framebuffer, grab mouse*)
     res:=Linux0.IOCtl0( kbdfd, KDSETMODE, 1);   (* graphics mode =1 *)
     res:=Linux0.IOCtl0( kbdfd, VTRELDISP, VTACKACQ);
+    Display.AcquireScreen;  (* KMS: the buffer on the screen again *)
     Put(0F7X, FALSE);  (* F7, redraw display *)
     Display.ResetClip;
     fdset:={kbdfd, mfd};

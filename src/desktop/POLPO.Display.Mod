@@ -289,6 +289,8 @@ VAR
   xaProtocols, xaDelete: LONGINT;  (* the atoms WM_PROTOCOLS, WM_DELETE_WINDOW *)
   Send: PROCEDURE (id, x, y, w, h, dx, dy: LONGINT);  (* SendX11 or SendX11SHM *)
   kmsFb: LONGINT;  (* polpo: the KMS framebuffer id, for DIRTYFB *)
+  kmsSc: ARRAY 26 OF LONGINT;  (* polpo: drm_mode_crtc of SETCRTC, again after a VT switch; 0 without KMS *)
+  kmsConn: ARRAY 1 OF LONGINT;  (* the connector it names *)
   bigEndian: BOOLEAN;  (* polpo: the machine keeps the most significant byte first *)
   swapPix: BOOLEAN;  (* polpo: the X server reads pixels in the other byte order: SendX11 swaps them *)
   swbuf: POINTER TO ARRAY OF CHAR;  (* the swapped rows *)
@@ -1766,7 +1768,6 @@ VAR fd, res, i, n, conn, nmodes, best, enc, crtc, w, h, pitch, size, handle, fb,
   m: ARRAY 4 OF LONGINT;  (* drm_mode_map_dumb *)
   sc: ARRAY 26 OF LONGINT;  (* drm_mode_crtc *)
   fbs, crtcs, conns, encs, modes, props, vals, cencs: Words;
-  connId: ARRAY 1 OF LONGINT;
 BEGIN
   fd:=Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR("/dev/dri/card0"), Linux0.ORDWR, 0);
   IF fd<=0 THEN WriteErr("Can't open '/dev/fb0' nor '/dev/dri/card0'"); RETURN -1 END;
@@ -1821,11 +1822,12 @@ BEGIN
   lo:=m[2]; hi:=m[3];
   fbadr:=Linux0.Mmap20(0, size, 3, Linux0.MAPSHARED, fd, SYSTEM.LSH(lo, -12) + hi*100000H);  (* mmap2: pages *)
   IF (fbadr>-4096) & (fbadr<0) THEN WriteSH("KMS: can't mmap the buffer ", -fbadr); RETURN -1 END;
-  connId[0]:=conn;
-  sc[0]:=SYSTEM.ADR(connId[0]); sc[1]:=0; sc[2]:=1; sc[3]:=crtc; sc[4]:=fb; sc[5]:=0; sc[6]:=0; sc[7]:=0; sc[8]:=1;
+  kmsConn[0]:=conn;
+  sc[0]:=SYSTEM.ADR(kmsConn[0]); sc[1]:=0; sc[2]:=1; sc[3]:=crtc; sc[4]:=fb; sc[5]:=0; sc[6]:=0; sc[7]:=0; sc[8]:=1;
   i:=0; WHILE i<17 DO sc[9+i]:=modes[17*best+i]; INC(i) END;
   res:=DrmIoctl(fd, 0A2H, 104, SYSTEM.ADR(sc));  (* SETCRTC *)
   IF res#0 THEN WriteSH("KMS: SETCRTC failed (another program shows the screen?) ", res); RETURN -1 END;
+  i:=0; WHILE i<26 DO kmsSc[i]:=sc[i]; INC(i) END;
   Width:=SHORT(w); Height:=SHORT(h); UBottom:=0;
   displayFormat:=color8888; bytes:=4; DrawPattern:=DrawPattern32;
   rmr:=16; rmw:=8; gmr:=8; gmw:=8; bmr:=0; bmw:=8;  (* XRGB8888 *)
@@ -1837,6 +1839,33 @@ BEGIN
   IF trace THEN WriteSH("KMS width ", w); WriteSH("KMS height ", h); WriteSH("KMS pitch ", pitch) END;
   RETURN fd
 END InitKMS;
+
+(* polpo: DRM_IOCTL_DROP_MASTER and SET_MASTER, _IO('d', nr): MIPS and PowerPC mark _IO with bit 29 *)
+PROCEDURE DrmIo(fd, nr: LONGINT): LONGINT;
+BEGIN
+  IF (Linux0.ARCH = "MIPS") OR (Linux0.ARCH = "MIPSBE") OR (Linux0.ARCH = "PPC") THEN
+    RETURN Linux0.IOCtl0(fd, 20000000H + 6400H + nr, 0)
+  ELSE RETURN Linux0.IOCtl0(fd, 6400H + nr, 0)
+  END
+END DrmIo;
+
+(** polpo: the console switches to another VT: with KMS the screen is given up (DRM master) *)
+PROCEDURE ReleaseScreen*;
+VAR res: LONGINT;
+BEGIN
+  IF kmsSc[4] # 0 THEN res:=DrmIo(xfd, 1FH) END  (* DROP_MASTER *)
+END ReleaseScreen;
+
+(** polpo: back on the VT of the desktop: with KMS the screen is taken again and shows the buffer *)
+PROCEDURE AcquireScreen*;
+VAR res: LONGINT;
+BEGIN
+  IF kmsSc[4] # 0 THEN
+    res:=DrmIo(xfd, 1EH);  (* SET_MASTER *)
+    res:=DrmIoctl(xfd, 0A2H, 104, SYSTEM.ADR(kmsSc));  (* SETCRTC *)
+    IF res#0 THEN WriteSH("KMS: SETCRTC failed after the VT switch ", res) END
+  END
+END AcquireScreen;
 
 PROCEDURE InitFB*(): LONGINT;
 CONST 
@@ -1864,9 +1893,10 @@ TYPE
     timing: ARRAY 9 OF LONGINT;
     reserved: ARRAY 6 OF LONGINT;
   END;
-VAR res: LONGINT; v: fbvarscreeninfo; f: fbfixscreeninfo;
+VAR res: LONGINT; v: fbvarscreeninfo; f: fbfixscreeninfo; kms: ARRAY 8 OF CHAR;
 BEGIN
-  xfd:=Linux0.Openat0( Linux0.ATFDCWD, SYSTEM.ADR("/dev/fb0"), Linux0.ORDWR, 0);
+  Kernel.GetConfig("OKMS", kms);  (* polpo: set: KMS even when there is a /dev/fb0 *)
+  IF kms # "" THEN xfd:=-1 ELSE xfd:=Linux0.Openat0( Linux0.ATFDCWD, SYSTEM.ADR("/dev/fb0"), Linux0.ORDWR, 0) END;
   IF xfd<=0 THEN  (* polpo: no fbdev, KMS then *)
     xfd:=InitKMS();
     IF xfd<=0 THEN Kernel.Shutdown(0); RETURN 0 END;

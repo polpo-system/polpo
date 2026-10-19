@@ -1754,6 +1754,13 @@ BEGIN
   END
 END MaskShift;
 
+(** polpo: as in the X11 Display; the terminal keeps the screen *)
+PROCEDURE ReleaseScreen*;
+END ReleaseScreen;
+
+PROCEDURE AcquireScreen*;
+END AcquireScreen;
+
 PROCEDURE InitFB*(): LONGINT;
 CONST
   FBIOGETVSCREENINFO= 4600H;
