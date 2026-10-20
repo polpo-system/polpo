@@ -4,7 +4,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
 
   CONST 
       SFtag = 0F7X; firstStr = 17;
-      maxEnt = 256; maxStr = 256; maxUDP = 32; maxMod = 24; maxParLev = 6;
+      maxEnt = 256; maxStr = 256; maxUDP = 128; maxMod = 24; maxParLev = 6;
       PtrSize = 4; ProcSize = 4; NotYetExp = 0;
       
     (* Standard Function Numbers *)
