@@ -491,7 +491,7 @@ MODULE AOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
 
   PROCEDURE Call(n: OPT.Node; VAR x: OPL.Item);
     VAR proc: OPT.Object; conval: OPT.Const; calleeUsed, saved, live: OPL.RegSet;
-      argSize: LONGINT; resForm: SHORTINT; receiver: OPT.Node; 
+      argSize, saveOff: LONGINT; resForm: SHORTINT; receiver: OPT.Node; 
 
     PROCEDURE ArgSize(par: OPT.Object): LONGINT;  (* no static link *)
       VAR s: LONGINT; c: SHORTINT; typ: OPT.Struct;
@@ -511,6 +511,30 @@ MODULE AOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
       END ;
       RETURN s + s MOD 8
     END ArgSize;
+
+    PROCEDURE CallArgSize(c: OPT.Node): LONGINT;
+      VAR p: OPT.Object; cv: OPT.Const;
+    BEGIN
+      IF c^.left^.class = Nproc THEN
+        p := c^.left^.obj; cv := p^.conval;
+        IF (p^.mnolev < 0) & (cv^.intval = -1) THEN cv^.intval := ArgSize(p^.link) END ;
+        RETURN cv^.intval
+      ELSE RETURN ArgSize(c^.left^.typ^.link)
+      END
+    END CallArgSize;
+
+    (* polpo: the largest argument area of the calls inside c. The registers of this call are saved above
+      it: a nested call that saves nothing writes its arguments from SP up, and with more arguments than
+      this call it overwrote them (x.f := Max(1, G(H(a, "s"))) stored to the length of "s") *)
+    PROCEDURE MaxNested(c: OPT.Node; VAR m: LONGINT);
+      VAR s: LONGINT;
+    BEGIN
+      WHILE c # NIL DO
+        IF c^.class = Ncall THEN s := CallArgSize(c); IF s > m THEN m := s END END ;
+        MaxNested(c^.left, m); MaxNested(c^.right, m);
+        c := c^.link
+      END
+    END MaxNested;
   
   BEGIN
     IF n^.left^.class = Nproc THEN
@@ -534,12 +558,13 @@ MODULE AOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
       ELSE INCL(calleeUsed.r, OPL.RRI)
       END
     END ;
-    OPL.SaveRegisters(calleeUsed, argSize, saved, live); 
+    saveOff := argSize; MaxNested(n^.left, saveOff); MaxNested(n^.right, saveOff);
+    OPL.SaveRegisters(calleeUsed, saveOff, saved, live); 
     design(n^.left, x, -1);
     IF (proc # NIL) & (proc.mode = OPT.TProc) THEN receiver := n^.right ELSE receiver := NIL END ;
     ActualPar(n^.right, receiver, n^.obj, x);
     OPC.Call(x, proc);
-    OPL.RestoreRegisters(x, argSize, saved, live);
+    OPL.RestoreRegisters(x, saveOff, saved, live);
   END Call;
   
   PROCEDURE expr(n: OPT.Node; VAR x: OPL.Item; rt: LONGINT);  (* rt # -1 indicates the target register to be used *)
