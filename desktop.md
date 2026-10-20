@@ -102,6 +102,9 @@ System.Text is shown. Edit.Store in the menu bar of a viewer stores its text, as
 its fonts; Edit.StorePlain stores it as plain text, for sources and other plain files. (Note: a
 plain file stays plain when it is stored with Edit.Store; only Oberon texts keep fonts.)
 
+Tools.Open (in System.Tool) lists the tool texts of the system and of the installed packages, each on
+a line with what it is for; a middle click on Edit.Open in a line opens that tool text.
+
 System.Close closes a viewer, and System.Recall opens the last closed one again. Edit.Recall puts
 the text deleted last back at the caret. Edit.Search, clicked in the menu bar of a viewer, finds the
 selected text in that viewer, from the caret on.
