@@ -35,6 +35,20 @@ with the viewer's name and commands for it: System.Close, System.Copy (a second 
 text), System.Grow (as high as the track, or as large as the screen; System.Close gives the place
 back) and Edit.Store.
 
+## Workspaces
+
+When the screen fills up, open another one. Workspaces.Add makes a new workspace, with its own
+user track and system track, System.Log and System.Tool, and shows it. Workspaces.Right and
+Workspaces.Left go to the next workspace and back (after the last comes the first again),
+Workspaces.Go 3 goes to the third, and Workspaces.Close closes the one shown, with all its
+viewers (Workspaces.Close 2 closes the second). Workspaces.Show writes in System.Log which one is
+shown, and how many there are. System.Tool has the first four commands near its top.
+
+The viewers of the workspaces that are not shown keep their texts and their places; they are drawn
+again when their workspace comes back, and what was written into System.Log meanwhile is there. There
+can be 16 workspaces. They work the same with X11, in the text console (KMS or framebuffer) and in a
+terminal with sixel graphics.
+
 ## The mouse
 
 The three buttons each have their own work, and clicking a second button while the first is still
