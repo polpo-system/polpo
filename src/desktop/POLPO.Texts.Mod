@@ -153,7 +153,9 @@ MODULE Texts;
     VAR M: UpdateMsg;
   BEGIN
     M.text := T; M.F := NIL; M.beg := beg; M.end := end; M.len := len;
-    Display.Broadcast(M); stamp := M.stamp
+    (* polpo: Viewers installs Display.Broadcast; without the desktop (a console program) nobody
+       shows the text *)
+    IF Display.Broadcast # NIL THEN Display.Broadcast(M); stamp := M.stamp END
   END Update;
 
 BEGIN
