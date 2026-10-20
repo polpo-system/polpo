@@ -58,7 +58,11 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    WHILE took its position before a flush, the compiler stopped in FixLink; ENTIER truncated and
    subtracted 1 from any negative value, ENTIER(-2.0) was -3; FOR on a variable of an enclosing
    procedure compared and increased it through a register freed after the first assignment (PPM
-   crashed) (2026-10-15). *)
+   crashed) (2026-10-15);
+   ARM: forward declarations of local procedures were refused (err 38);
+   ARMv7: the registers live across a call were saved just above its arguments, and a call in its
+   arguments with more arguments of its own overwrote them, x.f := Max(1, G(H(x, "s"))) stored
+   through the length of "s" (WebNav, 2026-10-20). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -72,6 +76,7 @@ TYPE
   WNode = POINTER TO WNodeDesc; WNodeDesc = RECORD END;
   WPair = POINTER TO WPairDesc; WPairDesc = RECORD (WNodeDesc) left, right: WNode END;
   WLeaf = POINTER TO WLeafDesc; WLeafDesc = RECORD (WNodeDesc) value: LONGINT END;
+  Saved = POINTER TO SavedDesc; SavedDesc = RECORD a, b, c: LONGINT END;
 
 VAR
   cells: POINTER TO RECORD r: ARRAY 10 OF LONGINT END; cellx: LONGINT;
@@ -701,6 +706,41 @@ BEGIN
   RETURN PoolIfs() = 100
 END PoolBranches;
 
+PROCEDURE LocalForward(n: LONGINT): LONGINT;
+VAR base: LONGINT;
+
+  PROCEDURE ^Odd(k: LONGINT): LONGINT;
+
+  PROCEDURE Even(k: LONGINT): LONGINT;
+  BEGIN
+    IF k = 0 THEN RETURN base ELSE RETURN Odd(k - 1) + 1 END
+  END Even;
+
+  PROCEDURE Odd(k: LONGINT): LONGINT;
+  BEGIN
+    IF k = 0 THEN RETURN base + 1000 ELSE RETURN Even(k - 1) + 10 END
+  END Odd;
+
+BEGIN base := 7; RETURN Even(n)
+END LocalForward;
+
+PROCEDURE Larger(x, y: LONGINT): LONGINT;
+BEGIN IF x > y THEN RETURN x ELSE RETURN y END
+END Larger;
+
+PROCEDURE SavedLen(p: Saved; s: ARRAY OF CHAR): LONGINT;
+VAR i: LONGINT;
+BEGIN i := 0; WHILE s[i] # 0X DO INC(i) END; RETURN i + p.a
+END SavedLen;
+
+PROCEDURE SavedAcross(): BOOLEAN;
+VAR r: Saved;
+BEGIN
+  NEW(r); r.a := 5; r.b := 0; r.c := 0;
+  r.c := Larger(1, Id(SavedLen(r, "colspan")));
+  RETURN (r.a = 5) & (r.b = 0) & (r.c = 12)
+END SavedAcross;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -763,6 +803,8 @@ BEGIN
   forLimit := 5; Check("FOR on a variable of the enclosing procedure", OuterFor() = 6);
   Check("string assignments around a flush of the constants", PoolStrings());
   Check("conditional branches around a flush of the constants", PoolBranches());
+  Check("forward declaration of a local procedure", (LocalForward(0) = 7) & (LocalForward(3) = 1019));
+  Check("registers saved across a call whose arguments call with more arguments", SavedAcross());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
