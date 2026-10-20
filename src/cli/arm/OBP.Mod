@@ -599,17 +599,20 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       oldpsize, psize, dsize, fwdCalls, fwdAddrs: LONGINT;
   BEGIN 
     dsize := 0; proc := NIL; body := TRUE; fwdCalls := 0; fwdAddrs := 0;
-    IF (sym # OC.ident) & (OBC.level = 0) THEN
+    IF sym # OC.ident THEN  (* polpo: forward declarations of local procedures too *)
       mode:=OC.LProc;
       IF sym = OC.arrow THEN (*forward*) body := FALSE
-      ELSIF (sym = OC.times) OR (sym = OC.plus) OR (sym = OC.minus) THEN (* just ignore it! *)
+      ELSIF (OBC.level = 0) & ((sym = OC.times) OR (sym = OC.plus) OR (sym = OC.minus)) THEN (* just ignore it! *)
       ELSE mode := OC.LProc; OBS.Mark(10)
       END ;
       OBS.Get(sym)
     ELSE mode := OC.LProc
     END ;
     IF sym = OC.ident THEN
-      IF OBC.level = 0 THEN OBT.Find(proc1, L1) ELSE proc1 := NIL END;
+      OBT.Find(proc1, L1);
+      IF (OBC.level > 0) & (proc1 # NIL) & ((L1 # OBC.level) OR (proc1.mode # OC.LProc) OR (proc1.a0 # -1)) THEN
+        proc1 := NIL  (* only a forward declaration of this scope is completed here *)
+      END;
       IF (proc1 # NIL) & (proc1.mode = OC.LProc) & (proc1.a0 = -1) THEN
         (*there exists a corresponding forward declaration*)
         OBT.Remove(proc1); OBT.Insert(OBS.name, proc);
