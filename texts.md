@@ -52,7 +52,7 @@ lookups are cheap, and an edited Oberon.Text is noticed without restarting anyth
 A console module (desktop modules import Texts and Oberon and call Oberon.OpenScanner instead):
 
     MODULE mytool;
-    IMPORT Texts := texts, Oberon := Oberon0, out;
+    IMPORT Texts, Oberon := Oberon0, out;
 
     PROCEDURE Show*;
       VAR S: Texts.Scanner; size: LONGINT;
@@ -94,6 +94,45 @@ variable is not set:
       Oberon.OpenScanner(S, "MyTool.Size");
       IF S.class = Texts.Int THEN size := S.i END
     END
+
+## The parameters of a command
+
+The same scanner also reads the parameters of a command, the text after the command name. They
+are in Oberon0.Par: the text and the position where they start. In the console that is the rest
+of the line given to loksh or typed at the shell; in the desktop it is the rest of the line after
+the command that was clicked (Oberon.Par of the desktop is the same). There are two ways to read
+them.
+
+The way of ETH Oberon is a scanner on that text:
+
+    Texts.OpenScanner(S, Oberon0.Par.text, Oberon0.Par.pos); Texts.Scan(S);
+    IF (S.class = Texts.Name) OR (S.class = Texts.String) THEN (* the name is in S.s *) END;
+    Texts.Scan(S);
+    IF S.class = Texts.Int THEN (* a number, in S.i *) END
+
+The scanner takes the text apart into names, numbers, strings in quotes and single characters, and
+S.class says which. A name starts with a letter, "." or "/", and may go on with letters, digits and
+@ . / : _ -, so tools/x.Tool and my-notes.txt are names; 2026-notes.txt is not, it begins with a
+number. Names and strings are cut at 63 characters. The scanner does not stop at the end of the
+line: S.line counts the lines it has passed. In the desktop a command also looks at S.class =
+Texts.Char: ^ stands for the selection, * for the marked viewer, and only the scanner (or the
+module In, which works on it) can handle them.
+
+The way of polpo is Texts.OpenArgs and Texts.Arg:
+
+    VAR A: Texts.Reader; name: ARRAY 256 OF CHAR;
+    Texts.OpenArgs(A);
+    WHILE Texts.Arg(A, name) DO (* one parameter in name *) END
+
+Texts.Arg gives the parameters one after the other as words: whatever stands between blanks, every
+character as it is written, or a "text with blanks" in quotes. Numbers stay words too (convert
+them with Strings.StrToInt, for example). It returns FALSE at the end of the line, at ~, and when a
+word does not fit into the array. This is what the console commands use (portia, the compilers,
+fs, tar and the others), since their parameters are file names and options of any kind.
+
+So: the scanner when a command wants numbers, names and the ^ and * of the desktop; Texts.Arg when
+it wants words exactly as typed, file names and options, with the line as their end. Both work the
+same in the console and in the desktop.
 
 ## Details
 
