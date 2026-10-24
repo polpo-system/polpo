@@ -8,7 +8,7 @@ MODULE logs;  (** the log of the console commands *)
   In the desktop out writes into the log as well, where the messages are already: Show writes
   nothing there. *)
 
-IMPORT Texts := texts, Oberon := Oberon0, out;
+IMPORT Texts, Oberon := Oberon0, out;
 
 (** Write what was appended to the log since pos with out, line ends as out.Ln; nothing in the
   desktop *)

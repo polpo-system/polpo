@@ -1,6 +1,6 @@
 MODULE system;  (** RISC-V/MIPS variant of src/cli/x86/system.Mod: module sizes from Kernel.ModuleDesc.data0 *)
 
-IMPORT Kernel, Mods := Modules, Oberon0, Texts := texts, Out := out;
+IMPORT Kernel, Mods := Modules, Oberon0, Texts, Out := out;
 
 PROCEDURE ShowModules*;
 VAR m: Kernel.Module; size, count, total: LONGINT;

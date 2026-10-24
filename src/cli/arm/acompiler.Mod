@@ -1,6 +1,6 @@
 MODULE acompiler;  (** command-line frontend of the ARM compiler *)
   IMPORT
-    OBS, OBP, OC := OBM, Texts := texts, Oberon := Oberon0, Out := out, logs;
+    OBS, OBP, OC := OBM, Texts, Oberon := Oberon0, Out := out, logs;
 
   VAR HW: Texts.Writer;  (* see Head *)
 

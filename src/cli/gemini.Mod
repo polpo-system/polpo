@@ -8,7 +8,7 @@ MODULE gemini;  (** Gemini downloads (gemini://, port 1965), on Gemini0 and the 
    Redirects (3x) are followed, up to 5; a body is complete only when the server ended with TLS
    close_notify, an incomplete one is not saved. dcs is the client with identities and input. *)
 
-IMPORT Texts := texts, Gemini0, out;
+IMPORT Texts, Gemini0, out;
 
 (* the file name for url: the last part of the path, index.gmi for a directory *)
 PROCEDURE DefaultName(VAR url, name: ARRAY OF CHAR);

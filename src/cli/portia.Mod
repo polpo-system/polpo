@@ -49,7 +49,7 @@ MODULE portia;  (** polpo's package manager; reads the package tree arden *)
    dest in the polpo root (share/, tools/: where Files.Old finds plain names) and removed with
    the objects; the copies in src/pkg/<name>/ go with /src. *)
 
-IMPORT Kernel, Linux0, SYSTEM, F := Files, Modules, Root, Texts := texts, Oberon := Oberon0, TOML, Versions, Checksums, termios, out;
+IMPORT Kernel, Linux0, SYSTEM, F := Files, Modules, Root, Texts, Oberon := Oberon0, TOML, Versions, Checksums, termios, out;
 
 CONST
   NameLen = 256;

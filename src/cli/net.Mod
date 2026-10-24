@@ -12,7 +12,7 @@ MODULE net;  (** minimal network tools over Sockets and DNS *)
    net.Address text ...           IP addresses in normal form (no lookup)
    A host is a name or an IPv4 or IPv6 address; its addresses are tried in turn. *)
 
-IMPORT Texts := texts, Sockets, DNS, Oberon := Oberon0, out;
+IMPORT Texts, Sockets, DNS, Oberon := Oberon0, out;
 
 CONST MaxAddrs = 8;
 

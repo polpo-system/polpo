@@ -17,7 +17,7 @@ MODULE vocsync;  (** modules shared with voc: copies with the imports of voc or 
      Linux0 (for Linux0 := unixNet).
      Everything else is the same file. *)
 
-IMPORT Files, texts, out;
+IMPORT Files, Texts, out;
 
 CONST NoSwaps = 4;
 
@@ -129,10 +129,10 @@ BEGIN
 END Convert;
 
 PROCEDURE To*;
-VAR A: texts.Reader; src, dst, name: ARRAY 256 OF CHAR; buf: Buf; i, p, n: LONGINT;
+VAR A: Texts.Reader; src, dst, name: ARRAY 256 OF CHAR; buf: Buf; i, p, n: LONGINT;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, src) OR ~texts.Arg(A, dst) THEN out.String("usage: vocsync.To polpo-file voc-file"); out.Ln; RETURN END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, src) OR ~Texts.Arg(A, dst) THEN out.String("usage: vocsync.To polpo-file voc-file"); out.Ln; RETURN END;
   IF ~Read(src, buf) THEN RETURN END;
   n := 0; i := 0;
   WHILE i < NoSwaps DO
@@ -146,10 +146,10 @@ BEGIN
 END To;
 
 PROCEDURE From*;
-VAR A: texts.Reader; args: ARRAY 64 OF ARRAY 256 OF CHAR; n, i: INTEGER; dst, name: ARRAY 256 OF CHAR; buf: Buf; k, m: LONGINT;
+VAR A: Texts.Reader; args: ARRAY 64 OF ARRAY 256 OF CHAR; n, i: INTEGER; dst, name: ARRAY 256 OF CHAR; buf: Buf; k, m: LONGINT;
 BEGIN
-  texts.OpenArgs(A); n := 0;
-  WHILE (n < LEN(args)) & texts.Arg(A, args[n]) DO INC(n) END;
+  Texts.OpenArgs(A); n := 0;
+  WHILE (n < LEN(args)) & Texts.Arg(A, args[n]) DO INC(n) END;
   IF n < 2 THEN out.String("usage: vocsync.From voc-file ... polpo-dir"); out.Ln; RETURN END;
   DEC(n); i := 0;  (* args[n]: the directory *)
   WHILE i < n DO

@@ -4,7 +4,7 @@ MODULE gzip;  (** gzip files in the console, with the zlib of ETH Oberon (GZRead
    gzip.Decompress file.gz [file]   decompresses (default output: the name without .gz)
    The files are those of gzip (RFC 1952): the ones of gzip -d and tar -z. *)
 
-IMPORT Files, GZReaders, GZWriters, texts, out;
+IMPORT Files, GZReaders, GZWriters, Texts, out;
 
 CONST BufLen = 8192;
 
@@ -16,8 +16,8 @@ BEGIN i := 0; WHILE (i < LEN(s)) & (s[i] # 0X) DO INC(i) END; RETURN i
 END Len;
 
 PROCEDURE Args(VAR a, b: ARRAY OF CHAR): BOOLEAN;  (* the first argument, and the second if there is one *)
-VAR A: texts.Reader;
-BEGIN texts.OpenArgs(A); b[0] := 0X; RETURN texts.Arg(A, a) & (texts.Arg(A, b) OR TRUE)
+VAR A: Texts.Reader;
+BEGIN Texts.OpenArgs(A); b[0] := 0X; RETURN Texts.Arg(A, a) & (Texts.Arg(A, b) OR TRUE)
 END Args;
 
 PROCEDURE Compress*;

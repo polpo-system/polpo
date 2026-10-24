@@ -11,7 +11,7 @@ MODULE boot;  (** loksh as the first process of a Linux system *)
   The first process must never end: when the command ends, or the desktop quits (System.Quit),
   boot syncs the disks and powers the machine off. *)
 
-IMPORT SYSTEM, Linux0, Kernel, Files, Root, Oberon0, texts, out;
+IMPORT SYSTEM, Linux0, Kernel, Files, Root, Oberon0, Texts, out;
 
 CONST
   MagicA = -18751827;  (* LINUX_REBOOT_MAGIC1, 0FEE1DEADH *)
@@ -91,17 +91,17 @@ END Off;
 (** boot.Init [command] ~  set up the system as its first process, then run the command
   (System.Init when none is given); see the comment at the top *)
 PROCEDURE Init*;
-VAR A: texts.Reader; cmd: ARRAY 64 OF CHAR; par: Oberon0.ParList; res: INTEGER;
+VAR A: Texts.Reader; cmd: ARRAY 64 OF CHAR; par: Oberon0.ParList; res: INTEGER;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, cmd) THEN cmd := "System.Init" END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, cmd) THEN cmd := "System.Init" END;
   Mount("proc", "/proc", "proc"); Mount("sysfs", "/sys", "sysfs");
   Mount("devtmpfs", "/dev", "devtmpfs"); Mount("tmpfs", "/tmp", "tmpfs");
   Console;
   out.String("boot: polpo as the first process, then "); out.String(cmd); out.Ln;
   Modules;
   first := TRUE; Kernel.InstallTermHandler(Off);
-  NEW(par); NEW(par.text); texts.Open(par.text, ""); par.pos := 0;
+  NEW(par); NEW(par.text); Texts.Open(par.text, ""); par.pos := 0;
   Oberon0.Call(cmd, par, FALSE, res);
   IF res # 0 THEN out.String("boot: "); out.String(cmd); out.String(" not found, error "); out.Int(res, 0); out.Ln END;
   Kernel.Shutdown(1)

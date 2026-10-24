@@ -1,6 +1,6 @@
 MODULE textfixture;
 
-IMPORT Files, Objects := objects, Texts := texts;
+IMPORT Files, Objects := objects, Texts;
 
 PROCEDURE Font(name: ARRAY OF CHAR): Objects.Library;
 VAR lib: Objects.Library;
@@ -13,7 +13,7 @@ PROCEDURE Generate*;
 VAR
   T: Texts.Text;
   W: Texts.Writer;
-  R: Files.Rider;
+  len: LONGINT;
   f: Files.File;
   normal, bold, italic: Objects.Library;
 BEGIN
@@ -34,8 +34,7 @@ BEGIN
   Texts.SetColor(W, 15); Texts.WriteLn(W);
 
   Texts.Append(T, W.buf);
-  f := Files.New("Styled.Text"); Files.Set(R, f, 0);
-  Texts.Store(R, T); Files.Register(f)
+  f := Files.New("Styled.Text"); Texts.Store(T, f, 0, len); Files.Register(f)
 END Generate;
 
 END textfixture.

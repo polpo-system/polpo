@@ -8,7 +8,7 @@ MODULE asciicoder;  (** AsciiCoder in the console: files as plain text, for mail
    The code is the one of AsciiCoder of ETH Oberon (AsciiCoder0): 64 characters from "0", lines
    of 76 characters. *)
 
-IMPORT Files, Texts := Texts0, texts, AsciiCoder0, out;
+IMPORT Files, Texts0, Texts, AsciiCoder0, out;
 
 CONST MaxFiles = 64;
 
@@ -23,30 +23,30 @@ BEGIN
 END Append;
 
 (* the text t as a plain file name (CR as LF) *)
-PROCEDURE Store(t: Texts.Text; VAR name: ARRAY OF CHAR);
-VAR f: Files.File; w: Files.Rider; r: Texts.Reader; ch: CHAR;
+PROCEDURE Store(t: Texts0.Text; VAR name: ARRAY OF CHAR);
+VAR f: Files.File; w: Files.Rider; r: Texts0.Reader; ch: CHAR;
 BEGIN
-  f := Files.New(name); Files.Set(w, f, 0); Texts.OpenReader(r, t, 0); Texts.Read(r, ch);
-  WHILE ~r.eot DO IF ch = 0DX THEN Files.Write(w, 0AX) ELSE Files.Write(w, ch) END; Texts.Read(r, ch) END;
+  f := Files.New(name); Files.Set(w, f, 0); Texts0.OpenReader(r, t, 0); Texts0.Read(r, ch);
+  WHILE ~r.eot DO IF ch = 0DX THEN Files.Write(w, 0AX) ELSE Files.Write(w, ch) END; Texts0.Read(r, ch) END;
   Files.Register(f)
 END Store;
 
 PROCEDURE Code*;
-VAR A: texts.Reader; arg, dest: Name; names: ARRAY MaxFiles OF Name; n, i: INTEGER; compress: BOOLEAN;
-  t: Texts.Text; W: Texts.Writer; f, f1: Files.File;
+VAR A: Texts.Reader; arg, dest: Name; names: ARRAY MaxFiles OF Name; n, i: INTEGER; compress: BOOLEAN;
+  t: Texts0.Text; W: Texts0.Writer; f, f1: Files.File;
 BEGIN
-  texts.OpenArgs(A); compress := FALSE; dest := ""; n := 0;
-  WHILE texts.Arg(A, arg) DO
+  Texts.OpenArgs(A); compress := FALSE; dest := ""; n := 0;
+  WHILE Texts.Arg(A, arg) DO
     IF arg = "%" THEN compress := TRUE
     ELSIF dest = "" THEN COPY(arg, dest)
     ELSIF n < MaxFiles THEN COPY(arg, names[n]); INC(n)
     END
   END;
   IF (dest = "") OR (n = 0) THEN out.String("usage: asciicoder.Code [%] out.txt file ..."); out.Ln; RETURN END;
-  NEW(t); Texts.Open(t, ""); Texts.OpenWriter(W);
-  Texts.WriteString(W, "AsciiCoder.DecodeFiles "); IF compress THEN Texts.WriteString(W, "% ") END;
-  i := 0; WHILE i < n DO Texts.WriteString(W, names[i]); Texts.Write(W, " "); INC(i) END;
-  Texts.Write(W, "~"); Texts.WriteLn(W); Texts.WriteLn(W); Texts.Append(t, W.buf);
+  NEW(t); Texts0.Open(t, ""); Texts0.OpenWriter(W);
+  Texts0.WriteString(W, "AsciiCoder.DecodeFiles "); IF compress THEN Texts0.WriteString(W, "% ") END;
+  i := 0; WHILE i < n DO Texts0.WriteString(W, names[i]); Texts0.Write(W, " "); INC(i) END;
+  Texts0.Write(W, "~"); Texts0.WriteLn(W); Texts0.WriteLn(W); Texts0.Append(t, W.buf);
   i := 0;
   WHILE i < n DO
     f := Files.Old(names[i]);
@@ -60,21 +60,21 @@ BEGIN
 END Code;
 
 PROCEDURE Decode*;
-VAR A: texts.Reader; src, dir, path: Name; t: Texts.Text; S: Texts.Scanner; names: ARRAY MaxFiles OF Name;
+VAR A: Texts.Reader; src, dir, path: Name; t: Texts0.Text; S: Texts0.Scanner; names: ARRAY MaxFiles OF Name;
   n, i: INTEGER; compress, ok: BOOLEAN; pos: LONGINT; f, f1: Files.File;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, src) THEN out.String("usage: asciicoder.Decode in.txt [dir]"); out.Ln; RETURN END;
-  IF ~texts.Arg(A, dir) THEN dir := "" ELSIF dir[0] # 0X THEN Append(dir, "/") END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, src) THEN out.String("usage: asciicoder.Decode in.txt [dir]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, dir) THEN dir := "" ELSIF dir[0] # 0X THEN Append(dir, "/") END;
   IF Files.Old(src) = NIL THEN out.String("asciicoder: no "); out.String(src); out.Ln; RETURN END;
-  NEW(t); Texts.Open(t, src); Texts.OpenScanner(S, t, 0); Texts.Scan(S);
-  WHILE ~S.eot & ~((S.class = Texts.Name) & (S.s = "AsciiCoder.DecodeFiles")) DO Texts.Scan(S) END;
+  NEW(t); Texts0.Open(t, src); Texts0.OpenScanner(S, t, 0); Texts0.Scan(S);
+  WHILE ~S.eot & ~((S.class = Texts0.Name) & (S.s = "AsciiCoder.DecodeFiles")) DO Texts0.Scan(S) END;
   IF S.eot THEN out.String("asciicoder: no AsciiCoder.DecodeFiles in "); out.String(src); out.Ln; RETURN END;
-  Texts.Scan(S); compress := (S.class = Texts.Char) & (S.c = "%"); IF compress THEN Texts.Scan(S) END;
+  Texts0.Scan(S); compress := (S.class = Texts0.Char) & (S.c = "%"); IF compress THEN Texts0.Scan(S) END;
   n := 0;
-  WHILE ((S.class = Texts.Name) OR (S.class = Texts.String)) & (n < MaxFiles) DO COPY(S.s, names[n]); INC(n); Texts.Scan(S) END;
-  IF ~((S.class = Texts.Char) & (S.c = "~")) THEN out.String("asciicoder: the list of files does not end with ~"); out.Ln; RETURN END;
-  pos := Texts.Pos(S); ok := TRUE; i := 0;
+  WHILE ((S.class = Texts0.Name) OR (S.class = Texts0.String)) & (n < MaxFiles) DO COPY(S.s, names[n]); INC(n); Texts0.Scan(S) END;
+  IF ~((S.class = Texts0.Char) & (S.c = "~")) THEN out.String("asciicoder: the list of files does not end with ~"); out.Ln; RETURN END;
+  pos := Texts0.Pos(S); ok := TRUE; i := 0;
   WHILE ok & (i < n) DO
     COPY(dir, path); Append(path, names[i]);
     IF compress THEN f := Files.New("") ELSE f := Files.New(path) END;

@@ -10,7 +10,7 @@ MODULE fetch;  (** HTTP downloads with the http module *)
    An incomplete body (shorter than its length, no last chunk, or a TLS connection that ended
    without close_notify) is not saved. *)
 
-IMPORT Texts := texts, Files, http, httpsPure, TLS13Live, strTypes, out;
+IMPORT Texts, Files, http, httpsPure, TLS13Live, strTypes, out;
 
 VAR secure: BOOLEAN;  (* the last Split saw https *)
 

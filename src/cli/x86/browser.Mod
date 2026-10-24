@@ -10,7 +10,7 @@ Refer to the license.txt file provided with this distribution. *)
 MODULE browser;  (** portable, except where noted *)
   IMPORT
     Kernel, Root, Modules := Modules0, OPM, OPS, OPT, OPV,
-    Files, Texts := texts, (*Display,*) Oberon := Oberon0(*, Fonts*), out;
+    Files, Texts, (*Display,*) Oberon := Oberon0(*, Fonts*), out;
 
   CONST
     (*visibility*)  internal=0; external=1; externalR=2;
@@ -284,7 +284,7 @@ MODULE browser;  (** portable, except where noted *)
         fullarg, opt: ARRAY 256 OF CHAR;
         i, j: INTEGER; R: Texts.Reader; ch: CHAR;
   BEGIN  SignOn; show := FALSE; extend := FALSE; hidden := FALSE;
-    (* polpo: words (texts.Arg): the module or a path, then options /d /e (also \d or -d, as
+    (* polpo: words (Texts.Arg): the module or a path, then options /d /e (also \d or -d, as
        compiler.Compile /s); the scanner read "fs /e" as the path fs/e *)
     Texts.OpenArgs(A);
     IF Texts.Arg(A, fullarg) THEN

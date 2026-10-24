@@ -11,11 +11,11 @@ MODULE fs;  (** directories and files of Linux in the console: cd, pwd, ls, mkdi
    fs.Rmdir path ...         removes empty directories
    fs.Mv old new             renames (moves) a file or directory
    fs.Cp from to             copies a file; into the directory to if it is one
-   Commands of loksh run in its process: after fs.Cd, texts.Show name and the other commands
+   Commands of loksh run in its process: after fs.Cd, Texts.Show name and the other commands
    find plain names in the new directory first (then on the search path of the root). The names
    are used as they are, as by Linux (Files accepts fewer). *)
 
-IMPORT SYSTEM, Linux0, Kernel, Files, texts, out;
+IMPORT SYSTEM, Linux0, Kernel, Files, Texts, out;
 
 CONST
   NameLen = 256; Block = 8192;
@@ -66,10 +66,10 @@ BEGIN
 END Expand;
 
 PROCEDURE Cd*;
-VAR A: texts.Reader; path: Name; r: LONGINT;
+VAR A: Texts.Reader; path: Name; r: LONGINT;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, path) THEN Kernel.GetConfig("HOME", path) END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, path) THEN Kernel.GetConfig("HOME", path) END;
   Expand(path);
   r := Linux0.ChDir0(SYSTEM.ADR(path[0]));
   IF r # 0 THEN Error("cd", path, r)
@@ -171,10 +171,10 @@ BEGIN
 END List;
 
 PROCEDURE Ls*;
-VAR A: texts.Reader; arg: Name; paths: ARRAY 64 OF Name; n, i: INTEGER; long, all: BOOLEAN;
+VAR A: Texts.Reader; arg: Name; paths: ARRAY 64 OF Name; n, i: INTEGER; long, all: BOOLEAN;
 BEGIN
-  texts.OpenArgs(A); n := 0; long := FALSE; all := FALSE;
-  WHILE texts.Arg(A, arg) DO
+  Texts.OpenArgs(A); n := 0; long := FALSE; all := FALSE;
+  WHILE Texts.Arg(A, arg) DO
     (* /l /a /la as other commands (compiler.Compile /s), also -l -a -la; only these words:
        other words starting with "/" are paths *)
     IF (arg = "/l") OR (arg = "-l") THEN long := TRUE ELSIF (arg = "/a") OR (arg = "-a") THEN all := TRUE
@@ -191,20 +191,20 @@ BEGIN
 END Ls;
 
 PROCEDURE Mkdir*;
-VAR A: texts.Reader; path: Name; r: LONGINT;
+VAR A: Texts.Reader; path: Name; r: LONGINT;
 BEGIN
-  texts.OpenArgs(A);
-  WHILE texts.Arg(A, path) DO
+  Texts.OpenArgs(A);
+  WHILE Texts.Arg(A, path) DO
     Expand(path); r := Linux0.MkDir0(SYSTEM.ADR(path[0]), 1EDH);  (* 0755 *)
     IF r # 0 THEN Error("mkdir", path, r) END
   END
 END Mkdir;
 
 PROCEDURE Remove(flags: LONGINT; what: ARRAY OF CHAR);
-VAR A: texts.Reader; path: Name; r: LONGINT;
+VAR A: Texts.Reader; path: Name; r: LONGINT;
 BEGIN
-  texts.OpenArgs(A);
-  WHILE texts.Arg(A, path) DO
+  Texts.OpenArgs(A);
+  WHILE Texts.Arg(A, path) DO
     Expand(path); r := Linux0.UnLinkat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), flags);
     IF r # 0 THEN Error(what, path, r) END
   END
@@ -230,20 +230,20 @@ BEGIN
 END Target;
 
 PROCEDURE Mv*;
-VAR A: texts.Reader; old, new: Name; r: LONGINT;
+VAR A: Texts.Reader; old, new: Name; r: LONGINT;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, old) OR ~texts.Arg(A, new) THEN out.String("usage: fs.Mv old new"); out.Ln; RETURN END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, old) OR ~Texts.Arg(A, new) THEN out.String("usage: fs.Mv old new"); out.Ln; RETURN END;
   Expand(old); Expand(new); Target(old, new);
   r := Linux0.Renameat0(Linux0.ATFDCWD, SYSTEM.ADR(old[0]), Linux0.ATFDCWD, SYSTEM.ADR(new[0]), 0);
   IF r # 0 THEN Error("mv", old, r) END
 END Mv;
 
 PROCEDURE Cp*;
-VAR A: texts.Reader; from, to: Name; in, dst, n, w, r, total: LONGINT; buf: ARRAY Block OF CHAR;
+VAR A: Texts.Reader; from, to: Name; in, dst, n, w, r, total: LONGINT; buf: ARRAY Block OF CHAR;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, from) OR ~texts.Arg(A, to) THEN out.String("usage: fs.Cp from to"); out.Ln; RETURN END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, from) OR ~Texts.Arg(A, to) THEN out.String("usage: fs.Cp from to"); out.Ln; RETURN END;
   Expand(from); Expand(to); Target(from, to);
   in := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(from[0]), Linux0.ORDonly, 0);
   IF in <= 0 THEN Error("cp", from, in); RETURN END;

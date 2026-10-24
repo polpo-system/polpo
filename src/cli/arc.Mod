@@ -10,7 +10,7 @@ MODULE arc;  (** Oberon archives (.Arc of Compress) in the console *)
    The archives are those of Compress of ETH Oberon (LZSS, names of at most 31 characters); the
    work is done by Compress0. *)
 
-IMPORT Files, Modules, texts, Compress0, out;
+IMPORT Files, Modules, Texts, Compress0, out;
 
 CONST MaxFiles = 128; MaxEntries = 1024;
 
@@ -55,16 +55,16 @@ END Cipher;
 
 (* the arguments: [\C install key] archive files; with \C the cipher is installed *)
 PROCEDURE Args(VAR archive: ARRAY OF CHAR; VAR files: ARRAY OF Name; VAR n: INTEGER): BOOLEAN;
-VAR A: texts.Reader; install, key: Name;
+VAR A: Texts.Reader; install, key: Name;
 BEGIN
-  texts.OpenArgs(A); n := 0; noCipher := FALSE; Compress0.ClearCrypt;
-  IF ~texts.Arg(A, archive) THEN RETURN FALSE END;
+  Texts.OpenArgs(A); n := 0; noCipher := FALSE; Compress0.ClearCrypt;
+  IF ~Texts.Arg(A, archive) THEN RETURN FALSE END;
   IF (archive = "\C") OR (archive = "\c") THEN
-    IF ~texts.Arg(A, install) OR ~texts.Arg(A, key) OR ~texts.Arg(A, archive) THEN RETURN FALSE END;
+    IF ~Texts.Arg(A, install) OR ~Texts.Arg(A, key) OR ~Texts.Arg(A, archive) THEN RETURN FALSE END;
     IF ~Cipher(install) THEN noCipher := TRUE; RETURN FALSE END;
     Compress0.InstallCrypt(install, key)
   END;
-  WHILE (n < LEN(files)) & texts.Arg(A, files[n]) DO INC(n) END;
+  WHILE (n < LEN(files)) & Texts.Arg(A, files[n]) DO INC(n) END;
   RETURN TRUE
 END Args;
 

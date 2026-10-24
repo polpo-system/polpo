@@ -1,6 +1,6 @@
 MODULE system;
 
-IMPORT SYSTEM, Kernel, Mods := Modules, Oberon0, Texts := texts, Out := out;
+IMPORT SYSTEM, Kernel, Mods := Modules, Oberon0, Texts, Out := out;
 
 PROCEDURE ShowModules*;
 VAR m: Kernel.Module; dsize, csize, count, total: LONGINT;

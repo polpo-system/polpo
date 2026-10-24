@@ -21,7 +21,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     by default the host architecture (Linux0.ARCH) and obj/<arch>/.
     
 *)
-  IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts := texts, Con := out, logs;
+  IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts, Con := out, logs;
 
   CONST
     MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6; PPC=7;

@@ -2,7 +2,7 @@ MODULE grep;
 
 (** Line-oriented search for ASCII and Oberon text files. *)
 
-IMPORT Files, FATFiles, Texts := texts, Oberon := Oberon0, Out := out, regex;
+IMPORT Files, FATFiles, Texts, Oberon := Oberon0, Out := out, regex;
 
 CONST MaxLine = 8192;
 

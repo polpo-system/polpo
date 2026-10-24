@@ -7,18 +7,18 @@ MODULE zip;  (** zip archives in the console, with Zip of ETH Oberon *)
    The archives are those of zip and unzip (deflate or stored, no encryption). ZipTool is the
    desktop tool. *)
 
-IMPORT Files, Zip, texts, out;
+IMPORT Files, Zip, Texts, out;
 
 CONST MaxFiles = 128;
 
 TYPE Name = ARRAY 256 OF CHAR;
 
 PROCEDURE Args(VAR archive: ARRAY OF CHAR; VAR files: ARRAY OF Name; VAR n: INTEGER): BOOLEAN;
-VAR A: texts.Reader;
+VAR A: Texts.Reader;
 BEGIN
-  texts.OpenArgs(A); n := 0;
-  IF ~texts.Arg(A, archive) THEN RETURN FALSE END;
-  WHILE (n < LEN(files)) & texts.Arg(A, files[n]) DO INC(n) END;
+  Texts.OpenArgs(A); n := 0;
+  IF ~Texts.Arg(A, archive) THEN RETURN FALSE END;
+  WHILE (n < LEN(files)) & Texts.Arg(A, files[n]) DO INC(n) END;
   RETURN TRUE
 END Args;
 

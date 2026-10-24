@@ -10,7 +10,7 @@ MODULE Pishmish;  (** a Gemini and Spartan browser in the desktop *)
    identity (/ident: a prefix of its fingerprint, its name or mail, see dcs) stays with the
    viewer for its next pages. tools/Pishmish.Tool has commands to click. *)
 
-IMPORT Input, Objects, Display, Texts, Fonts, Oberon, MenuViewers, TextFrames, Args := texts,
+IMPORT Input, Objects, Display, Texts, Fonts, Oberon, MenuViewers, TextFrames,
   TLSIdentity, Gemini0, Gemtext0;
 
 CONST
@@ -440,11 +440,11 @@ END Selection;
 
 (** Pishmish.Open url [/ident who] ~ (url ^: the selection): the page of url in a new viewer *)
 PROCEDURE Open*;
-VAR A: Args.Reader; arg, url, who: ARRAY MaxURL OF CHAR; p: Page; none: ARRAY 2 OF CHAR;
+VAR A: Texts.Reader; arg, url, who: ARRAY MaxURL OF CHAR; p: Page; none: ARRAY 2 OF CHAR;
 BEGIN
-  Args.OpenArgs(A); url := ""; who := "";
-  WHILE Args.Arg(A, arg) DO
-    IF arg = "/ident" THEN IF ~Args.Arg(A, who) THEN who := "" END
+  Texts.OpenArgs(A); url := ""; who := "";
+  WHILE Texts.Arg(A, arg) DO
+    IF arg = "/ident" THEN IF ~Texts.Arg(A, who) THEN who := "" END
     ELSIF url = "" THEN COPY(arg, url)
     END
   END;
@@ -490,23 +490,23 @@ END Send;
 
 (** Pishmish.Ident who: log in with the identity who ("none": without one) and load the page again *)
 PROCEDURE Ident*;
-VAR A: Args.Reader; who: ARRAY 256 OF CHAR; p: Page;
+VAR A: Texts.Reader; who: ARRAY 256 OF CHAR; p: Page;
 BEGIN
   p := ThisPage();
   IF p = NIL THEN Log("Pishmish.Ident works in a Pishmish viewer", ""); RETURN END;
-  Args.OpenArgs(A);
-  IF ~Args.Arg(A, who) THEN who := "none" END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, who) THEN who := "none" END;
   IF UseIdentity(p, who) THEN Reload END
 END Ident;
 
 (** Pishmish.Save name: the file of the page (shown as "A file") to name *)
 PROCEDURE Save*;
-VAR A: Args.Reader; name: ARRAY 256 OF CHAR; p: Page;
+VAR A: Texts.Reader; name: ARRAY 256 OF CHAR; p: Page;
 BEGIN
   p := ThisPage();
   IF (p = NIL) OR (p.last = NIL) THEN Log("Pishmish.Save saves the file of a Pishmish viewer", ""); RETURN END;
-  Args.OpenArgs(A);
-  IF ~Args.Arg(A, name) THEN Gemini0.NameForURL(p.last.url, name) END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, name) THEN Gemini0.NameForURL(p.last.url, name) END;
   IF Gemini0.Save(p.last, name) THEN Log("saved ", name) ELSE Log("", Gemini0.lastError) END
 END Save;
 

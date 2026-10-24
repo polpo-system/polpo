@@ -1,6 +1,6 @@
 MODULE compiler;  (** command-line version *)
   IMPORT
-    OPP, OPB, OPV, OPT, OPS, OPC, OPL, OPO, OPM, Kernel, Root, Texts := texts, Oberon := Oberon0, Out := out;
+    OPP, OPB, OPV, OPT, OPS, OPC, OPL, OPO, OPM, Kernel, Root, Texts, Oberon := Oberon0, Out := out;
 
   CONST
     NoBreakPC = -1;

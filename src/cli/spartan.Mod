@@ -6,7 +6,7 @@ MODULE spartan;  (** Spartan downloads (spartan://, port 300): plain TCP, no TLS
    the MIME type), 3 redirect (meta: a path on the same host, followed up to 5 times), 4 client
    error, 5 server error. The body ends with the connection. dcs sends data (input). *)
 
-IMPORT Texts := texts, Gemini0, out;
+IMPORT Texts, Gemini0, out;
 
 (* the file name for url: the last part of the path, index.gmi for a directory *)
 PROCEDURE DefaultName(VAR url, name: ARRAY OF CHAR);

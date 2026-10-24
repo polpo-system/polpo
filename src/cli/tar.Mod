@@ -11,7 +11,7 @@ MODULE tar;  (** tar archives, plain or gzip compressed, in the console *)
    are entries that would land outside dir. Pack writes ustar, with GNU long names for paths of
    more than 100 characters that no prefix splits; the archives are those of tar and tar -z. *)
 
-IMPORT Kernel, Files, FATFiles, GZReaders, GZWriters, texts, out;
+IMPORT Kernel, Files, FATFiles, GZReaders, GZWriters, Texts, out;
 
 CONST Block = 512; NameLen = 256;
 
@@ -188,20 +188,20 @@ BEGIN
 END Walk;
 
 PROCEDURE List*;
-VAR A: texts.Reader; archive, dir: Name;
+VAR A: Texts.Reader; archive, dir: Name;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, archive) THEN out.String("usage: tar.List archive"); out.Ln; RETURN END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, archive) THEN out.String("usage: tar.List archive"); out.Ln; RETURN END;
   dir := ""; Walk(archive, dir, 0, FALSE)
 END List;
 
 PROCEDURE Unpack*;
-VAR A: texts.Reader; archive, dir, n: Name; strip, i: INTEGER;
+VAR A: Texts.Reader; archive, dir, n: Name; strip, i: INTEGER;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, archive) OR ~texts.Arg(A, dir) THEN out.String("usage: tar.Unpack archive dir [n]"); out.Ln; RETURN END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, archive) OR ~Texts.Arg(A, dir) THEN out.String("usage: tar.Unpack archive dir [n]"); out.Ln; RETURN END;
   strip := 0;
-  IF texts.Arg(A, n) THEN i := 0; WHILE (n[i] >= "0") & (n[i] <= "9") DO strip := strip * 10 + ORD(n[i]) - ORD("0"); INC(i) END END;
+  IF Texts.Arg(A, n) THEN i := 0; WHILE (n[i] >= "0") & (n[i] <= "9") DO strip := strip * 10 + ORD(n[i]) - ORD("0"); INC(i) END END;
   i := 0; WHILE dir[i] # 0X DO INC(i) END; IF (i > 0) & (dir[i-1] # "/") THEN Append(dir, "/") END;
   Walk(archive, dir, strip, TRUE)
 END Unpack;
@@ -340,17 +340,17 @@ END Pack1;
 
 
 PROCEDURE Pack*;
-VAR A: texts.Reader; archive, path: Name; g: Files.File; n, k: LONGINT; zero: ARRAY Block OF CHAR;
+VAR A: Texts.Reader; archive, path: Name; g: Files.File; n, k: LONGINT; zero: ARRAY Block OF CHAR;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, archive) THEN out.String("usage: tar.Pack archive[.gz|.tgz] path ..."); out.Ln; RETURN END;
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, archive) THEN out.String("usage: tar.Pack archive[.gz|.tgz] path ..."); out.Ln; RETURN END;
   n := Len(archive);
   gz := (n > 3) & (archive[n-3] = ".") & (archive[n-2] = "g") & (archive[n-1] = "z")
     OR (n > 4) & (archive[n-4] = ".") & (archive[n-3] = "t") & (archive[n-2] = "g") & (archive[n-1] = "z");
   g := Files.New(archive);
   IF gz THEN GZWriters.Open(zw, GZWriters.DefaultCompression, GZWriters.DefaultStrategy, g) ELSE Files.Set(aw, g, 0) END;
   packed := 0; dirsPacked := 0; ok := TRUE;
-  WHILE texts.Arg(A, path) DO Pack1(path) END;
+  WHILE Texts.Arg(A, path) DO Pack1(path) END;
   k := 0; WHILE k < Block DO zero[k] := 0X; INC(k) END;
   Emit(zero, Block); Emit(zero, Block);
   IF gz THEN GZWriters.Close(zw); ok := zw.res = GZWriters.Ok END;

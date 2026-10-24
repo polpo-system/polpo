@@ -2,7 +2,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
 (* after RCompiler (ROP2), RC 6.3.89 / 17.6.93, p.m. 2017-06-12 *)
   IMPORT
     OPM := ROPM, OPT := ROPT, OPP := ROPP, Modules, Linux0, Root,
-    Texts := texts, Oberon := Oberon0, Out := out, logs;
+    Texts, Oberon := Oberon0, Out := out, logs;
 
   CONST
     mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX; mipsbetag* = 0F8X; ppctag* = 0F7X;

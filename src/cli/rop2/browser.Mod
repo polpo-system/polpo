@@ -7,7 +7,7 @@ MODULE browser;
 
   IMPORT
     OPM := ROPM, OPS := ROPS, OPT := ROPT, Linux0, Modules, Root,
-    Texts := texts, Oberon := Oberon0, out;
+    Texts, Oberon := Oberon0, out;
 
   CONST
     (* object modes *)

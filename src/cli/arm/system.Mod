@@ -1,6 +1,6 @@
 MODULE system;  (** ARM variant of src/cli/system.Mod: module sizes from Kernel.ModuleDesc.size *)
 
-IMPORT Kernel, Mods := Modules, Oberon0, Texts := texts, Out := out;
+IMPORT Kernel, Mods := Modules, Oberon0, Texts, Out := out;
 
 PROCEDURE ShowModules*;
 VAR m: Kernel.Module; count, total: LONGINT;

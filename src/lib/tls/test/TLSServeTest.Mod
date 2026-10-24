@@ -1,7 +1,7 @@
 MODULE TLSServeTest;  (* TLSServeTest.Run cert.pem key.pem port [n]: a TLS 1.3 server for tests (TLS13Server);
   it answers n connections (default 1) with an HTTP/1.0 response: the host name the client asked
   for and what it sent first; "big" in the request adds 100 000 bytes *)
-IMPORT TLS13Server, TLS13Live, Sockets, texts, out, Oberon := Oberon0;
+IMPORT TLS13Server, TLS13Live, Sockets, Texts, out, Oberon := Oberon0;
 
 VAR listener: Sockets.Socket;
 
@@ -46,16 +46,16 @@ END Reply;
 
 PROCEDURE Run*;
 VAR
-  A: texts.Reader; cert, key, arg: ARRAY 256 OF CHAR; port, n, k, got, peerPort: LONGINT;
+  A: Texts.Reader; cert, key, arg: ARRAY 256 OF CHAR; port, n, k, got, peerPort: LONGINT;
   id: TLS13Server.Identity; s: TLS13Live.State; c: Sockets.Socket; peer: Sockets.Address;
   req: ARRAY 1025 OF CHAR;
 BEGIN
-  texts.OpenArgs(A);
-  IF ~texts.Arg(A, cert) OR ~texts.Arg(A, key) OR ~texts.Arg(A, arg) THEN
+  Texts.OpenArgs(A);
+  IF ~Texts.Arg(A, cert) OR ~Texts.Arg(A, key) OR ~Texts.Arg(A, arg) THEN
     out.String("usage: TLSServeTest.Run cert.pem key.pem port [n]"); out.Ln; RETURN
   END;
   port := Int(arg); n := 1;
-  IF texts.Arg(A, arg) THEN n := Int(arg) END;
+  IF Texts.Arg(A, arg) THEN n := Int(arg) END;
   IF ~TLS13Server.Load(cert, key, id) THEN out.String(TLS13Server.lastError); out.Ln; RETURN END;
   Close; Oberon.OnStop(Close);
   listener := Sockets.Listen(Sockets.Inet6, port, 8);

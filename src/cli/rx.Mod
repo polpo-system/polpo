@@ -2,7 +2,7 @@ MODULE rx;
 
 (** Console commands for the System 3 RXA regular-expression engine. *)
 
-IMPORT Files, FATFiles, Texts := texts, Oberon := Oberon0, Out := out, RXA;
+IMPORT Files, FATFiles, Texts, Oberon := Oberon0, Out := out, RXA;
 
 CONST MaxLine = 10001;
 

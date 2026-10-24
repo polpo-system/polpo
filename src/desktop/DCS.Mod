@@ -8,7 +8,7 @@ MODULE DCS;  (** dcs in the desktop: Gemini and Spartan requests, the answers in
    DCS.Idents ~
    DCS.NewIdent name [mail] [/years n] ~ *)
 
-IMPORT Files, Gemini0, Args := texts, Texts, Oberon, MenuViewers, TextFrames;
+IMPORT Files, Gemini0, Texts, Oberon, MenuViewers, TextFrames;
 
 CONST
   Menu = "System.Close System.Copy System.Grow Edit.Search Edit.Store";
@@ -87,21 +87,21 @@ END ReadInput;
 (** DCS.Get url [input] [options] ~ (see dcs.Help): the answer in a new viewer *)
 PROCEDURE Get*;
 VAR
-  A: Args.Reader; arg, who, cert, key, inputFile, output, dir: ARRAY PathLen OF CHAR; fp: ARRAY 100 OF CHAR;
+  A: Texts.Reader; arg, who, cert, key, inputFile, output, dir: ARRAY PathLen OF CHAR; fp: ARRAY 100 OF CHAR;
   name: ARRAY 64 OF CHAR; save, fingerprint, follow, ok, gotURL, gotInput: BOOLEAN; o: Gemini0.Options; r: Gemini0.Response;
   list, id: Gemini0.Ident; i: LONGINT; T: Texts.Text;
 BEGIN
-  Args.OpenArgs(A);
+  Texts.OpenArgs(A);
   who := ""; cert := ""; key := ""; inputFile := ""; output := ""; save := FALSE; fingerprint := FALSE; follow := FALSE;
   gotURL := FALSE; gotInput := FALSE; url := ""; inputText := "";
   o := Gemini0.NewOptions(); o.trust := Gemini0.None;
-  WHILE Args.Arg(A, arg) DO
-    IF arg = "/ident" THEN IF ~Args.Arg(A, who) THEN gotURL := FALSE END
-    ELSIF arg = "/cert" THEN IF ~Args.Arg(A, cert) THEN gotURL := FALSE END
-    ELSIF arg = "/key" THEN IF ~Args.Arg(A, key) THEN gotURL := FALSE END
-    ELSIF arg = "/input" THEN IF ~Args.Arg(A, inputFile) THEN gotURL := FALSE END
-    ELSIF arg = "/output" THEN IF ~Args.Arg(A, output) THEN gotURL := FALSE END
-    ELSIF arg = "/pin" THEN IF Args.Arg(A, fp) THEN o.trust := Gemini0.Pin; COPY(fp, o.pin) END
+  WHILE Texts.Arg(A, arg) DO
+    IF arg = "/ident" THEN IF ~Texts.Arg(A, who) THEN gotURL := FALSE END
+    ELSIF arg = "/cert" THEN IF ~Texts.Arg(A, cert) THEN gotURL := FALSE END
+    ELSIF arg = "/key" THEN IF ~Texts.Arg(A, key) THEN gotURL := FALSE END
+    ELSIF arg = "/input" THEN IF ~Texts.Arg(A, inputFile) THEN gotURL := FALSE END
+    ELSIF arg = "/output" THEN IF ~Texts.Arg(A, output) THEN gotURL := FALSE END
+    ELSIF arg = "/pin" THEN IF Texts.Arg(A, fp) THEN o.trust := Gemini0.Pin; COPY(fp, o.pin) END
     ELSIF arg = "/save" THEN save := TRUE
     ELSIF arg = "/tofu" THEN o.trust := Gemini0.Tofu
     ELSIF arg = "/follow" THEN follow := TRUE
@@ -178,13 +178,13 @@ END Idents;
 
 (** DCS.NewIdent name [mail] [/years n] ~: a new identity (a P-256 key, self-signed), in the Log *)
 PROCEDURE NewIdent*;
-VAR A: Args.Reader; cn, mail, arg, dir: ARRAY PathLen OF CHAR; years, i: LONGINT; id: Gemini0.Ident;
+VAR A: Texts.Reader; cn, mail, arg, dir: ARRAY PathLen OF CHAR; years, i: LONGINT; id: Gemini0.Ident;
 BEGIN
-  Args.OpenArgs(A); cn := ""; mail := ""; years := 100;
-  WHILE Args.Arg(A, arg) DO
+  Texts.OpenArgs(A); cn := ""; mail := ""; years := 100;
+  WHILE Texts.Arg(A, arg) DO
     IF arg = "/years" THEN
       years := 0;
-      IF Args.Arg(A, arg) THEN i := 0; WHILE (arg[i] >= "0") & (arg[i] <= "9") DO years := years * 10 + ORD(arg[i]) - ORD("0"); INC(i) END END
+      IF Texts.Arg(A, arg) THEN i := 0; WHILE (arg[i] >= "0") & (arg[i] <= "9") DO years := years * 10 + ORD(arg[i]) - ORD("0"); INC(i) END END
     ELSIF cn = "" THEN COPY(arg, cn)
     ELSIF mail = "" THEN COPY(arg, mail)
     END

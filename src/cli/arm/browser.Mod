@@ -13,7 +13,7 @@ MODULE browser;  (* the console browser of the ARM port: the interface of a modu
   2015-07-07  using OBM.prefix:="arm/" 
 *)
 
-IMPORT OBT, OBS, OBM, Files, Root, Texts := texts, Oberon := Oberon0, out, SYSTEM;
+IMPORT OBT, OBS, OBM, Files, Root, Texts, Oberon := Oberon0, out, SYSTEM;
 
 CONST
 

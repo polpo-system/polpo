@@ -1,6 +1,6 @@
 MODULE oberon;
 
-IMPORT Kernel, Texts := texts, Oberon0;
+IMPORT Kernel, Texts, Oberon0;
 
 PROCEDURE PopulateParams;
 VAR W: Texts.Writer; i: INTEGER; arg: ARRAY 256 OF CHAR;

@@ -1,8 +1,8 @@
 MODULE cat;
-(** Deprecated: use texts.Show and texts.ShowPlain.
+(** Deprecated: use Texts.Show and Texts.ShowPlain.
     cat.Cat [-p] file... shows Oberon texts on the terminal, -p without fonts and colours. *)
 
-IMPORT Texts := texts, Oberon := Oberon0;
+IMPORT Texts, Oberon := Oberon0;
 
 PROCEDURE Cat*;
 VAR S: Texts.Scanner; rich: BOOLEAN;

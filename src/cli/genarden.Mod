@@ -11,7 +11,7 @@ MODULE genarden;  (** the recipes of the base system of polpo for the package tr
    tree made by portia.Sync (it has COMMIT) is refused: changes go into a git clone of arden.
    Run it after changing the build recipes, then portia.Check. *)
 
-IMPORT Kernel, Files, FATFiles, Root, Texts := Texts0, Oberon := Oberon0, texts, TOML, out;
+IMPORT Kernel, Files, FATFiles, Root, Texts0, Oberon := Oberon0, Texts, TOML, out;
 
 CONST
   NameLen = 256; MaxArchs = 7; MaxLine = 1024;
@@ -228,7 +228,7 @@ END AddSource;
 
 (* the lines of the recipe tools/<name>.Tool for the architecture a *)
 PROCEDURE Recipe(name: ARRAY OF CHAR; a: INTEGER; link: BOOLEAN);
-VAR path: Name; T: Texts.Text; R: Texts.Reader; ch: CHAR; line: ARRAY MaxLine OF CHAR; n: LONGINT;
+VAR path: Name; T: Texts0.Text; R: Texts0.Reader; ch: CHAR; line: ARRAY MaxLine OF CHAR; n: LONGINT;
 
   PROCEDURE Line;  (* a compilation of a source, or the link command *)
   VAR i, j: LONGINT; src, word: Name; p: Package;
@@ -254,12 +254,12 @@ VAR path: Name; T: Texts.Text; R: Texts.Reader; ch: CHAR; line: ARRAY MaxLine OF
 BEGIN
   path := "tools/"; Append(path, name); Append(path, ".Tool"); Root.Join(path, path);
   IF Files.Old(path) = NIL THEN out.String("genarden: no "); out.String(path); out.Ln; INC(problems); RETURN END;
-  NEW(T); Texts.Open(T, path); Texts.OpenReader(R, T, 0); n := 0; Texts.Read(R, ch);
+  NEW(T); Texts0.Open(T, path); Texts0.OpenReader(R, T, 0); n := 0; Texts0.Read(R, ch);
   WHILE ~R.eot DO
     IF (ch = 0DX) OR (ch = 0AX) THEN line[n] := 0X; Line; n := 0
     ELSIF n < MaxLine - 1 THEN line[n] := ch; INC(n)
     END;
-    Texts.Read(R, ch)
+    Texts0.Read(R, ch)
   END;
   line[n] := 0X; Line
 END Recipe;
@@ -424,16 +424,16 @@ BEGIN
 END Others;
 
 PROCEDURE Run*;
-VAR A: texts.Reader; arg, path: Name; buf: Buf; doc: TOML.Doc; s: TOML.Section; p, last: Package;
-  index, it, others: Item; f: Files.File; S: Texts.Scanner; i: LONGINT;
+VAR A: Texts.Reader; arg, path: Name; buf: Buf; doc: TOML.Doc; s: TOML.Section; p, last: Package;
+  index, it, others: Item; f: Files.File; S: Texts0.Scanner; i: LONGINT;
 BEGIN
-  problems := 0; texts.OpenArgs(A);
-  IF texts.Arg(A, arg) THEN COPY(arg, tree)
+  problems := 0; Texts.OpenArgs(A);
+  IF Texts.Arg(A, arg) THEN COPY(arg, tree)
   ELSE
     Kernel.GetConfig("PORTIA_TREE", tree);
     IF tree = "" THEN
       Oberon.OpenScanner(S, "Portia.Tree");
-      IF S.class IN {Texts.Name, Texts.String} THEN COPY(S.s, tree) ELSE Root.Join("arden/", tree) END
+      IF S.class IN {Texts0.Name, Texts0.String} THEN COPY(S.s, tree) ELSE Root.Join("arden/", tree) END
     END
   END;
   i := Len(tree); IF (i > 0) & (tree[i-1] # "/") THEN Append(tree, "/") END;

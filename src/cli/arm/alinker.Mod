@@ -17,7 +17,7 @@ MODULE alinker;   (* as 5.12.98 *)  (** command-line ARM boot linker *)
     
 *)
 
-  IMPORT Linux0, Files, Root, Texts := texts, Out := out, Oberon := Oberon0, SYSTEM, OBM;
+  IMPORT Linux0, Files, Root, Texts, Out := out, Oberon := Oberon0, SYSTEM, OBM;
 
   CONST
   RDonly= 0;  WRonly= 1;  RDWR=2;  OCREAT=40H;  OEXCL=80H;  OTRUNC= 200H;  OAPPEND=400H;  (* from X86 & ARM*)

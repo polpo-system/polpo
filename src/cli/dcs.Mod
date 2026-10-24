@@ -17,7 +17,7 @@ MODULE dcs;  (** dcs, the digital command system: a command line Gemini and Spar
    dcs.NewIdent name [mail] [/years n]   make an identity (a P-256 key, self-signed)
    dcs.Help *)
 
-IMPORT SYSTEM, Linux0, Files, Gemini0, Texts := texts, out;
+IMPORT SYSTEM, Linux0, Files, Gemini0, Texts, out;
 
 CONST
   MaxInput = 3000;  (* a Gemini query is at most 1024 bytes in all *)

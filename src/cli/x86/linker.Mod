@@ -55,7 +55,7 @@ MODULE linker;  (** non-portable *)  (** JdV / dVdW / pjm / prk *)
 *)
 
 IMPORT
-  Linux0, S := SYSTEM, Kernel, Files, Texts := texts, (*Fonts,*) Oberon := Oberon0, Out := out;
+  Linux0, S := SYSTEM, Kernel, Files, Texts, (*Fonts,*) Oberon := Oberon0, Out := out;
 
 CONST
   Boundary = 32;  (* boundaries on which Oberon GC allocates blocks (=32) *)
@@ -319,15 +319,13 @@ END LogOpen;
 
 PROCEDURE LogClose;
 VAR
-  len: LONGINT; res: INTEGER; text: Texts.Text; file: Files.File; r: Files.Rider;
+  len: LONGINT; res: INTEGER; text: Texts.Text; file: Files.File;
 BEGIN
   Files.Delete (logName, res);
   file := Files.New (logName);
   NEW (text); Texts.Open (text, "");
   Texts.Append (text, logWriter.buf);
-  Files.Set(r, file, 0);
-  Texts.Store (r, text);
-  len := text.len;
+  Texts.Store (text, file, 0, len);
   Files.Register (file);
   file := NIL;
   text := NIL
