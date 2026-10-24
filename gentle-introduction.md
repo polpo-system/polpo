@@ -110,17 +110,17 @@ commands of the module.)
 ## Modules and commands
 
 In the polpo directory there is a small module for you to play with, hello.Mod. Let us look at it
-without leaving the shell. Type tex and press Tab: loksh completes it to texts., and a second Tab
+without leaving the shell. Type Tex and press Tab: loksh completes it to Texts., and a second Tab
 shows the commands of the module texts:
 
-    > texts.
+    > Texts.
     DeleteLines Replace Show ShowPlain
 
 The first two change files, as sed does on Unix; Show prints a file, as cat does. Type S and press
 Tab: there are two commands beginning with S, Show and ShowPlain, so loksh shows both and waits.
 Type how and a blank, then h and Tab, and loksh completes the file name:
 
-    > texts.Show hello.Mod
+    > Texts.Show hello.Mod
     MODULE hello;
     IMPORT out;
 
@@ -276,10 +276,10 @@ around the system. Since everything is a module, everything can be looked at thi
 
 Many files in polpo are not plain text but Oberon texts: they keep fonts and colours, and they can
 even contain pictures and other objects. Tool texts (tools/*.Tool), the configuration
-Oberon.Text and many documents are written so. texts.Show prints them with their fonts as styles
-of the terminal, texts.ShowPlain as plain text, and xxs edits them and keeps their fonts:
+Oberon.Text and many documents are written so. Texts.Show prints them with their fonts as styles
+of the terminal, Texts.ShowPlain as plain text, and xxs edits them and keeps their fonts:
 
-    > texts.ShowPlain tools/System.Tool
+    > Texts.ShowPlain tools/System.Tool
     > xxs.Open tools/System.Tool
 
 Sources (.Mod files) may be plain text or Oberon texts; the compiler reads both. (Note: texts.md
@@ -304,14 +304,14 @@ How does a command get its parameters, if a procedure without parameters is a co
 them itself, from the text after the command name. A console command does it like this:
 
     PROCEDURE Hello*;
-      VAR A: texts.Reader; name: ARRAY 64 OF CHAR;
+      VAR A: Texts.Reader; name: ARRAY 64 OF CHAR;
     BEGIN
-      texts.OpenArgs(A);
-      IF texts.Arg(A, name) THEN out.String("hello, "); out.String(name); out.Ln END
+      Texts.OpenArgs(A);
+      IF Texts.Arg(A, name) THEN out.String("hello, "); out.String(name); out.Ln END
     END Hello;
 
-texts.Arg gives the parameters one after the other and returns FALSE when there are no more.
-(hello would need IMPORT texts, out; for this.) In the desktop, where the "rest of the line" is
+Texts.Arg gives the parameters one after the other and returns FALSE when there are no more.
+(hello would need IMPORT Texts, out; for this.) In the desktop, where the "rest of the line" is
 the text after the command in a viewer, the same command works unchanged. programming.md tells the
 details.
 

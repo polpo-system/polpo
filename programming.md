@@ -12,13 +12,13 @@ An Oberon module is one source file, from MODULE Name; to END Name.; what it exp
 with an asterisk. A command is an exported procedure without parameters. Here is a small one:
 
     MODULE greet;
-    IMPORT texts, out;
+    IMPORT Texts, out;
 
     PROCEDURE Hello*;
-      VAR A: texts.Reader; name: ARRAY 64 OF CHAR;
+      VAR A: Texts.Reader; name: ARRAY 64 OF CHAR;
     BEGIN
-      texts.OpenArgs(A);
-      IF ~texts.Arg(A, name) THEN out.String("usage: greet.Hello name"); out.Ln; RETURN END;
+      Texts.OpenArgs(A);
+      IF ~Texts.Arg(A, name) THEN out.String("usage: greet.Hello name"); out.Ln; RETURN END;
       out.String("hello, "); out.String(name); out.Ln
     END Hello;
 
@@ -124,7 +124,7 @@ modules that differ between ports, as Linux0 and Kernel.
 
 ## Parameters and output
 
-A command reads its parameters itself. texts.OpenArgs(A) opens them, and texts.Arg(A, s) gives one
+A command reads its parameters itself. Texts.OpenArgs(A) opens them, and Texts.Arg(A, s) gives one
 after the other: blanks separate them, quotes ("...") keep blanks inside one, and the end of the
 line or a ~ ends them. Arg returns FALSE when there are no more. In the desktop, Module.Command
 args ~ written in a text calls the same command with the same parameters, so a console command
@@ -140,7 +140,7 @@ parameters of the command (In.Open, then In.Int, In.Name, In.String, In.Real, an
 whether they were there), in the console from the command line and in the desktop from the text
 after the command; ^ instead of the parameters takes the latest selection, * the marked viewer,
 both only in the desktop. Strings (conversions between numbers, dates and strings) works in both
-too. A program that uses out or Out, texts.Arg or In, and asks no questions runs unchanged in the
+too. A program that uses out or Out, Texts.Arg or In, and asks no questions runs unchanged in the
 console and in the desktop. Reading the terminal itself (stdin, as the shell does) and writing to
 it directly work only in the console.
 

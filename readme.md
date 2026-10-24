@@ -73,23 +73,23 @@ Bold and italic fonts are shown bold and italic, larger sizes (headings) bold, w
 terminal's own font:
 
 ```
-bin/x86/loksh texts.Show texts/UserGuide.Text
-bin/x86/loksh texts.ShowPlain texts/UserGuide.Text | less
+bin/x86/loksh Texts.Show texts/UserGuide.Text
+bin/x86/loksh Texts.ShowPlain texts/UserGuide.Text | less
 ```
 
-Programs can call `texts.ShowFile(name, rich)`. `cat.Cat [-p]` still works but is
+Programs can call `Texts.ShowFile(name, rich)`. `cat.Cat [-p]` still works but is
 deprecated.
 
 Edit texts from the console, Oberon texts and plain files alike:
 
 ```
-bin/x86/loksh texts.Replace tools/System.Tool Oberon20.Scn.Fnt Syntax20.Scn.Fnt
-bin/x86/loksh texts.Replace notes.Text '"old words"' '"new words"'
-bin/x86/loksh texts.DeleteLines tools/System.Tool wishup.Tool
+bin/x86/loksh Texts.ReplaceIn tools/System.Tool Oberon20.Scn.Fnt Syntax20.Scn.Fnt
+bin/x86/loksh Texts.ReplaceIn notes.Text '"old words"' '"new words"'
+bin/x86/loksh Texts.DeleteLines tools/System.Tool wishup.Tool
 ```
 
-`texts.Replace file old new` replaces every occurrence; the new text keeps the font and
-colour of the old, and `""` as new deletes. `texts.DeleteLines file text` deletes every
+`Texts.ReplaceIn file old new` replaces every occurrence; the new text keeps the font and
+colour of the old, and `""` as new deletes. `Texts.DeleteLines file text` deletes every
 line containing the text. Arguments are words separated by blanks, any file name works;
 texts with blanks are quoted (in the Unix shell as `'"..."'`). The file is stored where it was found, the old version as `.Bak`; an Oberon
 text keeps its fonts and colours, a plain file stays plain. Texts with objects (gadgets)
@@ -131,8 +131,8 @@ order of their imports, then links and installs `bin/<arch>/loksh`. It gives the
 objects as the recipes in `tools/`.
 
 ```
-bin/x86/loksh portia.Install display-sixel   # build it, replacing display-x11 (make sixel)
-bin/x86/loksh portia.Install display-x11     # and back
+bin/x86/loksh portia.Install display-sixel   # build it, replacing display (make sixel)
+bin/x86/loksh portia.Install display         # and back (X11, KMS or framebuffer)
 bin/x86/loksh portia.Remove console-tools    # delete its objects, if nothing needs it
 ```
 
@@ -180,9 +180,9 @@ installation's own and not in git: the packages installed besides the base syste
 `-name` for a base package removed or replaced. portia writes only the world file. (A record
 `portia.<arch>` of earlier versions of portia is turned into a world file the first time, and
 kept as `portia.<arch>.old`.) `portia.Record` makes the world file from the files present;
-display-x11 and display-sixel are alternatives providing `display`, and `portia.Mark
+display-sixel is an alternative to display (it provides `display`, and the two conflict), and `portia.Mark
 display-sixel` records the switch after `make sixel` (in the world file: `display-sixel` and
-`-display-x11`). Installing, removing and fetching packages come next. The
+`-display`). Installing, removing and fetching packages come next. The
 package descriptions are TOML. Libraries the base system needs live in `src/lib/<name>/`
 (`toml`, `versions`), each a package of the `lib` category.
 
@@ -463,7 +463,7 @@ runs only `tools/arm.Tool`, with the ARM compiler. Both link
 Directly, from the polpo directory (prefix `qemu-arm` on x86):
 
 ```
-bin/arm/loksh texts.Show texts/UserGuide.Text
+bin/arm/loksh Texts.Show texts/UserGuide.Text
 bin/arm/loksh compiler.Compile hello.Mod     # native ARM compiler
 bin/arm/loksh hello.world
 bin/arm/loksh System.Init                    # the Oberon desktop
