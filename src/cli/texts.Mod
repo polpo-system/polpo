@@ -1,4 +1,9 @@
-MODULE texts;
+MODULE texts;  (** the text module of the console, kept for packages that import it *)
+
+(* polpo: texts is not used any more. for consistency the console and the desktop share one module,
+   Texts, which has the console commands too: Texts.Show, Texts.ShowPlain, Texts.ReplaceIn (here
+   texts.Replace), Texts.DeleteLines, Texts.OpenArgs and Texts.Arg. texts stays so that older
+   packages keep compiling; new code imports Texts. *)
 
 IMPORT Kernel, Files, Objects := objects, Texts0, Oberon := Oberon0, out;
 

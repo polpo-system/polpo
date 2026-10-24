@@ -1,4 +1,8 @@
-MODULE objects;  (** console object facade *)
+MODULE objects;  (** console object facade, kept for packages that import it *)
+
+(* polpo: objects is not used any more. for consistency the console and the desktop share one
+   module, Objects, with the same types (both are made on Objects0). objects stays so that older
+   packages keep compiling; new code imports Objects. *)
 
 IMPORT Files, Objects0;
 
