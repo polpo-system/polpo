@@ -199,12 +199,12 @@ programming.md ("Trying a changed system module") tells what to keep in mind.
 
 ## Changing a module
 
-Now let us give hello a second command. Open the file in xxs, the small editor of the console:
+Now let us give hello a second command. Open the file in the small editor of the console, none:
 
-    > xxs.Open hello.Mod
+    > none.Open hello.Mod
 
 Move with the arrows to the line PROCEDURE world*;, hold Shift and press the down arrow four times:
-the four lines of the procedure are selected. Ctrl+C copies them. (Note: in xxs, Ctrl+C copies, as
+the four lines of the procedure are selected. Ctrl+C copies them. (Note: in none, Ctrl+C copies, as
 in other editors; at the prompt of the shell it stops a command.) Press the down arrow once more,
 without Shift, which ends the selection, and Ctrl+V pastes the copy. Now there are two procedures
 world. Change the second one: call it there, in the PROCEDURE line and after END, and let it write
@@ -215,7 +215,7 @@ something else:
       out.String("hello there!"); out.Ln;
     END there;
 
-Ctrl+O writes the file (Enter confirms the name), Ctrl+X leaves xxs, and you are back at the prompt.
+Ctrl+O writes the file (Enter confirms the name), Ctrl+X leaves the editor, and you are back at the prompt.
 Compile it as before:
 
     > compiler.Compile hello.Mod
@@ -263,7 +263,7 @@ there and world, because hello is loaded anew from the new file when it is neede
 free it, and the next command loads the new version. system.Free refuses to free a module that
 other loaded modules import, saying that its reference count is not zero; free those first.)
 
-Question: system.ShowModules lists xxs now. Why, and why does a second xxs.Open start faster than
+Question: system.ShowModules lists the module none now. Why, and why does a second none.Open start faster than
 the first?
 
 ## Looking at an interface
@@ -277,10 +277,10 @@ around the system. Since everything is a module, everything can be looked at thi
 Many files in polpo are not plain text but Oberon texts: they keep fonts and colours, and they can
 even contain pictures and other objects. Tool texts (tools/*.Tool), the configuration
 Oberon.Text and many documents are written so. Texts.Show prints them with their fonts as styles
-of the terminal, Texts.ShowPlain as plain text, and xxs edits them and keeps their fonts:
+of the terminal, Texts.ShowPlain as plain text, and the editor none edits them and keeps their fonts:
 
     > Texts.ShowPlain tools/System.Tool
-    > xxs.Open tools/System.Tool
+    > none.Open tools/System.Tool
 
 Sources (.Mod files) may be plain text or Oberon texts; the compiler reads both. (Note: texts.md
 is about one text in particular, Oberon.Text, the configuration of the system.)

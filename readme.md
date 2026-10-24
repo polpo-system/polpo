@@ -108,7 +108,7 @@ bin/x86/loksh portia.Sync    # the newest commit of arden from GitHub, as files,
 Sync downloads one archive of the newest commit and remembers the commit in `arden/COMMIT`;
 when nothing changed it downloads nothing more. A tree that is a git checkout is left to
 `git pull`. Another tree can be named with `PORTIA_TREE` or `Portia.Tree` in `Oberon.Text`.
-The tree describes core, console, xxs, the compilers, the desktop, the
+The tree describes core, console, the editor none, the compilers, the desktop, the
 display variants and more, each with its modules per architecture, data files and
 dependencies, sorted into categories: `linux` (packages producing Linux executables, like
 core with `loksh`), `system`, `devel`, `apps`, `games`, `lib`. portia reads it:
@@ -117,10 +117,10 @@ core with `loksh`), `system`, `devel`, `apps`, `games`, `lib`. portia reads it:
 bin/x86/loksh portia.List                    # the packages; i: installed
 bin/x86/loksh portia.List apps               # one category
 bin/x86/loksh portia.Info display-sixel      # dependencies, provides, conflicts, modules
-bin/x86/loksh portia.Files xxs               # the files of a package on this architecture
+bin/x86/loksh portia.Files none               # the files of a package on this architecture
 bin/x86/loksh portia.Owner obj/x86/Display.Obj
 bin/x86/loksh portia.Check                   # all files here, every import satisfied
-bin/x86/loksh portia.Build xxs               # build xxs and its dependencies
+bin/x86/loksh portia.Build none               # build the editor none and its dependencies
 bin/x86/loksh portia.Build                   # build every installed package (all of polpo)
 bin/x86/loksh portia.Build /arm              # the same for ARM, cross compiled on x86
 qemu-arm bin/arm/loksh portia.Build          # or natively
@@ -284,14 +284,14 @@ self-signed certificate with openssl.
 (github.com/norayr: http, Internet, strutils, base64: main, master for Internet), apart from their
 import lines; `vocsync.To` writes the voc version of a file.
 
-### xxs, a console editor
+### none, a console editor
 
-`xxs` is a small nano-like editor for the console, the size that fits every terminal:
+`none` (it was called xxs) is a small nano-like editor for the console, the size that fits every terminal:
 
 ```
-bin/x86/loksh xxs.Open Oberon.Text     # edit the configuration...
+bin/x86/loksh none.Open Oberon.Text     # edit the configuration...
 bin/x86/loksh System.Init              # ...then start the desktop
-bin/x86/loksh xxs.Fit notes.txt        # the same as xxs.Open; new files are created
+bin/x86/loksh none.Fit notes.txt        # the same as none.Open; new files are created
 ```
 
 It edits plain files and Oberon texts: plain files stay plain, Oberon texts keep their
