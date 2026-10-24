@@ -1,7 +1,6 @@
 MODULE none;  (** a small nano-like editor for the console, the size that fits every terminal *)
 
 (* none.Open file   edit a file, a new one when it does not exist
-   none.Fit file    the same
 
    It was called xxs. It is called none because on a Dvorak keyboard, typing nano, the fingers
    often write none.
@@ -922,11 +921,6 @@ BEGIN
     r := Linux0.Write0(1, SYSTEM.ADR(fname[0]), 22)
   END
 END Open;
-
-(** none.Fit file -- the same, the size that fits *)
-PROCEDURE Fit*;
-BEGIN Open
-END Fit;
 
 BEGIN
   raw := FALSE; opos := 0; search := ""

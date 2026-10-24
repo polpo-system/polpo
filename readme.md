@@ -291,7 +291,7 @@ import lines; `vocsync.To` writes the voc version of a file.
 ```
 bin/x86/loksh none.Open Oberon.Text     # edit the configuration...
 bin/x86/loksh System.Init              # ...then start the desktop
-bin/x86/loksh none.Fit notes.txt        # the same as none.Open; new files are created
+bin/x86/loksh none.Open notes.txt       # a new file when it does not exist
 ```
 
 It edits plain files and Oberon texts: plain files stay plain, Oberon texts keep their
