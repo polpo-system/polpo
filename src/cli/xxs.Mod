@@ -15,7 +15,7 @@ MODULE xxs;  (** a small nano-like editor for the console, the size that fits ev
    they act on every line of it (a block of width 0 types into all its lines: indenting). Copies
    go to the terminal's clipboard too (OSC 52); a paste from the terminal is taken as it is. *)
 
-IMPORT Kernel, Linux0, Files, Objects := objects, Texts, termios, SYSTEM;
+IMPORT Kernel, Linux0, Files, Objects, Texts, termios, SYSTEM;
 
 CONST
   ESC = 1BX; CR = 0DX; LF = 0AX; TAB = 09X;

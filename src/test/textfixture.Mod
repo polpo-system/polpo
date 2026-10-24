@@ -1,6 +1,6 @@
 MODULE textfixture;
 
-IMPORT Files, Objects := objects, Texts;
+IMPORT Files, Objects, Texts;
 
 PROCEDURE Font(name: ARRAY OF CHAR): Objects.Library;
 VAR lib: Objects.Library;
