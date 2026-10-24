@@ -601,6 +601,26 @@ BEGIN
   RETURN Installed(p)
 END IsInstalled;
 
+(* the package for the dependency name: the package of that name; but when it is not installed and
+   an installed package provides the name, that one; for a virtual
+   name the installed provider, else the first one in the tree *)
+PROCEDURE Dep(VAR name: ARRAY OF CHAR): Package;
+VAR q, r, inst: Package;
+BEGIN
+  q := Find(name);
+  IF (q = NIL) OR ~IsInstalled(q) THEN
+    inst := NIL; r := packages;
+    WHILE r # NIL DO
+      IF Has(r.provides, name) THEN
+        IF IsInstalled(r) THEN inst := r ELSIF q = NIL THEN q := r END
+      END;
+      r := r.next
+    END;
+    IF inst # NIL THEN q := inst END
+  END;
+  RETURN q
+END Dep;
+
 (* ----- commands ----- *)
 
 PROCEDURE Arg(VAR s: ARRAY OF CHAR): BOOLEAN;
@@ -738,6 +758,7 @@ BEGIN
   it := p.deps;
   WHILE it # NIL DO
     q := Find(it.s);
+    IF (q # NIL) & ~IsInstalled(q) THEN q := Dep(it.s) END;  (* an installed provider in its place *)
     IF q # NIL THEN Closure(q, set)
     ELSE  (* virtual: every package providing it counts *)
       q := packages;
@@ -1337,11 +1358,7 @@ BEGIN
   Add(list, "?");  (* placeholder against cycles, replaced below *)
   it := p.deps;
   WHILE it # NIL DO
-    q := Find(it.s);
-    IF q = NIL THEN  (* virtual *)
-      r := packages; q := NIL;
-      WHILE r # NIL DO IF Has(r.provides, it.s) & ((q = NIL) OR IsInstalled(r)) THEN q := r END; r := r.next END
-    END;
+    q := Dep(it.s);
     IF q # NIL THEN Order(q, list) END;
     it := it.next
   END;
@@ -1354,7 +1371,7 @@ BEGIN
 END SetArch;
 
 (** portia.Record -- record the packages whose files are here as installed; of alternatives
-  sharing files (display-x11, display-sixel) the first; see portia.Mark *)
+  sharing files (variants of the same modules) the first; see portia.Mark *)
 (* the record from the files present; of alternatives the first *)
 PROCEDURE RecordAll(verbose: BOOLEAN);
 VAR p: Package; it: Item; skip: BOOLEAN;
@@ -1515,12 +1532,7 @@ END Confirm;
 PROCEDURE Resolve(VAR name: ARRAY OF CHAR): Package;
 VAR q, r: Package;
 BEGIN
-  q := Find(name);
-  IF q = NIL THEN
-    r := packages;
-    WHILE r # NIL DO IF Has(r.provides, name) & ((q = NIL) OR IsInstalled(r)) THEN q := r END; r := r.next END
-  END;
-  RETURN q
+  RETURN Dep(name)
 END Resolve;
 
 (* add to set the dependencies of p that are missing or older than p needs, recursively *)

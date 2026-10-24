@@ -1,4 +1,5 @@
 core 0.1.0
+console-base 0.1.0
 console 0.1.0
 xxs 0.1.0
 toml 0.1.0
@@ -39,8 +40,7 @@ dcs 0.1.0
 net 0.1.0
 compiler-rop2 0.1.0
 compiler-ppc 0.1.0
-desktop-base 0.1.0
-display-x11 0.1.0
+display 0.1.0
 desktop-tools 0.1.0
 desktop-system 0.1.0
 desktop-compiler-rop2 0.1.0
