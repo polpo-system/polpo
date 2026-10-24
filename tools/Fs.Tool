@@ -9,7 +9,7 @@ fs.Rmdir path ...            removes empty directories
 fs.Mv old new                renames or moves (into new if it is a directory)
 fs.Cp from to                copies a file (into to if it is a directory)
 
-loksh runs its commands in one process: after fs.Cd, Texts.Show name, xxs.Open name
+loksh runs its commands in one process: after fs.Cd, Texts.Show name, none.Open name
 and the others find a plain name in the new directory first, then on the search path
 of the polpo root (the root, share/, tools/, fonts/).
 

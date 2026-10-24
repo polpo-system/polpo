@@ -1,7 +1,10 @@
-MODULE xxs;  (** a small nano-like editor for the console, the size that fits every terminal *)
+MODULE none;  (** a small nano-like editor for the console, the size that fits every terminal *)
 
-(* xxs.Open file   edit a file, a new one when it does not exist
-   xxs.Fit file    the same
+(* none.Open file   edit a file, a new one when it does not exist
+   none.Fit file    the same
+
+   It was called xxs. It is called none because on a Dvorak keyboard, typing nano, the fingers
+   often write none.
 
    Plain files stay plain, Oberon texts keep their fonts and colours; in the Write Out
    prompt (^O), ^T switches between storing as Oberon text and as plain text.
@@ -622,7 +625,7 @@ VAR i, p, ln, sb, se, first, last, l, r, hb, he, ucol, e: LONGINT; eolSel: BOOLE
 BEGIN
   GetSize; Follow;
   CSI("?25l"); Goto(1, 1);
-  Attr(7); Str("  xxs  "); Str(name);
+  Attr(7); Str("  none  "); Str(name);
   IF plain THEN Str("  [plain text]") ELSE Str("  [Oberon text]") END;
   IF modified THEN Str("  Modified") END;
   CSI("K"); Attr(0);
@@ -722,7 +725,7 @@ PROCEDURE ShowHelp;
 VAR k: LONGINT;
 BEGIN
   Goto(1, 1); CSI("2J"); Goto(1, 1);
-  Str("xxs - a nano-like editor for Oberon texts and plain files"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
+  Str("none - a nano-like editor for Oberon texts and plain files"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
   Str("^O  Write Out: store the file; in the prompt ^T stores as plain or Oberon text"); Ch(CR); Ch(LF);
   Str("^X  Exit, asking to store changes"); Ch(CR); Ch(LF);
   Str("Shift+arrows, Home, End, PgUp, PgDn  select;  ^A  select all"); Ch(CR); Ch(LF);
@@ -908,23 +911,23 @@ BEGIN
   Restore
 END Edit;
 
-(** xxs.Open file -- edit file, a new one when it does not exist *)
+(** none.Open file -- edit file, a new one when it does not exist *)
 PROCEDURE Open*;
 VAR A: Texts.Reader; fname: ARRAY 256 OF CHAR; r: LONGINT;
 BEGIN
   Texts.OpenArgs(A);
   IF Texts.Arg(A, fname) THEN Edit(fname)
   ELSE
-    fname := "usage: xxs.Open file"; fname[20] := LF; fname[21] := 0X;
-    r := Linux0.Write0(1, SYSTEM.ADR(fname[0]), 21)
+    fname := "usage: none.Open file"; fname[21] := LF; fname[22] := 0X;
+    r := Linux0.Write0(1, SYSTEM.ADR(fname[0]), 22)
   END
 END Open;
 
-(** xxs.Fit file -- the same, the size that fits *)
+(** none.Fit file -- the same, the size that fits *)
 PROCEDURE Fit*;
 BEGIN Open
 END Fit;
 
 BEGIN
   raw := FALSE; opos := 0; search := ""
-END xxs.
+END none.
