@@ -176,10 +176,34 @@ clock, through Input.Available, Input.Read or Oberon.Time. A loop that does neit
 stopped by Ctrl+C in the terminal, which interrupts it at once. Ctrl+Alt+P pauses a command
 instead of stopping it; desktop.md describes that.)
 
-Then the kernel writes the details of the trap to Kernel.Log, abandons the command, and goes back
-to the shell's prompt (or to the desktop, which shows a Trap viewer). The shell prints
+Then the kernel abandons the command and goes back to the shell's prompt (or to the desktop,
+which shows a Trap viewer with the procedures and their variables). In the console the trap is
+shown on the standard error: what it was, the procedures that were running, the last one first,
+each with its pc in the code of its module, and the command that finds the statement:
 
-    loksh: the command stopped (Ctrl+C, or a trap: Kernel.Log has the details)
+    TRAP 7: index out of range
+      Test.Index  pc 32
+      Test.Run  pc 90
+      Oberon0.Call  pc 2062
+      shell.Run  pc 6714
+    compiler.Compile /f 32 <the source of Test> shows the statement (compile it with the options of its object)
+
+and the shell prints
+
+    loksh: the command stopped (Ctrl+C or a trap; Kernel.Log has the registers)
+
+Compiling with /f and a pc writes no object; the compiler names the line and column of the
+statement whose code holds the pc:
+
+    loksh compiler.Compile /f 32 Test.Mod
+    Test.Mod:9:11: pc 32
+
+The pc of a procedure that called another is that of its call (one byte before the return
+address), so /f finds the call statement for it too. The source and the options (/2, /x) must be
+those the object was compiled from, since the search compiles the module again. compiler.Compile
+is the native compiler of each port; the cross compilers (acompiler, a7compiler, rvcompiler,
+mcompiler, mbcompiler, pcompiler) take /f the same way. Kernel.Log keeps the registers and the
+other details the kernel writes.
 
 Oberon has no exceptions and no unwinding. The stopped command does not go on, and its remaining
 statements, including any closing it meant to do, never run. Its modules stay loaded, and its

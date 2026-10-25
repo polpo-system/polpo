@@ -10,7 +10,7 @@ MODULE shell;
     current directory and of the root) on every keypress: no startup cache, no
     rehash needed; it always reflects the latest compiled state. *)
 
-IMPORT nIn := stdin, nOut := out, nTermios := termios, Kernel, Complete0,
+IMPORT nIn := stdin, nOut := out, nTermios := termios, Kernel, traps, Complete0,
   Modules, Oberon0, oberon, nTexts := Texts, oocStrings;
 
 CONST
@@ -291,7 +291,7 @@ PROCEDURE Interactive;
 VAR buf: ARRAY 256 OF CHAR; len: INTEGER; r: LONGINT; quit: BOOLEAN;
 BEGIN
   IF entered THEN
-    nOut.Ln; nOut.String("loksh: the command stopped (Ctrl+C, or a trap: Kernel.Log has the details)"); nOut.Ln;
+    nOut.Ln; nOut.String("loksh: the command stopped (Ctrl+C or a trap; Kernel.Log has the registers)"); nOut.Ln;
     Oberon0.Stopped  (* the cleanups of the commands (Oberon0.OnStop) *)
   END;
   entered := TRUE; quit := FALSE;
@@ -325,6 +325,7 @@ VAR
   res: INTEGER;
   quit: BOOLEAN;
 BEGIN
+  traps.Install;  (* a trap in a command: what it was and where, on the standard error *)
   firstArg := 1;
   IF Kernel.NoOfArgs > firstArg THEN
     Kernel.GetArg(firstArg, cmd);
