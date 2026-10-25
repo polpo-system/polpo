@@ -41,10 +41,11 @@ BEGIN
 END Convs;
 
 PROCEDURE Maths;
-VAR h, l: LONGINT; y: LONGREAL; z: ComplexMath.COMPLEX;
+VAR h, l, k: LONGINT; y: LONGREAL; z: ComplexMath.COMPLEX;
 BEGIN
   Check("LowReal.small = 2^-126", SYSTEM.VAL(LONGINT, LowReal.small) = 800000H);
   y := LowLReal.small; SYSTEM.GET(SYSTEM.ADR(y), l); SYSTEM.GET(SYSTEM.ADR(y) + 4, h);
+  IF LowLReal.isBigEndian THEN k := l; l := h; h := k END;  (* the high word first *)
   Check("LowLReal.small = 2^-1022", (h = 100000H) & (l = 0));
   Check("LowReal.scale", LowReal.scale(1.5, -3) = 0.1875);
   Check("LowReal.intpart", LowReal.intpart(-7.75) = -7.0);
