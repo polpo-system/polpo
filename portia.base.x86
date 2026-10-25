@@ -27,6 +27,7 @@ math 0.1.0
 ooc-conversions 0.1.0
 ooc-time 0.1.0
 ooc-io 0.1.0
+ooc-uri 0.1.0
 strutils 0.1.0
 base64 0.1.0
 internet 0.1.0

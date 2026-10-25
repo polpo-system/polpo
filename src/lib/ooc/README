@@ -4,15 +4,24 @@ prefix, except where polpo has a module of that name: oocStrings, oocFiles, oocR
 voc keeps the prefix (oocIntStr); vocsync translates the imports of the shared modules.
 
 Packages (arden base):
-  ooc-strings      Ascii, CharClass, oocStrings, Strings2, OakStrings
+  ooc-strings      Ascii, CharClass, oocStrings, Strings2, OakStrings, oocUnicode, LongStrings
   ooc-math         LowReal, LowLReal, RealMath, LRealMath, ComplexMath, LComplexMath, OakMath,
                    oocRandomNumbers
   ooc-conversions  ConvTypes, IntConv, IntStr, LongInts, RealConv, LRealConv, RealStr, LRealStr
   ooc-time         SysClock, JulianDay; Time on x86
-  ooc-io           x86: Msg, Channel, FilesHost, oocFiles, ProgramArgsHost, ProgramArgs,
-                   TextRider, BinaryRider, Filenames
-Time and ooc-io use type-bound procedures: the x86 compiler takes them with /2; the ROP2 back
-ends (RISC-V, MIPS, ARMv7) cannot call them and the ARM compiler (OB) does not know them.
+  ooc-io           x86: Msg, Channel, IOMemory, FilesHost, oocFiles, ProgramArgsHost,
+                   ProgramArgs, TextRider, BinaryRider, Filenames
+  ooc-uri          x86: URI references of ooc-libxml (RFC 2396): URIParser, URI and its parts,
+                   the schemes file, memory and mailto
+Updated from voc 4.0.2 (src/ports/ooc, 2026-10-25), for the XML library (package ooc-xml):
+oocUnicode.LONGCHAR is a UTF-16 code unit kept in a LONGINT, LongStrings works on strings of
+them, and Msg, Channel, TextRider and oocFiles keep such characters in their messages; IOMemory
+gives channels on files in memory; the URI modules come from ooc-libxml. IntStr and IntConv got
+voc's fixes for MIN(LONGINT) and long inputs. IOMemory keeps addresses in LONGINT (voc:
+SYSTEM.ADDRESS).
+Time, ooc-io and ooc-uri use type-bound procedures: the x86 compiler takes them with /2; the
+ROP2 back ends (RISC-V, MIPS, ARMv7, PowerPC) cannot call them and the ARM compiler (OB) does
+not know them.
 
 Written for polpo (LGPL too, as the library they belong to):
   SysClock         gettimeofday of Linux0
