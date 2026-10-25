@@ -18,6 +18,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     target: ARRAY 32 OF CHAR;  (* name of the target *)
     backend: ARRAY 32 OF CHAR;  (* back end module: VOPV, MOPV, AOPV *)
     init, module: Modules.Command;  (* its Init and Module *)
+    breakpc: LONGINT;  (* the pc of /f *)
     targetopt: SET;  (* default options of the target *)
 
   PROCEDURE SignOn;
@@ -56,11 +57,13 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       ELSIF ch = "a" THEN OPM.opt := OPM.opt / {assert}
       ELSIF ch = "e" THEN OPM.opt := OPM.opt / {extsf}
       ELSIF ch = "d" THEN OPM.opt := OPM.opt / {softdiv}
+      ELSIF ch = "f" THEN OPM.opt := OPM.opt / {findpc}
       END
     UNTIL ch = 0X;
     OPM.Init(source, Oberon.Log);
     OPP.Module(OPT.prog, OPM.opt);
     IF OPM.noerr THEN
+      OPM.breakpc := breakpc;  (* the back end's Init keeps it with /f *)
       init; OPT.Export(ext, new);
       IF OPM.noerr THEN
         module;
@@ -94,8 +97,10 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       Head("  compiling  "); Head(dir);
       pos := Oberon.Log.len;
       Texts.OpenReader(r, t, 0);
+      OPM.breakpos := -1;
       Module(r, opt, error);
-      logs.Show(pos)
+      logs.Show(pos);
+      IF (findpc IN OPM.opt) & (OPM.breakpos >= 0) THEN logs.ShowPC(name, t, OPM.breakpos, OPM.breakpc) END
     ELSE
       Head(" not found"); Out.Ln; error := TRUE
     END;
@@ -125,6 +130,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     Out.String("  /e       allow extended symbol file"); Out.Ln;
     Out.String("  /d       software division (ARMv7: on, /d selects hardware sdiv)"); Out.Ln;
     Out.String("  /Pdir/   symbol and object file directory (default obj/<target>/)"); Out.Ln;
+    Out.String("  /f pc    find the statement of pc (the PC of a trap): file:line:column, no object"); Out.Ln;
     Out.Ln;
     Out.String("Options apply to the files that follow them."); Out.Ln
   END Help;
@@ -159,13 +165,16 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       error, loaded: BOOLEAN;
       i, j: INTEGER;
   BEGIN
-    error := FALSE; loaded := FALSE; opt[0] := 0X;
+    error := FALSE; loaded := FALSE; opt[0] := 0X; breakpc := MAX(LONGINT);
     Texts.OpenScanner(S, Oberon.Par.text, Oberon.Par.pos);
     Texts.Scan(S);
     IF S.class # Texts.Name THEN Help; RETURN END;
-    WHILE (S.class = Texts.Name) & ~error DO
-      COPY(S.s, name);
-      IF (name = "/h") OR (name = "-h") OR (name = "--help") OR (name = "/help") THEN
+    WHILE ((S.class = Texts.Name) OR (S.class = Texts.Int)) & ~error DO
+      IF S.class = Texts.Int THEN name := ""; breakpc := S.i  (* the pc of /f *)
+      ELSE COPY(S.s, name)
+      END;
+      IF name = "" THEN
+      ELSIF (name = "/h") OR (name = "-h") OR (name = "--help") OR (name = "/help") THEN
         Help; RETURN
       ELSIF name = "/v" THEN SetTarget("RISC-V", "VOPV", "riscv", riscvtag)
       ELSIF name = "/m" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)

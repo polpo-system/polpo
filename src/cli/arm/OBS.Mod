@@ -43,7 +43,7 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
 
     ch, prev: CHAR;     (*current and previous  characters*)
     lastpos: LONGINT; (*error position in source file*)
-    prevpos: LONGINT; (*position of previous token*)
+    prevpos*: LONGINT; (*position of previous token*)
 
     i: INTEGER;
     keyTab  : ARRAY KW OF

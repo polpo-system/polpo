@@ -25,4 +25,25 @@ BEGIN
   END
 END Show;
 
+(** Write "name:line:column: pc n" for the statement the compilers found for pc (option /f):
+  pos is where they stopped, after the statement; the line and column are those of the last
+  character before pos that is not blank *)
+PROCEDURE ShowPC*(name: ARRAY OF CHAR; T: Texts.Text; pos, pc: LONGINT);
+VAR R: Texts.Reader; ch: CHAR; i, line, col, l, c: LONGINT;
+BEGIN
+  line := 1; col := 1; l := 1; c := 1; i := 0;
+  IF pos > T.len THEN pos := T.len END;
+  Texts.OpenReader(R, T, 0);
+  WHILE i < pos DO
+    Texts.Read(R, ch); INC(i);
+    IF (ch = 0DX) OR (ch = 0AX) THEN INC(line); col := 1
+    ELSE
+      IF (ch # " ") & (ch # 09X) THEN l := line; c := col END;
+      INC(col)
+    END
+  END;
+  out.String(name); out.Char(":"); out.Int(l, 0); out.Char(":"); out.Int(c, 0);
+  out.String(": pc "); out.Int(pc, 0); out.Ln
+END ShowPC;
+
 END logs.

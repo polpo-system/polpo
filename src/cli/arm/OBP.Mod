@@ -1081,7 +1081,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
   BEGIN
     OBE.inxchk := TRUE; OBC.typchk := TRUE; OBH.clrchk := TRUE;
     OBE.ovfchk := FALSE; newSF := FALSE; statistics := FALSE; statsEmpty := TRUE;
-    noFiles := FALSE; OBC.trapPos := MAX(LONGINT);
+    noFiles := FALSE; OBC.trapPos := MAX(LONGINT); OBC.foundPos := -1;
     Root.Obj("arm", OC.prefix)
   END SetDefaults;
 

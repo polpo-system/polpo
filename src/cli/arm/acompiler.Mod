@@ -1,8 +1,9 @@
 MODULE acompiler;  (** command-line frontend of the ARM compiler *)
   IMPORT
-    OBS, OBP, OC := OBM, Texts, Oberon := Oberon0, Out := out, logs;
+    OBS, OBP, OBC, OC := OBM, Texts, Oberon := Oberon0, Out := out, logs;
 
   VAR HW: Texts.Writer;  (* see Head *)
+    find: BOOLEAN; breakpc: LONGINT;  (* /f pc: find the source position of pc *)
 
   PROCEDURE SignOn;
   BEGIN
@@ -24,9 +25,15 @@ MODULE acompiler;  (** command-line frontend of the ARM compiler *)
     Head(name);
     IF t.len # 0 THEN
       OBP.SetDefaults; OBP.ParseOptions(opt);
+      IF find THEN OBP.SetTrapPC(breakpc) END;
       pos := Oberon.Log.len;
       OBP.CompilationUnit(t, 0);
       logs.Show(pos);
+      IF find THEN  (* where the scanner was when the code reached pc: the statement ends before it *)
+        IF OBC.foundPos >= 0 THEN logs.ShowPC(name, t, OBC.foundPos, breakpc)
+        ELSE Out.String("  pc not found"); Out.Ln
+        END
+      END;
       error := OBS.scanerr
     ELSE
       Head(" not found"); Out.Ln;
@@ -49,6 +56,7 @@ MODULE acompiler;  (** command-line frontend of the ARM compiler *)
     Out.String("  /n       do not write output files"); Out.Ln;
     Out.String("  /a       constant block statistics"); Out.Ln;
     Out.String("  /Pdir/   symbol and object file prefix (default obj/arm/)"); Out.Ln;
+    Out.String("  /f pc    find the statement of pc (the PC of a trap): file:line:column, no object"); Out.Ln;
     Out.Ln;
     Out.String("Options apply to the files that follow them."); Out.Ln
   END Help;
@@ -61,13 +69,15 @@ MODULE acompiler;  (** command-line frontend of the ARM compiler *)
       error: BOOLEAN;
       i, j: INTEGER;
   BEGIN
-    error := FALSE; opt[0] := 0X;
+    error := FALSE; opt[0] := 0X; find := FALSE; breakpc := 0;
     Texts.OpenScanner(S, Oberon.Par.text, Oberon.Par.pos);
     Texts.Scan(S);
     IF S.class # Texts.Name THEN Help; RETURN END;
-    WHILE (S.class = Texts.Name) & ~error DO
-      COPY(S.s, name);
-      IF (name = "/h") OR (name = "-h") OR (name = "--help") OR (name = "/help") THEN
+    WHILE ((S.class = Texts.Name) OR (S.class = Texts.Int)) & ~error DO
+      IF S.class = Texts.Int THEN name := ""; breakpc := S.i ELSE COPY(S.s, name) END;
+      IF name = "" THEN
+      ELSIF name = "/f" THEN find := ~find
+      ELSIF (name = "/h") OR (name = "-h") OR (name = "--help") OR (name = "/help") THEN
         Help; RETURN
       ELSIF (name[0] = "/") OR (name[0] = "\") THEN
         j := 0; WHILE opt[j] # 0X DO INC(j) END;

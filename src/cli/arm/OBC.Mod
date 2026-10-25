@@ -147,6 +147,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
         
     (* debug *)
     trapPos*  : LONGINT;  (*position where a trap happened*)
+    foundPos* : LONGINT;  (* polpo: the source position where trapPos was reached, -1 before *)
         
   PROCEDURE ^FlushConsts*;
   PROCEDURE ^PutSDT*(op, dest, base, offset : LONGINT);
@@ -163,7 +164,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
   PROCEDURE IncPC;
   BEGIN
     INC(pc);
-    IF pc >= trapPos THEN OBS.Mark(355); trapPos := MAX(LONGINT) END
+    IF pc >= trapPos THEN OBS.Mark(355); foundPos := OBS.prevpos; trapPos := MAX(LONGINT) END
   END IncPC;
   
   (* -------------------------------------------------------------------- *)

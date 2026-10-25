@@ -119,6 +119,7 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
     noerr*: BOOLEAN;  (* no error found until now *)
     curpos*, errpos*: LONGINT;  (* character and error position in source file *)
     breakpc*: LONGINT;  (* set by Compiler.Module *)
+    breakpos*: LONGINT;  (* polpo: the position of the statement of breakpc, set by Mark(255) *)
     objname*: ARRAY 64 OF CHAR;
     OFtag*: CHAR;  (* set in compiler module *)
     Dir*: FileName;
@@ -203,7 +204,7 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
       noerr := FALSE;
       IF (pos < lastpos) OR (lastpos + 9 < pos) THEN lastpos := pos; LogWLn; LogWStr("  ");
         IF (n < 249) OR (n > 255) THEN LogWStr("  pos"); LogWNum(pos, 6); LogWStr("  err"); LogWNum(n, 4)  (* polpo: the back end's errors (700...) printed a stale objname *)
-        ELSIF n = 255 THEN LogWStr("pos"); LogWNum(pos, 6); LogWStr("  pc "); LogWHex(breakpc)
+        ELSIF n = 255 THEN LogWStr("pos"); LogWNum(pos, 6); LogWStr("  pc "); LogWHex(breakpc); breakpos := pos
         ELSIF n = 254 THEN LogWStr("pc not found")
         ELSE LogWStr(objname);
           IF n = 253 THEN LogWStr(" is new, compile with \e")

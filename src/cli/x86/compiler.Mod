@@ -1,10 +1,13 @@
 MODULE compiler;  (** command-line version *)
   IMPORT
-    OPP, OPB, OPV, OPT, OPS, OPC, OPL, OPO, OPM, Kernel, Root, Texts, Oberon := Oberon0, Out := out;
+    OPP, OPB, OPV, OPT, OPS, OPC, OPL, OPO, OPM, Kernel, Root, Texts, Oberon := Oberon0, Out := out, logs;
 
   CONST
     NoBreakPC = -1;
     module = OPS.module; ident = OPS.ident; period = OPS.period;
+
+  VAR
+    breakpc: LONGINT;  (* the pc to find (/f pc), else NoBreakPC *)
 
   PROCEDURE SignOn;
   BEGIN
@@ -204,7 +207,9 @@ MODULE compiler;  (** command-line version *)
       Texts.OpenReader(r, t, 0);
       Out.String(name);
       OPS.Init;
-      Module(r, name, opt, NoBreakPC, error)
+      OPM.breakpos := -1;
+      Module(r, name, opt, breakpc, error);
+      IF (breakpc # NoBreakPC) & (OPM.breakpos >= 0) THEN logs.ShowPC(name, t, OPM.breakpos, breakpc) END
     ELSE
       Out.String(name);
       Out.String(" not found");
@@ -243,7 +248,7 @@ BEGIN
   Out.String("  Other Options:"); Out.Ln;
   Out.String("    /S   Enable system checking"); Out.Ln;
   Out.String("    /n   No files mode"); Out.Ln;
-  Out.String("    /f   Find PC mode"); Out.Ln;
+  Out.String("    /f pc  Find the statement of pc (the PC of a trap): file:line:column, no object"); Out.Ln;
   Out.String("    /w   Enable warnings"); Out.Ln;
   Out.String("    /X   Use module name as prefix"); Out.Ln;
   Out.String("    /T   Trace procedures"); Out.Ln;
@@ -263,6 +268,9 @@ BEGIN
   Out.String("  Compile multiple files without checks:"); Out.Ln;
   Out.String("    compiler.Compile /x /v /t File1.Mod File2.Mod"); Out.Ln;
   Out.Ln;
+  Out.String("  Find the statement of a trap (TRAP 7 in Test.Run, PC = 32):"); Out.Ln;
+  Out.String("    compiler.Compile /f 32 Test.Mod"); Out.Ln;
+  Out.Ln;
   Out.String("  Compile to specific directory:"); Out.Ln;
   Out.String("    compiler.Compile /Pobj/x86/ Test.Mod"); Out.Ln;
   Out.Ln;
@@ -278,7 +286,7 @@ VAR
   i, j: INTEGER;
 BEGIN
   error := FALSE;
-  globalOpt[0] := 0X;
+  globalOpt[0] := 0X; breakpc := NoBreakPC;
 
   (* Read from Oberon parameter text, NOT from command line *)
   Texts.OpenScanner(S, Oberon.Par.text, Oberon.Par.pos);
@@ -329,6 +337,8 @@ BEGIN
         COPY(globalOpt, localOpt);
         CompileFile(name, localOpt, error)
       END
+    ELSIF S.class = Texts.Int THEN  (* the pc of /f *)
+      breakpc := S.i
     END;
 
     Texts.Scan(S)
@@ -336,5 +346,5 @@ BEGIN
 END Compile;
 
 BEGIN
-  SignOn
+  SignOn; breakpc := NoBreakPC
 END compiler.
