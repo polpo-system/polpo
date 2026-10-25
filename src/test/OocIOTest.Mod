@@ -3,7 +3,8 @@ MODULE OocIOTest;  (** loksh OocIOTest.Run alpha "b c": the channels of the OOC 
 (* Writes and reads zq_oocio1.txt (TextRider) and zq_oocio2.bin (a Tmp file, BinaryRider) in the
    current directory, then deletes them; ProgramArgs gives the command name and the arguments. *)
 
-IMPORT oocFiles, TextRider, BinaryRider, ProgramArgs, Files, out;
+IMPORT oocFiles, TextRider, BinaryRider, ProgramArgs, Files, out, Msg, IOMemory, URI, URIParser,
+  URISchemeFile, URISchemeMemory;
 
 VAR fails, checks: LONGINT;
 
@@ -61,11 +62,49 @@ BEGIN
   r.ReadLine(s); Check("ProgramArgs: b c", s = "b c")
 END Args;
 
+PROCEDURE Memory;
+VAR ch: IOMemory.Channel; res: Msg.Msg; w: TextRider.Writer; r: TextRider.Reader; s: ARRAY 64 OF CHAR;
+BEGIN
+  ch := IOMemory.Tmp("", {IOMemory.read, IOMemory.write}, res);
+  Check("IOMemory.Tmp", (ch # NIL) & (res = NIL));
+  IF ch = NIL THEN RETURN END;
+  w := TextRider.ConnectWriter(ch); w.WriteString("memory"); w.WriteLn; w.WriteLInt(7, 0);
+  Check("IOMemory: length", ch.Length() = 8);
+  r := TextRider.ConnectReader(ch); r.SetPos(0);
+  r.ReadLine(s); Check("IOMemory: read back", s = "memory");
+  ch.Close
+END Memory;
+
+PROCEDURE URIs;
+VAR base: URI.HierarchicalURI; u: URI.URI; res: Msg.Msg;
+
+  PROCEDURE Is(ref, want: ARRAY OF CHAR): BOOLEAN;
+  VAR s: ARRAY 256 OF CHAR;
+  BEGIN
+    u := URIParser.NewURI(ref, base, res);
+    IF (u = NIL) OR (res # NIL) THEN RETURN FALSE END;
+    u.GetString(s); RETURN s = want
+  END Is;
+
+BEGIN
+  base := NIL; u := URIParser.NewURI("http://a/b/c/d;p?q", NIL, res);
+  Check("URIParser.NewURI", (u # NIL) & (res = NIL) & (u IS URI.HierarchicalURI));
+  IF (u = NIL) OR ~(u IS URI.HierarchicalURI) THEN RETURN END;
+  base := u(URI.HierarchicalURI);
+  Check("URI: ../g resolved (RFC 2396 C.1)", Is("../g", "http://a/b/g"));
+  Check("URI: g?y resolved", Is("g?y", "http://a/b/c/g?y"));
+  Check("URI: ./g/ resolved", Is("./g/", "http://a/b/c/g/"));
+  base := NIL;
+  Check("URI: file scheme, escapes kept", Is("file:/x%20y/z.xml", "file:/x%20y/z.xml"));
+  u := URIParser.NewURI("http://a/%00", NIL, res);
+  Check("URI: %00 refused", res # NIL)
+END URIs;
+
 PROCEDURE Run*;
 VAR res: INTEGER;
 BEGIN
   fails := 0; checks := 0;
-  Text; Binary; Args;
+  Text; Binary; Args; Memory; URIs;
   Files.Delete("./zq_oocio1.txt", res); Files.Delete("./zq_oocio2.bin", res);
   out.String("OocIOTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;

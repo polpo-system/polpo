@@ -1,6 +1,6 @@
 MODULE OocTest;  (** loksh OocTest.Run: the OOC library on this port (strings, conversions, math, time) *)
 
-IMPORT SYSTEM, Ascii, Strings := oocStrings, Strings2, IntStr, RealStr, LRealStr, ConvTypes,
+IMPORT SYSTEM, Ascii, Strings := oocStrings, Strings2, LongStrings, oocUnicode, IntStr, RealStr, LRealStr, ConvTypes,
   LowReal, LowLReal, RealMath, LRealMath, ComplexMath, JulianDay, SysClock, out;
 
 VAR fails, checks: LONGINT;
@@ -26,12 +26,30 @@ BEGIN
   Check("Ascii.dle is 10X, soh 01X", (Ascii.dle = 10X) & (Ascii.soh = 01X) & (Ascii.dc1 = 11X))
 END Strs;
 
+PROCEDURE Longs;
+VAR l, m: ARRAY 32 OF oocUnicode.LONGCHAR; s: ARRAY 32 OF CHAR; found: BOOLEAN; pos: LONGINT;
+BEGIN
+  LongStrings.Long("abc", l); Check("LongStrings.Long", (LongStrings.Length(l) = 3) & (l[1] = ORD("b")));
+  Check("LongStrings.Equal8", LongStrings.Equal8(l, "abc") & ~LongStrings.Equal8(l, "abd"));
+  l[1] := 0531H; LongStrings.Append8("de", l);  (* U+0531, ARMENIAN CAPITAL LETTER AYB *)
+  Check("LongStrings.Append8", (LongStrings.Length(l) = 5) & (l[1] = 0531H) & (l[4] = ORD("e")));
+  LongStrings.Short(l, "?", s); Check("LongStrings.Short", s = "a?cde");
+  LongStrings.Long("cd", m); LongStrings.FindNext(m, l, 0, found, pos);
+  Check("LongStrings.FindNext", found & (pos = 2));
+  LongStrings.Delete(l, 1, 2); LongStrings.Short(l, "?", s); Check("LongStrings.Delete", s = "ade");
+  LongStrings.Capitalize(l); LongStrings.Short(l, "?", s); Check("LongStrings.Capitalize", s = "ADE");
+  l[0] := 0FFFFH; l[1] := 0; Check("LongStrings: units up to 0FFFFH", (l[0] = 65535) & (LongStrings.Length(l) = 1))
+END Longs;
+
 PROCEDURE Convs;
 VAR s: ARRAY 64 OF CHAR; i: LONGINT; r: REAL; x: LONGREAL; res: ConvTypes.ConvResults;
 BEGIN
   IntStr.StrToInt("-12345", i, res); Check("IntStr.StrToInt", (res = IntStr.strAllRight) & (i = -12345));
   IntStr.StrToInt("99999999999", i, res); Check("IntStr.StrToInt out of range", res = IntStr.strOutOfRange);
   IntStr.IntToStr(2147483647, s); Check("IntStr.IntToStr", s = "2147483647");
+  IntStr.IntToStr(MIN(LONGINT), s); Check("IntStr.IntToStr MIN(LONGINT)", s = "-2147483648");
+  IntStr.StrToInt("-2147483648", i, res); Check("IntStr.StrToInt MIN(LONGINT)", (res = IntStr.strAllRight) & (i = MIN(LONGINT)));
+  IntStr.StrToInt("-2147483649", i, res); Check("IntStr.StrToInt below MIN(LONGINT)", res = IntStr.strOutOfRange);
   RealStr.StrToReal("3.25", r, res); Check("RealStr.StrToReal", (res = RealStr.strAllRight) & (r = 3.25));
   RealStr.RealToFixed(3.14159, 2, s); Check("RealStr.RealToFixed", s = "3.14");
   LRealStr.StrToReal("1.5E2", x, res); Check("LRealStr.StrToReal", (res = LRealStr.strAllRight) & (x = 150.0D0));
@@ -74,7 +92,7 @@ END Times;
 PROCEDURE Run*;
 BEGIN
   fails := 0; checks := 0;
-  Strs; Convs; Maths; Times;
+  Strs; Longs; Convs; Maths; Times;
   out.String("OocTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
