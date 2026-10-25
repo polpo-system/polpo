@@ -23,10 +23,10 @@ MODULE IntConv;
 *)
  
 IMPORT
-  Char := CharClass, Str := oocStrings, Conv := ConvTypes;
+  Char := CharClass, Conv := ConvTypes;
  
 TYPE
-  ConvResults = Conv.ConvResults; (* strAllRight, strOutOfRange, strWrongFormat, strEmpty *)
+  ConvResults* = Conv.ConvResults; (* strAllRight, strOutOfRange, strWrongFormat, strEmpty *)
 
 CONST
   strAllRight*=Conv.strAllRight;       (* the string format is correct for the corresponding conversion *)
@@ -115,12 +115,13 @@ PROCEDURE FormatInt*(str: ARRAY OF CHAR): ConvResults;
 VAR
   ch: CHAR;
   int: LONGINT;
-  len, index, digit: INTEGER;
+  index: LONGINT;
+  digit: INTEGER;
   state: Conv.ScanState;
   positive: BOOLEAN;
   prev, class: Conv.ScanClass;
 BEGIN
-  len:=Str.Length(str); index:=0;
+  index:=0;
   class:=Conv.padding; prev:=class;
   state:=SI; int:=0; positive:=TRUE;
   LOOP
@@ -137,20 +138,19 @@ BEGIN
             IF int>(MAX(LONGINT)-digit) DIV 10 THEN RETURN strOutOfRange END;
             int:=int*10+digit
           ELSE
-            IF int>(MIN(LONGINT)+digit) DIV 10 THEN
-              int:=int*10-digit
-            ELSIF (int < (MIN(LONGINT)+digit) DIV 10) OR
-                  ((int = (MIN(LONGINT)+digit) DIV 10) &
-                    ((MIN(LONGINT)+digit) MOD 10 # 0)) THEN
+            (* Check magnitude before multiplying, including the extra unit
+               representable by MIN(LONGINT) in two's-complement arithmetic. *)
+            IF (int < -(MAX(LONGINT) DIV 10)) OR
+               ((int = -(MAX(LONGINT) DIV 10)) &
+                 (digit > MAX(LONGINT) MOD 10 + 1)) THEN
               RETURN strOutOfRange
-            ELSE
-              int:=int*10-digit
-            END
+            END;
+            int:=int*10-digit
           END
         END
       
     | Conv.invalid:
-      IF (prev = Conv.padding) THEN
+      IF (prev = Conv.padding) & (ch = 0X) THEN
         RETURN strEmpty;
       ELSE
         RETURN strWrongFormat;
@@ -176,17 +176,18 @@ PROCEDURE ValueInt*(str: ARRAY OF CHAR): LONGINT;
   *)
 VAR
   ch: CHAR;
-  len, index, digit: INTEGER;
+  index: LONGINT;
+  digit: INTEGER;
   int: LONGINT;  
   state: Conv.ScanState;
   positive: BOOLEAN;
   class: Conv.ScanClass;  
 BEGIN
   IF FormatInt(str)=strAllRight THEN
-    len:=Str.Length(str); index:=0;
+    index:=0;
     state:=SI; int:=0; positive:=TRUE;
-    WHILE index<=len-1 DO
-      ch:=str[index]; INC(index);
+    WHILE str[index] # 0X DO
+      ch:=str[index];
       state.p(ch, class, state);
       IF class=Conv.valid THEN
         IF ch="-" THEN positive:=FALSE
@@ -197,7 +198,8 @@ BEGIN
           ELSE int:=int*10-digit
           END
         END
-      END
+      END;
+      INC(index)
     END;
     RETURN int
   ELSE RETURN 0 (* raise exception here *)

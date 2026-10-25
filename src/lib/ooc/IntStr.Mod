@@ -68,33 +68,32 @@ END Reverse;
 
 PROCEDURE IntToStr*(int: LONGINT; VAR str: ARRAY OF CHAR);
 CONST
-  maxLength = 11; (* maximum number of digits representing a LONGINT value *)
+  maxLength = 3 * SIZE(LONGINT); (* room for decimal digits and a sign *)
 VAR
   b : ARRAY maxLength+1 OF CHAR;
   s, e: INTEGER;
+  digit: LONGINT;
 BEGIN
-  (* build representation in string 'b' *)
-  IF int = MIN(LONGINT) THEN      (* smallest LONGINT, -int is an overflow *)
-    b := "-2147483648";
-    e := 11
+  IF LEN(str) = 0 THEN RETURN END;
+  IF int < 0 THEN
+    b[0] := "-"; s := 1;
+    (* Extract the first digit without negating MIN(LONGINT). *)
+    int := -(int + 1);
+    digit := int MOD 10 + 1; int := int DIV 10;
+    IF digit = 10 THEN digit := 0; INC(int) END
   ELSE
-    IF int < 0 THEN               (* negative sign *)
-      b[0] := "-"; int := -int; s := 1
-    ELSE  (* no sign *)
-      s := 0
-    END;
-    e := s;                       (* 's' holds starting position of string *)
-    REPEAT
-      b[e] := CHR(int MOD 10+ORD("0"));
-      int := int DIV 10;
-      INC(e)
-    UNTIL int = 0;
-    b[e] := 0X;
-    Reverse(b, s, e-1)
+    s := 0;
+    digit := int MOD 10; int := int DIV 10
   END;
+  e := s; b[e] := CHR(digit + ORD("0")); INC(e);
+  WHILE int > 0 DO
+    b[e] := CHR(int MOD 10 + ORD("0"));
+    int := int DIV 10; INC(e)
+  END;
+  b[e] := 0X;
+  Reverse(b, s, e-1);
 
   COPY(b, str) (* truncate output if necessary *)
 END IntToStr;
 
 END IntStr.
-
