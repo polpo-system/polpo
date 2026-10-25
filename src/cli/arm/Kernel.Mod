@@ -190,6 +190,7 @@ VAR
   
     (* interrupt handling/memory management *)
   handler: TrapHandler;  (* trap handlers *)
+  defaultHandler: TrapHandler;  (* polpo: DefaultTrapHandler, which OB cannot compare with *)
   loop: Proc;  (* main loop *)
   handlingtrap: BOOLEAN;
 
@@ -1104,13 +1105,14 @@ END NewArr;
 PROCEDURE SysHalt( );  (* trap no. in R7 *)
 VAR pc, fp, trap: LONGINT;
 BEGIN
-  SYSTEM.GETREG(PC, pc);
-  SYSTEM.GETREG(Linux0.FP, fp);
   SYSTEM.GETREG(7, trap);
+  SYSTEM.GETREG(Linux0.FP, fp);
+  GetFrame(fp, pc); DEC(pc, 4);  (* polpo: the BL to SysHalt in the code that trapped, and its frame *)
   IF trap=0FF00H THEN trap:=MAX(INTEGER) END;
   WriteString("SysHalt Trap nr. "); WriteInt( trap, 3); WriteLn;
   DefaultTrapHandler( trap, fp, pc, 0);
-  handler( trap, fp, pc, 0);
+  IF handler # defaultHandler THEN handler( trap, fp, pc, 0) END;
+  IF (trap#MAX(INTEGER)) & (loop=NIL) THEN Shutdown( 2) END;  (* polpo: exit status 2 after a trap, as SignalHandler *)
   IF trap#MAX(INTEGER) THEN
     SYSTEM.PUTREG(Linux0.SP, Linux0.StackOrg);  (* callers FP *)
     SYSTEM.PUTREG(Linux0.FP, Linux0.StackOrg);  (* callers FP *)
@@ -1572,7 +1574,7 @@ BEGIN
   Idle:= Idle0;
   GetConfig("OTRACE", trace);
   CmdLine;
-  handler:=DefaultTrapHandler;
+  handler:=DefaultTrapHandler; defaultHandler:=handler;
 END Kernel.
 
 (*
