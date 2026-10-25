@@ -169,6 +169,7 @@ TYPE
     (* interrupt handling *)          (*            32,  33,  34    , 35  *)
 
   TrapHandler = PROCEDURE ( trap, sp, pc, page: LONGINT);
+  TraceProc* = PROCEDURE (m: Module; pc: LONGINT; VAR name: ARRAY OF CHAR);  (** see Trace *)
 
 VAR
     (* exported variables *)
@@ -481,6 +482,37 @@ BEGIN
   END;
   pc:=Linux0.Regs[ Linux0.LR];
 END GetFrame;
+
+(** Trace - call p for each procedure on the stack of a trap at pc, sp being the stack pointer
+  given to the trap handler: its module (NIL if unknown, the last call then), the pc in the code
+  of the module in bytes, the name of the procedure ("" if unknown; "$$" is the module body).
+  The pc of a caller is one byte before its return address, in its call. Linux0.Regs must
+  hold the registers of the trap (as for the trap handlers). *)
+PROCEDURE Trace*(sp, pc: LONGINT; p: TraceProc);
+VAR mod: Module; refpos, ofs, n, k: LONGINT; name: ARRAY 64 OF CHAR;
+BEGIN
+  n := 0;
+  LOOP
+    mod := GetMod(pc); name[0] := 0X; ofs := pc;
+    IF mod # NIL THEN
+      ofs := pc - mod.cb; IF n > 0 THEN DEC(ofs) END;
+      IF (mod.refs # NIL) & (LEN(mod.refs^) > 0) THEN
+        refpos := FindProcU(mod.refs, ofs, TRUE);  (* also the frame layout for GetFrame *)
+        IF refpos >= 0 THEN
+          k := 0;
+          WHILE (refpos < LEN(mod.refs^)) & (mod.refs[refpos] # 0X) & (k < LEN(name) - 1) DO
+            name[k] := mod.refs[refpos]; INC(refpos); INC(k)
+          END;
+          name[k] := 0X
+        END
+      END
+    END;
+    p(mod, ofs, name); INC(n);
+    IF (mod = NIL) OR (name[0] = 0X) OR (n = 32) THEN EXIT END;
+    GetFrame0(sp); GetFrame(sp, pc);
+    IF sp >= StackOrg THEN EXIT END
+  END
+END Trace;
 
 (* DefaultTrapHandler - This handler is installed if nothing better is available... *)
 

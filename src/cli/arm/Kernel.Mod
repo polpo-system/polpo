@@ -161,6 +161,7 @@ TYPE
 
     (* interrupt handling *)
   TrapHandler* = PROCEDURE (error, fp, pc, page: LONGINT);
+  TraceProc* = PROCEDURE (m: Module; pc: LONGINT; VAR name: ARRAY OF CHAR);  (** see Trace *)
 
   Timeval = RECORD sec, usec: LONGINT END;
 
@@ -406,6 +407,36 @@ BEGIN
   SYSTEM.GET(fp+4, pc);
   SYSTEM.GET(fp, fp);
 END GetFrame;
+
+(** Trace - call p for each procedure on the stack of a trap at pc with frame fp: its module
+  (NIL if unknown, the last call then), the pc in the code of the module in bytes (from sb),
+  the name of the procedure ("" if unknown; "$$" is the module body). The pc of a caller is one
+  byte before its return address, in its call. *)
+PROCEDURE Trace*(fp, pc: LONGINT; p: TraceProc);
+VAR m: Module; refpos, ofs, n, k, lastfp: LONGINT; name: ARRAY 64 OF CHAR;
+BEGIN
+  n := 0;
+  LOOP
+    m := GetMod(pc); name[0] := 0X; ofs := pc;
+    IF m # NIL THEN
+      ofs := pc - m.sb; IF n > 0 THEN DEC(ofs) END;
+      IF (m.refs # NIL) & (LEN(m.refs^) > 0) THEN
+        refpos := FindProc(m.refs, ofs);
+        IF refpos >= 0 THEN
+          k := 0;
+          WHILE (refpos < LEN(m.refs^)) & (m.refs[refpos] # 0X) & (k < LEN(name) - 1) DO
+            name[k] := m.refs[refpos]; INC(refpos); INC(k)
+          END;
+          name[k] := 0X
+        END
+      END
+    END;
+    p(m, ofs, name); INC(n);
+    IF (m = NIL) OR (n = 32) THEN EXIT END;
+    lastfp := fp; GetFrame(fp, pc);
+    IF (fp <= lastfp) OR (fp >= Linux0.StackOrg) THEN EXIT END
+  END
+END Trace;
 
 (* DefaultTrapHandler - This handler is installed if nothing better is available... *)
 PROCEDURE DefaultTrapHandler(error, fp, pc, page: LONGINT);
