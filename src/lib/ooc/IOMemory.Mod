@@ -166,7 +166,7 @@ PROCEDURE ExtendFile (b: File; newLen: LONGINT);
 
 PROCEDURE CopyBytes (VAR source, dest: ARRAY OF SYSTEM.BYTE;
                      sourceStart, destStart, count: LONGINT);
-  VAR sourceAddr, destAddr: SYSTEM.ADDRESS; i: LONGINT;
+  VAR sourceAddr, destAddr: LONGINT; i: LONGINT;  (* polpo: addresses are LONGINT (voc: SYSTEM.ADDRESS) *)
   BEGIN
     IF count = 0 THEN RETURN END;
     sourceAddr := SYSTEM.ADR (source[sourceStart]);
