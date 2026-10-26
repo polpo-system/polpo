@@ -972,6 +972,10 @@ END PutTrap;
   BEGIN
     IF softDiv THEN  (* R0 = R1 DIV R0; R1 = R1 MOD R0 *)
       zeroTrap:=(y.mode#OPT.Con) OR (y.offset <= 0);
+      IF (x.mode = Reg) & ((x.reg = T0) OR (x.reg = T1)) THEN
+        (* polpo: x in T0 (a function result) was overwritten by y: F(a) DIV b gave b DIV b *)
+        xreg:=-1; GetR( TempReg, xreg); PutR( MOV, xreg, 0, x.reg); ReleaseR( x.reg); x.reg:=xreg
+      END;
       Load(y, T0); Load(x, T1); (* first load T0 as T1 is used in adress loading *)
       IF zeroTrap THEN PutI( CMPI, 0, y.reg, 0); PutTrap( GT, ZeroTrap) END;  (* polpo: as with SDIV below *)
       GetR(TempReg, rt);

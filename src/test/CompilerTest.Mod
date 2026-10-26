@@ -741,6 +741,11 @@ BEGIN
   RETURN (r.a = 5) & (r.b = 0) & (r.c = 12)
 END SavedAcross;
 
+(* ARMv7 (software division): the result of F in R0 was overwritten by the divisor *)
+PROCEDURE CallDiv(a, b: LONGINT): BOOLEAN;
+BEGIN RETURN (Id(a) DIV b = 14) & (Id(a) MOD b = 2) & ODD(Id(0CE00H) DIV b) & ~ODD(Id(0CE00H) DIV (b * 37449))
+END CallDiv;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -805,6 +810,7 @@ BEGIN
   Check("conditional branches around a flush of the constants", PoolBranches());
   Check("forward declaration of a local procedure", (LocalForward(0) = 7) & (LocalForward(3) = 1019));
   Check("registers saved across a call whose arguments call with more arguments", SavedAcross());
+  Check("DIV and MOD of a function result by a variable", CallDiv(100, 7));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
