@@ -90,6 +90,7 @@ Display over ssh connection:
 IMPORT Linux0, Kernel, Objects, SYSTEM;
 
 CONST
+  FdWords = 32;  (* polpo: the words of the fd_set of select, 1024 descriptors *)
   ETH = "ETH Oberon / ";
 
 (* default window size *)
@@ -1439,19 +1440,34 @@ END CreatePatterns;
 
 (* --------------------- X11 Initialization ---------------------------------*)
 
-PROCEDURE Avail( fd: SET; usec: LONGINT): BOOLEAN;
+(* polpo: the fd_set of select as 1024 descriptors (32 SETs, the layout of the kernel's array of
+  32-bit words); the descriptors are not limited to 0..31 any more *)
+PROCEDURE AvailFds(VAR fd: ARRAY OF LONGINT; n, usec: LONGINT): BOOLEAN;
 TYPE  TimeVal= RECORD tvsec, tvusec: LONGINT END;
-VAR num: LONGINT; timeout: TimeVal;
+VAR num, i, max: LONGINT; timeout: TimeVal; set: ARRAY FdWords OF SET;
 BEGIN
+  i := 0; WHILE i < FdWords DO set[i] := {}; INC(i) END;
+  max := -1; i := 0;
+  WHILE i < n DO
+    IF (fd[i] >= 0) & (fd[i] < FdWords * 32) THEN
+      INCL(set[fd[i] DIV 32], fd[i] MOD 32); IF fd[i] > max THEN max := fd[i] END
+    END;
+    INC(i)
+  END;
   timeout.tvsec:=0; timeout.tvusec:= usec;    (* don't block at all *)
-  num:= Linux0.Select0(32, SYSTEM.ADR(fd), 0, 0, SYSTEM.ADR(timeout));
+  num:= Linux0.Select0(max + 1, SYSTEM.ADR(set), 0, 0, SYSTEM.ADR(timeout));
   RETURN num>0;
-END Avail;
+END AvailFds;
+
+PROCEDURE Ready(fd, usec: LONGINT): BOOLEAN;
+VAR one: ARRAY 1 OF LONGINT;
+BEGIN one[0] := fd; RETURN AvailFds(one, 1, usec)
+END Ready;
 
 PROCEDURE X11Err( n: LONGINT);
 VAR b: ARRAY 8 OF LONGINT; i,  res: LONGINT;
 BEGIN
-  IF Avail( {xfd}, 0) THEN
+  IF Ready(xfd, 0) THEN
     res:=Linux0.Read0( xfd, SYSTEM.ADR(b), 32);
     WriteSH("ERROR: X11Err:", n);
     WriteSH("X11Err:", b[0]);
@@ -1868,7 +1884,7 @@ BEGIN
   b[ 0]:= 101+2*10000H;
   b[ 1]:= ORD(r1data.minkeycode)+(ORD(r1data.maxkeycode)-ORD(r1data.minkeycode))*100H;
 (*  res:= Kernel.Write0( dfd, SYSTEM.ADR(b[0]), 8);*)
-WHILE Avail({xfd}, 0) DO
+WHILE Ready(xfd, 0) DO
   res:= Linux0.Read0( xfd, SYSTEM.ADR(b[0]), 32);
 END;
 

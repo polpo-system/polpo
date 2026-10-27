@@ -44,6 +44,7 @@ Module Input is responsible for event timing, mouse and keyboard input.
 IMPORT  Linux0, Kernel, Display, Utf8, SYSTEM;
 
 CONST
+  FdWords = 32;  (* polpo: the words of the fd_set of select, 1024 descriptors *)
   ME="/dev/input/eventx";
 
   STDERR=2;
@@ -135,7 +136,7 @@ VAR
   utf: ARRAY 32 OF BOOLEAN;
   keywarn: BOOLEAN;
 
-  fdset: SET;
+  fds: ARRAY 3 OF LONGINT; nfds: LONGINT;  (* polpo: the descriptors Idle waits on, any numbers *)
   trace: BOOLEAN;
   mouseSkip, mouseMotionCount: LONGINT;
 
@@ -204,19 +205,34 @@ END Str2Int;
 
 PROCEDURE^ PollTTY;
 
-PROCEDURE Avail( fd: SET; usec: LONGINT): BOOLEAN;
+(* polpo: the fd_set of select as 1024 descriptors (32 SETs, the layout of the kernel's array of
+  32-bit words); the descriptors are not limited to 0..31 any more *)
+PROCEDURE AvailFds(VAR fd: ARRAY OF LONGINT; n, usec: LONGINT): BOOLEAN;
 TYPE  TimeVal= RECORD tvsec, tvusec: LONGINT END;
-VAR num: LONGINT; timeout: TimeVal;
+VAR num, i, max: LONGINT; timeout: TimeVal; set: ARRAY FdWords OF SET;
 BEGIN
+  i := 0; WHILE i < FdWords DO set[i] := {}; INC(i) END;
+  max := -1; i := 0;
+  WHILE i < n DO
+    IF (fd[i] >= 0) & (fd[i] < FdWords * 32) THEN
+      INCL(set[fd[i] DIV 32], fd[i] MOD 32); IF fd[i] > max THEN max := fd[i] END
+    END;
+    INC(i)
+  END;
   timeout.tvsec:=0; timeout.tvusec:= usec;    (* don't block at all *)
-  num:= Linux0.Select0(32, SYSTEM.ADR(fd), 0, 0, SYSTEM.ADR(timeout));
+  num:= Linux0.Select0(max + 1, SYSTEM.ADR(set), 0, 0, SYSTEM.ADR(timeout));
   RETURN num>0;
-END Avail;
+END AvailFds;
+
+PROCEDURE Ready(fd, usec: LONGINT): BOOLEAN;
+VAR one: ARRAY 1 OF LONGINT;
+BEGIN one[0] := fd; RETURN AvailFds(one, 1, usec)
+END Ready;
 
 PROCEDURE Idle( code: LONGINT);    (* code ignored *)
 VAR x: BOOLEAN;
 BEGIN
-  x:=Avail( fdset, 10*1000);
+  x:=AvailFds( fds, nfds, 10*1000);
   IF x & ~x11 THEN PollTTY END;
   (* Terminal sixel backend: let Display flush a pending coalesced frame.
      PutImage with zero size is treated as an idle tick by POLPO.SXL.Display. *)
@@ -226,7 +242,7 @@ END Idle;
 PROCEDURE PollMouseFB;
 VAR e: InputEvent;  res: LONGINT; b: ARRAY 4 OF CHAR;
 BEGIN
-  WHILE Avail( {mfd}, 0) DO
+  WHILE Ready(mfd, 0) DO
     IF iemouse THEN
       res:= Linux0.Read0( mfd, SYSTEM.ADR( e), SIZE(InputEvent));
       IF e.type=1H THEN    (* EV_KEY *)
@@ -274,7 +290,7 @@ VAR ch: CHAR;
 BEGIN
   n:=0; term:=0X;
   LOOP
-    IF ~Avail({kbdfd}, 0) THEN RETURN FALSE END;
+    IF ~Ready(kbdfd, 0) THEN RETURN FALSE END;
     ReadChar(ch);
     IF IsDigit(ch) THEN
       n:=n*10 + ORD(ch)-ORD("0")
@@ -373,17 +389,17 @@ END MapCSIKey;
 PROCEDURE PollTTY;
 VAR ch, ch2, term: CHAR; n, m: LONGINT; isUTF: BOOLEAN;
 BEGIN
-IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
+IF Ready(kbdfd, 0) THEN  ReadChar( ch);
   isUTF := ORD(ch) >= 080H;
   modState := 0;
-  IF (ch = 0C2X) & Avail( {kbdfd}, 0) THEN  (* polpo: xterm sends Ctrl+Alt+C as U+0083 (C2 83), Ctrl+Alt+P as U+0090 *)
+  IF (ch = 0C2X) & Ready(kbdfd, 0) THEN  (* polpo: xterm sends Ctrl+Alt+C as U+0083 (C2 83), Ctrl+Alt+P as U+0090 *)
     ReadChar( ch2);
     IF ch2 = 83X THEN Linux0.break := TRUE; ch := 0X
     ELSIF ch2 = 90X THEN pauseReq := TRUE; ch := 0X  (* Ctrl+Alt+P: U+0090 *)
     ELSE Put(ch, TRUE); ch := ch2
     END
   END;
-  IF ( ch= 1BX) & Avail( {kbdfd}, 0) THEN
+  IF ( ch= 1BX) & Ready(kbdfd, 0) THEN
     isUTF := FALSE;
     ReadChar( ch);
 
@@ -393,7 +409,7 @@ IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
       pauseReq := TRUE; ch:=0X
     ELSIF ch="O" THEN       (* SS3: xterm often sends F1..F4 as ESC O P/Q/R/S *)
       ch:=0X;
-      IF Avail({kbdfd}, 0) THEN
+      IF Ready(kbdfd, 0) THEN
         ReadChar(ch2);
         IF ch2="P" THEN ch:=0A4X       (* F1 *)
         ELSIF ch2="Q" THEN ch:=0A5X    (* F2 *)
@@ -408,7 +424,7 @@ IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
         END
       END
 
-    ELSIF ( ch= "[") & Avail( {kbdfd}, 0) THEN
+    ELSIF ( ch= "[") & Ready(kbdfd, 0) THEN
       ReadChar( ch);
       IF ch="<" THEN
         IF PollMouseSGR() THEN ch:=0X END
@@ -417,7 +433,7 @@ IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
       ELSIF ch="F" THEN ch:=0A9X    (* End *)
       ELSIF ch="[" THEN     (* VT100/xterm old application function keys: ESC [ [ A..E *)
         ch:=0X;
-        IF Avail( {kbdfd}, 0) THEN
+        IF Ready(kbdfd, 0) THEN
           ReadChar(ch2);
           CASE ORD( ch2) OF
             65: ch:=0A4X;   (* F1 *)
@@ -430,7 +446,7 @@ IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
         END
       ELSIF IsDigit(ch) THEN
         n:=ORD(ch)-ORD("0"); term:=0X;
-        WHILE Avail({kbdfd}, 0) & IsDigit(ch) DO
+        WHILE Ready(kbdfd, 0) & IsDigit(ch) DO
           ReadChar(ch);
           IF IsDigit(ch) THEN n:=n*10 + ORD(ch)-ORD("0")
           ELSE term:=ch
@@ -453,7 +469,7 @@ IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
         ELSE
           (* Ignore modified CSI forms like ESC [ 1 ; 2 P for now.
              Drain until a likely final byte so the sequence does not leak as text. *)
-          WHILE (term#0X) & (term<"@") & Avail({kbdfd}, 0) DO ReadChar(term) END;
+          WHILE (term#0X) & (term<"@") & Ready(kbdfd, 0) DO ReadChar(term) END;
           ch:=0X
         END
       ELSE
@@ -609,7 +625,7 @@ VAR
   event: Event;
   c: CHAR;
 BEGIN
-  WHILE Avail( {dfd}, 0) DO
+  WHILE Ready(dfd, 0) DO
     res:=Linux0.Read0(dfd, SYSTEM.ADR(event),  32);
     IF res # 32 THEN
       WriteString("PollX: short X11 read");
@@ -755,7 +771,7 @@ BEGIN
       WriteSH("Res Error... ", res);*)
     END;
 (*  ELSE*)
-(*    IF Avail( {dfd}, 0*1000) THEN END;  (* wait... *)*)
+(*    IF Ready(dfd, 0*1000) THEN END;  (* wait... *)*)
   END;
 END PollX;
 
@@ -790,7 +806,7 @@ BEGIN
   IF x11 THEN PollX
   ELSIF mfd>=0 THEN PollMouseFB
   ELSE
-    WHILE Avail({kbdfd}, 0) DO PollTTY END
+    WHILE Ready(kbdfd, 0) DO PollTTY END
   END;
   IF mouseX>=Display.Width THEN mouseX:=Display.Width-1 END;
   IF mouseX<0 THEN mouseX:=0 END;
@@ -871,7 +887,7 @@ BEGIN
   switching:= TRUE;
   IF onoberon THEN
     WriteString("switching to con");
-    fdset:={};
+    nfds:=0;
     Display.SetClip( 0, 0, 0, 0);
     res:=Linux0.IOCtl0( kbdfd, KDSETMODE, 0);   (* text mode =0 *)
     res:=Linux0.IOCtl0( kbdfd, VTRELDISP, VTPROCESS);
@@ -883,7 +899,7 @@ BEGIN
     res:=Linux0.IOCtl0( kbdfd, VTRELDISP, VTACKACQ);
     Put(0F7X, FALSE);  (* F7, redraw display *)
     Display.ResetClip;
-    fdset:={kbdfd, mfd};
+    fds[0]:=kbdfd; fds[1]:=mfd; nfds:=2;
     onoberon:= TRUE;
   END;
   switching:= FALSE;
@@ -1058,7 +1074,7 @@ BEGIN
   Kernel.GetConfig("SXL_MOUSE_SKIP", bdata);
   mouseSkip:=Str2Int(bdata, 0);
   IF mouseSkip<0 THEN mouseSkip:=0 END;
-  fdset:={kbdfd};
+  fds[0]:=kbdfd; nfds:=1;
   WriteCSI("?1003h");  (* xterm all-motion mouse reports *)
   WriteCSI("?1006h");  (* SGR mouse coordinates: ESC [ < b ; x ; y M/m *)
   WriteCSI("?1016h");  (* SGR-pixels: report pixel coordinates, not character cells *)

@@ -42,6 +42,7 @@ Module Input is responsible for event timing, mouse and keyboard input.
 IMPORT  Linux0, Kernel, FileDir, Display, Utf8, SYSTEM;
 
 CONST
+  FdWords = 32;  (* polpo: the words of the fd_set of select, 1024 descriptors *)
 
   STDERR=2;
   KDSETMODE=4B3AH;
@@ -133,7 +134,7 @@ VAR
   utf: ARRAY 32 OF BOOLEAN;
   keywarn: BOOLEAN;
 
-  fdset: SET;
+  fds: ARRAY 3 OF LONGINT; nfds: LONGINT;  (* polpo: the descriptors Idle waits on, any numbers *)
   trace: BOOLEAN;
 
 (* FB *)
@@ -177,8 +178,8 @@ END WriteErr;
 
 PROCEDURE RequireSelectable(fd: LONGINT);
 BEGIN
-  IF (fd < 0) OR (fd >= 32) THEN
-    WriteErr("Input: file descriptor outside select range 0..31");
+  IF (fd < 0) OR (fd >= FdWords * 32) THEN
+    WriteErr("Input: file descriptor outside select range 0..1023");
     WriteSH("Input file descriptor: ", fd);
     Kernel.Shutdown(1)
   END
@@ -196,25 +197,40 @@ BEGIN
   WHILE i < n DO Put(s[i], n > 1); INC(i) END
 END PutUnicode;
 
-PROCEDURE Avail( fd: SET; usec: LONGINT): BOOLEAN;
+(* polpo: the fd_set of select as 1024 descriptors (32 SETs, the layout of the kernel's array of
+  32-bit words); the descriptors are not limited to 0..31 any more *)
+PROCEDURE AvailFds(VAR fd: ARRAY OF LONGINT; n, usec: LONGINT): BOOLEAN;
 TYPE  TimeVal= RECORD tvsec, tvusec: LONGINT END;
-VAR num: LONGINT; timeout: TimeVal;
+VAR num, i, max: LONGINT; timeout: TimeVal; set: ARRAY FdWords OF SET;
 BEGIN
+  i := 0; WHILE i < FdWords DO set[i] := {}; INC(i) END;
+  max := -1; i := 0;
+  WHILE i < n DO
+    IF (fd[i] >= 0) & (fd[i] < FdWords * 32) THEN
+      INCL(set[fd[i] DIV 32], fd[i] MOD 32); IF fd[i] > max THEN max := fd[i] END
+    END;
+    INC(i)
+  END;
   timeout.tvsec:=0; timeout.tvusec:= usec;    (* don't block at all *)
-  num:= Linux0.Select0(32, SYSTEM.ADR(fd), 0, 0, SYSTEM.ADR(timeout));
+  num:= Linux0.Select0(max + 1, SYSTEM.ADR(set), 0, 0, SYSTEM.ADR(timeout));
   RETURN num>0;
-END Avail;
+END AvailFds;
+
+PROCEDURE Ready(fd, usec: LONGINT): BOOLEAN;
+VAR one: ARRAY 1 OF LONGINT;
+BEGIN one[0] := fd; RETURN AvailFds(one, 1, usec)
+END Ready;
 
 PROCEDURE Idle( code: LONGINT);    (* code ignored *)
 VAR x: BOOLEAN;
 BEGIN
-  x:=Avail( fdset, 10*1000)
+  x:=AvailFds( fds, nfds, 10*1000)
 END Idle;
 
 PROCEDURE PollMouseFB;
 VAR e: InputEvent;  res: LONGINT; b: ARRAY 4 OF CHAR;
 BEGIN
-  WHILE Avail( {mfd}, 0) DO
+  WHILE Ready(mfd, 0) DO
     IF iemouse THEN
       res:= Linux0.Read0( mfd, SYSTEM.ADR( e), SIZE(InputEvent));
       IF e.type=1H THEN    (* EV_KEY *)
@@ -254,15 +270,15 @@ END ReadChar;
 PROCEDURE PollTTY;
 VAR ch, ch2: CHAR; isUTF: BOOLEAN;
 BEGIN
-IF Avail( {kbdfd}, 0) THEN  ReadChar( ch);
+IF Ready(kbdfd, 0) THEN  ReadChar( ch);
   isUTF := ORD(ch) >= 080H;
-  IF ( ch= 1BX) & Avail( {kbdfd}, 0) THEN
+  IF ( ch= 1BX) & Ready(kbdfd, 0) THEN
     isUTF := FALSE;
     ReadChar( ch);
-    IF ( ch= "[") & Avail( {kbdfd}, 0) THEN
+    IF ( ch= "[") & Ready(kbdfd, 0) THEN
       ReadChar( ch);
       IF ( ch>="A") & (ch<="D") THEN ch:= CHR( ORD(ch)+80H);
-      ELSIF Avail( {kbdfd}, 0) THEN
+      ELSIF Ready(kbdfd, 0) THEN
         ReadChar(ch2);
         IF ch= "[" THEN     (*F1..F5 *)
           CASE ORD( ch2) OF
@@ -503,7 +519,7 @@ VAR
   event: Event;
   c: CHAR;
 BEGIN
-  WHILE (npend > 0) OR Avail( {dfd}, 0) DO
+  WHILE (npend > 0) OR Ready(dfd, 0) DO
     IF npend > 0 THEN  (* polpo: events kept by ReadReply first *)
       event := pend[0]; i := 1;
       WHILE i < npend DO pend[i-1] := pend[i]; INC(i) END;
@@ -670,7 +686,7 @@ BEGIN
       WriteSH("Res Error... ", res);*)
     END;
 (*  ELSE*)
-(*    IF Avail( {dfd}, 0*1000) THEN END;  (* wait... *)*)
+(*    IF Ready(dfd, 0*1000) THEN END;  (* wait... *)*)
   END;
 END PollX;
 
@@ -788,7 +804,7 @@ BEGIN
   switching:= TRUE;
   IF onoberon THEN
     WriteString("switching to con");
-    fdset:={};
+    nfds:=0;
     Display.SetClip( 0, 0, 0, 0);
     Display.ReleaseScreen;  (* KMS: DRM master *)
     res:=Linux0.IOCtl0( kbdfd, KDSETMODE, 0);   (* text mode =0 *)
@@ -802,7 +818,7 @@ BEGIN
     Display.AcquireScreen;  (* KMS: the buffer on the screen again *)
     Put(0F7X, FALSE);  (* F7, redraw display *)
     Display.ResetClip;
-    fdset:={kbdfd, mfd};
+    fds[0]:=kbdfd; fds[1]:=mfd; nfds:=2;
     onoberon:= TRUE;
   END;
   switching:= FALSE;
@@ -930,7 +946,7 @@ BEGIN
     myProperty:=-1;
     dfd:=Display.InitX11();
     RequireSelectable(dfd);
-    fdset:={dfd};
+    fds[0]:=dfd; nfds:=1;
     myProperty:=InternAtom("OberonProperty");
     xaClipboard:=InternAtom("CLIPBOARD"); xaTargets:=InternAtom("TARGETS"); xaUtf8:=InternAtom("UTF8_STRING");
   ELSE
@@ -939,7 +955,7 @@ BEGIN
     InitKbdFB;
     Kernel.InstallTermHandler( CloseFB);  (* before the checks: the console is in graphics mode *)
     RequireSelectable(kbdfd); RequireSelectable(mfd);
-    fdset:={kbdfd, mfd};
+    fds[0]:=kbdfd; fds[1]:=mfd; nfds:=2;
   END;
 END Init;
 
