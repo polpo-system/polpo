@@ -104,6 +104,7 @@ VAR
     modLoadAddrAddr : LONGINT; (* Offset into code of Modules.modLoadAddr (in words!) *)
     pc : LONGINT; (* word address *)
     fixup: ARRAY 16 OF LONGINT;
+    pendPos, pendEno, pendCC: ARRAY 512 OF LONGINT; npend: LONGINT;  (* polpo: runtime calls of the modules linked before Kernel *)
     initCalls : ARRAY MaxModules OF Object;
     initCnt : INTEGER;
     quiet: BOOLEAN;
@@ -352,11 +353,17 @@ VAR
       IF mno=0 THEN
         addr:= fixup[ eno];
         IF eno=4 THEN cc:= code[pos-1] DIV 10000000H MOD 10H END;
-        IF addr=-1 THEN Out.String("fixup "); Out.Int( eno, 6); Out.String(" could not be patched!"); Out.Ln END;
+        IF addr=-1 THEN  (* polpo: a routine of Kernel, linked after this module (Linux0): patched by PatchPending *)
+          IF npend < LEN(pendPos) THEN pendPos[npend] := pos; pendEno[npend] := eno; pendCC[npend] := cc; INC(npend)
+          ELSE Out.String("fixup "); Out.Int( eno, 6); Out.String(" could not be patched!"); Out.Ln
+          END
+        END
       ELSE 
         addr:=o.imports[mno].entries[eno ];
       END;
-      code[pos]:=SYSTEM.LSH( cc, 28)+0B000000H+((addr DIV 4 - (pos+(LoadBase4 DIV 4) +2)) MOD 1000000H); (* ExtCall is always BL not if SWI replacement p.m.*)
+      IF addr # -1 THEN
+        code[pos]:=SYSTEM.LSH( cc, 28)+0B000000H+((addr DIV 4 - (pos+(LoadBase4 DIV 4) +2)) MOD 1000000H) (* ExtCall is always BL not if SWI replacement p.m.*)
+      END;
 (*      code[pos]:=0EB000000H+((addr - LoadBase) DIV 4 - pos -2) MOD 1000000H;*)
 
       fixlist:=SYSTEM.LSH(cw,-17) MOD 8000H*4;  (* 0 .. 128 KB *)
@@ -364,6 +371,22 @@ VAR
     END
   END ExtCallFixup;
   
+  (* polpo: the calls of DivMod and SysHalt (division, traps) of the modules linked before Kernel, Linux0,
+    once Kernel has given their addresses; before, they jumped nowhere *)
+  PROCEDURE PatchPending;
+  VAR i, addr: LONGINT;
+  BEGIN
+    i := 0;
+    WHILE i < npend DO
+      addr := fixup[pendEno[i]];
+      IF addr = -1 THEN Out.String("fixup "); Out.Int(pendEno[i], 6); Out.String(" could not be patched!"); Out.Ln
+      ELSE code[pendPos[i]] := SYSTEM.LSH(pendCC[i], 28) + 0B000000H + ((addr DIV 4 - (pendPos[i] + (LoadBase4 DIV 4) + 2)) MOD 1000000H)
+      END;
+      INC(i)
+    END;
+    npend := 0
+  END PatchPending;
+
   PROCEDURE ExtAddrFixup(fixlist: LONGINT; o : Object);
   VAR pos, mno, eno, cw : LONGINT;
   BEGIN 
@@ -682,7 +705,7 @@ VAR i: LONGINT;
     entry, res, of : LONGINT;
     buf: ARRAY 64 OF LONGINT;
 BEGIN
-  LoadObject(s,o); BuildModuleBlocks; FixTypeDescs;
+  LoadObject(s,o); PatchPending; BuildModuleBlocks; FixTypeDescs;
 
   (* patch linked list of modules *)
   IF ~quiet THEN
@@ -765,6 +788,7 @@ END BuildImage;
     Out.String("OLR Oberon BootLinker 2015-02-12 / polpo"); Out.Ln;
     objs:=NIL; pc:=0;
     FOR i:=0 TO 15 DO fixup[ i]:= -1 END;
+    npend := 0;
     modules:=0; initCnt:=0;
     modulesAddr := -1; modLoadAddrAddr := -1;
     FOR i := 0 TO MaxModules-1 DO initCalls[i] := NIL END;
