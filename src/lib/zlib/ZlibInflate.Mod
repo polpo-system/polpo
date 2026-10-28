@@ -465,7 +465,10 @@ MODULE ZlibInflate;	(** eos  **)
 			END;
 			IF wavail = 0 THEN
 				Flush(s);
-				IF (s.write = WindowSize) & (s.read # 0) THEN
+				(* polpo: the space left after Flush, as LOADOUT of zlib: Flush moves read, and write to 0 at the
+					end of the window; without it a single Inflate with Finish stopped after 32 KB *)
+				IF s.write < s.read THEN wavail := s.read - s.write - 1 ELSE wavail := WindowSize - s.write END;
+				IF (wavail = 0) & (s.write = WindowSize) & (s.read # 0) THEN
 					s.write := 0; wavail := s.read-1;
 				END;
 				IF wavail = 0 THEN
@@ -947,6 +950,9 @@ MODULE ZlibInflate;	(** eos  **)
 				END;
 				s.res.code := Ok;
 				FreeCodes(s);
+				(* polpo: InflateCodes moved read and write: the space left again, as LOAD of zlib (a stored block
+					after it saw a space below 0 and stopped) *)
+				IF s.write < s.read THEN wavail := s.read - s.write - 1 ELSE wavail := WindowSize - s.write END;
 				IF s.block.last THEN s.block.state := BlkDry
 				ELSE s.block.state := BlkType
 				END
