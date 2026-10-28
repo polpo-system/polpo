@@ -65,13 +65,14 @@ MODULE MOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     WithTrap = 14;
     CaseTrap = 16;
     FuncTrap = 17;
+    MaxMarks = 8192;  (* statements of a procedure for /f *)
 
   VAR
     ExitChain, ReturnChain: OPL.Label;
     CommonDesign: OPL.Item;
     CommonDesignClass: SHORTINT;
     assert, findpc: BOOLEAN;
-    breakpc: LONGINT;
+    nmarks: LONGINT; markPc, markPos: ARRAY MaxMarks OF LONGINT;  (* polpo: the pc after each statement and its position *)
 
   PROCEDURE Align(VAR offset: LONGINT; align: LONGINT);
   BEGIN
@@ -660,10 +661,24 @@ MODULE MOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
   
   PROCEDURE Checkpc;
   BEGIN
-    IF findpc & (OPL.pc > breakpc) & OPM.noerr THEN OPM.err(255) END
+    IF findpc & (nmarks < MaxMarks) THEN markPc[nmarks] := OPL.pc; markPos[nmarks] := OPM.errpos; INC(nmarks) END
     (* in the case of a call, the breakpc value shown in the trap viewer must point to the call instruction
       and not to the next instruction, i.e. breakpc # return address !! *)
   END Checkpc;
+
+  (* polpo: /f marks the first statement of this procedure whose code ends after the pc (the last one for a
+    pc after it), from the pcs Checkpc noted and the shift Exit made (compiling the procedure again to find
+    it used the lists of the code to adjust of the first time: ARMv7 stopped in AOPL.AdjustLink) *)
+  PROCEDURE Found(pcOffset: INTEGER);
+    VAR i, at: LONGINT;
+  BEGIN
+    IF findpc & (OPL.pc > OPM.breakpc DIV 4) & OPM.noerr & (nmarks > 0) THEN
+      at := OPM.breakpc DIV 4 + pcOffset; i := 0;
+      WHILE (i < nmarks - 1) & (markPc[i] <= at) DO INC(i) END;
+      OPM.Mark(255, markPos[i])
+    END;
+    nmarks := 0
+  END Found;
 
   PROCEDURE stat(n: OPT.Node);
     VAR x, y, nofel: OPL.Item; L, Lcbj, prevExitChain: OPL.Label;
@@ -727,7 +742,7 @@ MODULE MOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     END Dim;
 
     PROCEDURE Enter(n: OPT.Node);
-      VAR proc, type: OPT.Object; i, j, pc, pcOffset: INTEGER;
+      VAR proc, type: OPT.Object; i, j, pcOffset: INTEGER;
         ch: CHAR; name: ARRAY 64 OF CHAR; calleeUsed: OPL.RegSet;
     BEGIN
       proc := n^.obj;
@@ -735,14 +750,8 @@ MODULE MOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
         calleeUsed := OPL.defaultCalleeUsed;
         OPL.Enter(NIL, calleeUsed);
         OPC.Enter(NIL);
-        pc := OPL.pc;
-        LOOP
-          ReturnChain := 0; stat(n^.right); OPL.FixLink(ReturnChain);
-          OPL.Exit(NIL, calleeUsed, pcOffset);
-          IF (OPL.pc > OPM.breakpc DIV 4) & OPM.noerr THEN breakpc := OPM.breakpc DIV 4 + pcOffset; OPL.pc := pc
-          ELSE EXIT
-          END
-        END ;
+        nmarks := 0; ReturnChain := 0; stat(n^.right); OPL.FixLink(ReturnChain);
+        OPL.Exit(NIL, calleeUsed, pcOffset); Found(pcOffset);
         name := "$$"; OPL.OutRefPoint; OPL.OutRefName(name); OPL.OutRefs(OPT.topScope);
         INC(OPL.level); stat(n^.left); DEC(OPL.level)
       ELSE (* enter proc *)
@@ -753,20 +762,15 @@ MODULE MOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
         OPL.Enter(proc, calleeUsed);
         OPC.Enter(proc);
         OPC.InitPtrs(proc);
-        pc := OPL.pc;
-        LOOP
-          ReturnChain := 0;
-          stat(n^.right);
-          IF n^.obj^.typ # OPT.notyp THEN OPL.PutTrap(FuncTrap) END ;
-          OPL.FixLink(ReturnChain);
-          OPL.Exit(proc, calleeUsed, pcOffset);
-          IF OPL.InterProcInf THEN
-            proc^.conval^.realval := SYSTEM.VAL(LONGREAL, calleeUsed)
-          END ;
-          IF (OPL.pc > OPM.breakpc DIV 4) & OPM.noerr THEN breakpc := OPM.breakpc DIV 4 + pcOffset; OPL.pc := pc
-          ELSE EXIT
-          END
+        nmarks := 0; ReturnChain := 0;
+        stat(n^.right);
+        IF n^.obj^.typ # OPT.notyp THEN OPL.PutTrap(FuncTrap) END ;
+        OPL.FixLink(ReturnChain);
+        OPL.Exit(proc, calleeUsed, pcOffset);
+        IF OPL.InterProcInf THEN
+          proc^.conval^.realval := SYSTEM.VAL(LONGREAL, calleeUsed)
         END ;
+        Found(pcOffset);
         OPL.OutRefPoint;
         IF proc^.mode = TProc THEN
           type := proc^.link^.typ^.strobj;
@@ -892,7 +896,7 @@ MODULE MOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     OPL.Init(OPM.opt); OPC.Init(OPM.opt);
     assert := ass IN OPM.opt; findpc := fpc IN OPM.opt;
     IF ~findpc THEN OPM.breakpc := MAX(LONGINT) END;
-    breakpc := MAX(LONGINT);
+    nmarks := 0;
     Allocate;
   END Init;
   
