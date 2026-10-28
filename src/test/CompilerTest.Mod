@@ -62,7 +62,11 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARM: forward declarations of local procedures were refused (err 38);
    ARMv7: the registers live across a call were saved just above its arguments, and a call in its
    arguments with more arguments of its own overwrote them, x.f := Max(1, G(H(x, "s"))) stored
-   through the length of "s" (WebNav, 2026-10-20). *)
+   through the length of "s" (WebNav, 2026-10-20);
+   ARMv7: F(a) DIV b with software division loaded b into R0 over the result of F (punycode, 2026-10-26);
+   ROP2: each p.a[i] of an open array on the heap kept the register of p.a reserved to the end of the
+   statement; a condition with seven of them took all registers of ARMv7, the compiler stopped in
+   AOPC.Index (PNGImagesTest, 2026-10-28). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -77,6 +81,8 @@ TYPE
   WPair = POINTER TO WPairDesc; WPairDesc = RECORD (WNodeDesc) left, right: WNode END;
   WLeaf = POINTER TO WLeafDesc; WLeafDesc = RECORD (WNodeDesc) value: LONGINT END;
   Saved = POINTER TO SavedDesc; SavedDesc = RECORD a, b, c: LONGINT END;
+  Pix = POINTER TO RECORD w: LONGINT; pix: POINTER TO ARRAY OF CHAR END;
+  Smalls = POINTER TO ARRAY OF Small;
 
 VAR
   cells: POINTER TO RECORD r: ARRAY 10 OF LONGINT END; cellx: LONGINT;
@@ -746,6 +752,45 @@ PROCEDURE CallDiv(a, b: LONGINT): BOOLEAN;
 BEGIN RETURN (Id(a) DIV b = 14) & (Id(a) MOD b = 2) & ODD(Id(0CE00H) DIV b) & ~ODD(Id(0CE00H) DIV (b * 37449))
 END CallDiv;
 
+(* ROP2: in p.a[i] of an open array on the heap the register of p.a stayed reserved to the end of the
+  statement; a condition with seven of them took all registers of ARMv7 (err 215, ASSERT 61) *)
+PROCEDURE Above(a, b: Pix): LONGINT;  (* the first pixel with alpha 0 and a component above b, -1 none *)
+VAR i, n: LONGINT;
+BEGIN
+  i := 0; n := a.w;
+  WHILE i < n DO
+    IF (a.pix[4 * i + 3] = 0X) & ((a.pix[4 * i] > b.pix[4 * i]) OR (a.pix[4 * i + 1] > b.pix[4 * i + 1])
+      OR (a.pix[4 * i + 2] > b.pix[4 * i + 2])) THEN RETURN i
+    END;
+    INC(i)
+  END;
+  RETURN -1
+END Above;
+
+(* p.a[0] has no index code: its base is the reserved register itself *)
+PROCEDURE Zeros(a, b: Pix): BOOLEAN;
+BEGIN
+  RETURN (a.pix[0] = 1X) & ((a.pix[0] > b.pix[0]) OR (b.pix[0] = 2X) OR (a.pix[0] = b.pix[0]) OR (b.pix[0] < a.pix[0])
+    OR (a.pix[0] # 1X) OR (b.pix[0] = 3X))
+END Zeros;
+
+PROCEDURE OpenConds(): BOOLEAN;
+VAR a, b: Pix; p: POINTER TO ARRAY OF ARRAY OF INTEGER; r: Smalls; i, j: LONGINT; ok: BOOLEAN;
+BEGIN
+  NEW(a); NEW(b); a.w := 3; b.w := 3; NEW(a.pix, 12); NEW(b.pix, 12);
+  i := 0; WHILE i < 12 DO a.pix[i] := 5X; b.pix[i] := 5X; INC(i) END;
+  a.pix[3] := 0X; a.pix[7] := 0X; a.pix[11] := 0X; a.pix[9] := 6X;
+  ok := Above(a, b) = 2;
+  a.pix[0] := 1X; b.pix[0] := 3X; ok := ok & Zeros(a, b); b.pix[0] := 0X; ok := ok & Zeros(a, b);
+  b.pix[0] := 1X; ok := ok & Zeros(a, b); b.pix[0] := 4X; ok := ok & ~Zeros(a, b);
+  NEW(p, 3, 4); i := 0; WHILE i < 3 DO j := 0; WHILE j < 4 DO p[i, j] := SHORT(10 * i + j); INC(j) END; INC(i) END;
+  i := 2; j := 1;
+  ok := ok & (p[i, j] = 21) & ((p[0, j] = 1) OR (p[i, 0] = 99)) & (p[0, 0] = 0) & (RowSum(p[i]) = 86)
+    & (p[i - 1, j + 1] = 12) & (p[i, j] + p[i - 2, j + 2] = 24) & (LEN(p[i]) = 4) & (RowSum(p[0]) = 6);
+  NEW(r, 3); r[1].a := 3; r[1].b := 4; r[2].a := 5; r[2].b := 6; i := 1;
+  RETURN ok & (r[i].a = 3) & ((r[i].b = 7) OR (r[i + 1].a = 5)) & (r[i + 1].b = 6) & (r[i].a + r[i + 1].b = 9)
+END OpenConds;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -811,6 +856,7 @@ BEGIN
   Check("forward declaration of a local procedure", (LocalForward(0) = 7) & (LocalForward(3) = 1019));
   Check("registers saved across a call whose arguments call with more arguments", SavedAcross());
   Check("DIV and MOD of a function result by a variable", CallDiv(100, 7));
+  Check("a condition of seven elements of open arrays on the heap", OpenConds());
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 
