@@ -96,7 +96,8 @@ BEGIN
   IF ~done THEN
     CASE trap OF
       10: Str("division by zero or by a negative number")
-    | 13, 113: Str("keyboard interrupt")
+    | 13: Str("keyboard interrupt")
+    | 113: Str("keyboard interrupt, or HALT or ASSERT (113)")
     | 28, -6: Str("invalid instruction")
     | 11, 29, -14:
         IF (page >= 0) & (page < 4096) THEN Str("NIL reference")
