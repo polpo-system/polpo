@@ -106,18 +106,19 @@ BEGIN
     ok := (Linux0.UnLinkat0(Linux0.ATFDCWD, SYSTEM.ADR(list.cert[0]), 0) = 0) & (Linux0.UnLinkat0(Linux0.ATFDCWD, SYSTEM.ADR(list.key[0]), 0) = 0);
     list := list.next
   END;
-  ok := Gemini0.NewIdent(dir, "ada", "ada@example.org", 10, a) & Gemini0.NewIdent(dir, "adam", "", 10, b);
+  (* names with letters a fingerprint has not: FindIdent tries the beginnings of fingerprints first *)
+  ok := Gemini0.NewIdent(dir, "rina", "rina@example.org", 10, a) & Gemini0.NewIdent(dir, "rinat", "", 10, b);
   Check("made", ok);
   IF ok THEN
-    Check("details", (a.cn = "ada") & (a.mail = "ada@example.org") & (a.notAfter[0] = "2") & (a.fingerprint[63] # 0X));
+    Check("details", (a.cn = "rina") & (a.mail = "rina@example.org") & (a.notAfter[0] = "2") & (a.fingerprint[63] # 0X));
     list := Gemini0.LoadIdents(dir);
     Check("two listed", (list # NIL) & (list.next # NIL) & (list.next.next = NIL));
-    id := Gemini0.FindIdent(list, "ada"); Check("by name", id # NIL);
+    id := Gemini0.FindIdent(list, "rina"); Check("by name", id # NIL);
     IF id # NIL THEN Check("the right one", id.fingerprint = a.fingerprint) END;
-    id := Gemini0.FindIdent(list, "ADA@example.org"); Check("by mail", (id # NIL) & (id.fingerprint = a.fingerprint));
+    id := Gemini0.FindIdent(list, "RINA@example.org"); Check("by mail", (id # NIL) & (id.fingerprint = a.fingerprint));
     COPY(b.fingerprint, q); q[10] := 0X;
     id := Gemini0.FindIdent(list, q); Check("by fingerprint", (id # NIL) & (id.fingerprint = b.fingerprint));
-    id := Gemini0.FindIdent(list, "da"); Check("ambiguous", (id = NIL) & (Gemini0.nCandidates = 2));
+    id := Gemini0.FindIdent(list, "in"); Check("ambiguous", (id = NIL) & (Gemini0.nCandidates = 2));
     id := Gemini0.FindIdent(list, "nobody"); Check("none", (id = NIL) & (Gemini0.nCandidates = 0));
     Check("loads", Gemini0.LoadIdentity(a.cert, a.key) # NIL)
   END
