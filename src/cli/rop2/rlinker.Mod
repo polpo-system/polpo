@@ -878,7 +878,9 @@ END Fixup;
       Fixup(m, KernelRoutines[0].adr, newreclink, FALSE); (* can be removed? No *) 
     ELSIF m.name="Linux0" THEN
       softDiv:=m.cb+shift0+20H; (* ugly, distance to Div hard coded *)
-      
+      (* polpo: the divisions of Linux0 itself (ARMv7): its chain was skipped above, as Kernel was not there
+        and softDiv not known; they jumped nowhere *)
+      IF tag = 36FBH THEN Fixup(m, softDiv, newreclink, FALSE) END
     END;
     (* body := S.VAL(Command, S.ADR(m.code[0])); *) m.refcnt:=0;
     (* Unix.Cacheflush(S.ADR(m.code[0]), codesize*4, 1); *)
