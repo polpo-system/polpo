@@ -780,5 +780,90 @@ CODE
   MOV  PC, LR
 END RecvFrom0;
 
-END Linux0.
+(* polpo: the nonblocking sockets of Sockets, as unixNet of norayr/Internet has them, made of Socket0,
+  Accept40, IOCtl0, GetSockOpt0, SetSockOpt0 and Select0 with the numbers of this architecture *)
 
+PROCEDURE SocketNonblocking0*( domain, type, protocol: LONGINT): LONGINT;
+CONST SockNonblock = 800H; SockCloexec = 80000H;
+BEGIN
+  RETURN Socket0( domain, type + SockNonblock + SockCloexec, protocol)
+END SocketNonblocking0;
+
+(** clear (blocking) or set O_NONBLOCK of fd *)
+PROCEDURE SetBlocking0*( fd: LONGINT; blocking: BOOLEAN): LONGINT;
+CONST FIONBIO = 5421H;
+VAR on: LONGINT;
+BEGIN
+  IF blocking THEN on := 0 ELSE on := 1 END;
+  RETURN IOCtl0( fd, FIONBIO, SYSTEM.ADR( on))
+END SetBlocking0;
+
+(** accept a connection of fd as a nonblocking socket, closed on exec *)
+PROCEDURE AcceptNonblocking0*( fd, addr, lenadr: LONGINT): LONGINT;
+CONST SockNonblock = 800H; SockCloexec = 80000H;
+BEGIN
+  RETURN Accept40( fd, addr, lenadr, SockNonblock + SockCloexec)
+END AcceptNonblocking0;
+
+(** a result of Connect0: the connection is still being made *)
+PROCEDURE Pending0*( result: LONGINT): BOOLEAN;
+CONST EINPROGRESS = 115; EALREADY = 114;
+BEGIN
+  RETURN (result = -EINPROGRESS) OR (result = -EALREADY)
+END Pending0;
+
+(** a result of a nonblocking call: it would have to wait *)
+PROCEDURE WouldBlock0*( result: LONGINT): BOOLEAN;
+CONST EAGAIN = 11;
+BEGIN
+  RETURN result = -EAGAIN
+END WouldBlock0;
+
+(** a result of a call interrupted by a signal *)
+PROCEDURE Interrupted0*( result: LONGINT): BOOLEAN;
+CONST EINTR = 4;
+BEGIN
+  RETURN result = -EINTR
+END Interrupted0;
+
+(** the pending error of socket fd (SO_ERROR), negative; 0 if none *)
+PROCEDURE SocketError0*( fd: LONGINT): LONGINT;
+CONST SolSocket = 1; SoError = 4;
+VAR e, n, r: LONGINT;
+BEGIN
+  e := 0; n := 4; r := GetSockOpt0( fd, SolSocket, SoError, SYSTEM.ADR( e), SYSTEM.ADR( n));
+  IF r < 0 THEN RETURN r END;
+  RETURN -e
+END SocketError0;
+
+(** SO_LINGER of 0 seconds: closing fd resets the connection and drops the data not sent *)
+PROCEDURE Abortive0*( fd: LONGINT): LONGINT;
+CONST SolSocket = 1; SoLinger = 13;
+VAR l: ARRAY 2 OF LONGINT;
+BEGIN
+  l[ 0] := 1; l[ 1] := 0;
+  RETURN SetSockOpt0( fd, SolSocket, SoLinger, SYSTEM.ADR( l[ 0]), 8)
+END Abortive0;
+
+(** wait up to ms milliseconds (below 0: without a limit) until fd can be read (write: written), or has
+  an error or was closed by the other side: 0 at the timeout, above 0 when ready, below 0 an error. Made
+  with select, fd must be below 1024 *)
+PROCEDURE Poll0*( fd: LONGINT; write: BOOLEAN; ms: LONGINT): LONGINT;
+VAR set: ARRAY 32 OF SET; tv: ARRAY 2 OF LONGINT; i, t: LONGINT;
+BEGIN
+  IF fd < 0 THEN RETURN -9 END;
+  IF fd >= 1024 THEN RETURN -22 END;
+  i := 0; WHILE i < 32 DO set[ i] := {}; INC( i) END;
+  INCL( set[ fd DIV 32], fd MOD 32);
+  t := 0;
+  IF ms >= 0 THEN  (* seconds and microseconds without DIV: division by 1000 calls a routine that Linux0
+      does not have on ARM *)
+    tv[ 0] := 0; WHILE ms >= 1000 DO DEC( ms, 1000); INC( tv[ 0]) END;
+    tv[ 1] := ms * 1000; t := SYSTEM.ADR( tv[ 0])
+  END;
+  IF write THEN RETURN Select0( fd + 1, 0, SYSTEM.ADR( set[ 0]), 0, t)
+  ELSE RETURN Select0( fd + 1, SYSTEM.ADR( set[ 0]), 0, 0, t)
+  END
+END Poll0;
+
+END Linux0.
