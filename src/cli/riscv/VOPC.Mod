@@ -80,7 +80,7 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
   END DeRef;
   
   PROCEDURE Index*(VAR x, y: OPL.Item; rt: LONGINT);
-    VAR len, size, n: OPL.Item; elemsize, nofel, dummy: LONGINT;
+    VAR len, size, n: OPL.Item; elemsize, nofel, dummy: LONGINT; last: BOOLEAN;
   BEGIN
     IF rt >= 32 THEN rt := -1 END ;
     IF x.typ^.comp = OPL.Array THEN elemsize := x.typ^.BaseTyp^.size;
@@ -104,6 +104,7 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
         OPL.LoadAddr(x, -1); x.reg := OPL.PutSPC(OPL.ADD, rt, x, y); x.offset := 0; x.mode := OPL.Based
       END
     ELSE (* x.typ^.comp = DynArr *)
+      last := x.typ^.BaseTyp^.comp # OPL.DynArr;  (* polpo: LoadAddr below sets x.typ to LONGINT *)
       IF (y.mode # OPL.Con) OR (y.offset # 0) THEN
         OPL.LenDesc(x, len, x.typ);
         IF inxchk THEN n := y;
@@ -117,6 +118,12 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
         END ;
         OPL.Size(x, size, -1, x.typ^.BaseTyp); OPL.Mul(y, size, -1);
         OPL.LoadAddr(x, -1); x.reg := OPL.PutSPC(OPL.ADD, rt, x, y); x.offset := 0; x.mode := OPL.Based
+      END;
+      (* polpo: after the last open dimension the descriptor is not read again: the base DeRef froze
+        becomes a temporary (frozen until EndStat, the bases of a long condition took all registers, err 215) *)
+      IF last & (x.descmode = OPL.Based) & (x.reg2 # OPL.SP) THEN
+        OPL.ThawR(OPL.FrozenReg, x.reg2);
+        IF x.reg = x.reg2 THEN OPL.GetR(OPL.TempReg, x.reg) END
       END
     END;
   END Index;
