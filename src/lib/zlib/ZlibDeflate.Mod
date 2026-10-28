@@ -1024,10 +1024,19 @@ BEGIN
 		INC(stream.string, stream.lookAhead);
 		stream.lookAhead := 0;
 
-		(* zlib flushes the block if the pending buffer will be full. With MemLevel = 8 and WindowBits = 15 this is impossible
-			since MaxBlockSize is almost twice the window size *)
-		ASSERT(stream.string < stream.block + MaxBlockSize, 113);
-		
+		(* zlib flushes the block if the pending buffer will be full. polpo: as zlib, the block ends at MaxBlockSize and the
+			rest stays look-ahead; FillWindow takes up to twice the window size at once (the ASSERT here stopped
+			Compress at level 0 for 65532 bytes and more) *)
+		IF stream.string >= stream.block + MaxBlockSize THEN
+			stream.lookAhead := stream.string - (stream.block + MaxBlockSize);
+			stream.string := stream.block + MaxBlockSize;
+			FlushBlock(stream, stream.window^, stream.block, stream.string - stream.block, FALSE);
+			stream.block := stream.string;
+			FlushPending(stream.pend, stream.out);
+			IF stream.out.avail = 0 THEN RETURN NeedMore
+			END
+		END;
+
 		(* flush if we may have to slide, otherwise stream.block may become negative and the data will be lost *)
 		IF (stream.string - stream.block) >= MaxDist THEN
 			FlushBlock(stream, stream.window^, stream.block, stream.string - stream.block, FALSE);
