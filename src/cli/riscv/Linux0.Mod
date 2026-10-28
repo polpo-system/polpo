@@ -823,11 +823,7 @@ BEGIN
   i := 0; WHILE i < 32 DO set[ i] := {}; INC( i) END;
   INCL( set[ fd DIV 32], fd MOD 32);
   t := 0;
-  IF ms >= 0 THEN  (* seconds and microseconds without DIV: division by 1000 calls a routine that Linux0
-      does not have on ARM *)
-    tv[ 0] := 0; WHILE ms >= 1000 DO DEC( ms, 1000); INC( tv[ 0]) END;
-    tv[ 1] := ms * 1000; t := SYSTEM.ADR( tv[ 0])
-  END;
+  IF ms >= 0 THEN tv[ 0] := ms DIV 1000; tv[ 1] := ms MOD 1000 * 1000; t := SYSTEM.ADR( tv[ 0]) END;
   IF write THEN RETURN Select0( fd + 1, 0, SYSTEM.ADR( set[ 0]), 0, t)
   ELSE RETURN Select0( fd + 1, SYSTEM.ADR( set[ 0]), 0, 0, t)
   END
