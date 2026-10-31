@@ -13,7 +13,7 @@ MODULE browser;  (* the console browser of the ARM port: the interface of a modu
   2015-07-07  using OBM.prefix:="arm/" 
 *)
 
-IMPORT OBT, OBS, OBM, Files, Root, Texts, Oberon := Oberon0, out, SYSTEM;
+IMPORT OBT, OBS, OBM, Files, Root, Texts, Oberon := Oberon0, out, SYSTEM, HugeInt;
 
 CONST
 
@@ -56,9 +56,10 @@ PROCEDURE WriteFlags (obj: OBT.Object);
 END WriteFlags;
 
 PROCEDURE WriteConstValue (obj: OBT.Object);
-  VAR i: INTEGER; y: LONGINT; s: SET;  lr : LONGREAL;
+  VAR i: INTEGER; y: LONGINT; s: SET;  lr : LONGREAL; h: HugeInt.Huge; hs: ARRAY 24 OF CHAR;
 BEGIN
   y := obj.a0;
+  IF obj.typ = OBT.hinttyp THEN HugeInt.Pack(h, obj.a0, obj.a1); HugeInt.Str(h, hs); Str(hs); RETURN END;  (* polpo *)
   CASE obj.typ^.form OF
     | OBM.SInt, OBM.Int, OBM.LInt:  Texts.WriteInt(W, y, 0)
     | OBM.Real:  Texts.WriteReal(W, SYSTEM.VAL(REAL, obj.a0), 15)
@@ -110,7 +111,7 @@ BEGIN
     IF recField & (showAdr IN option) THEN Ch("["); Num(obj.a0); Str("] ") END;
     Str(obj^.name); IF recField THEN Ch("*") END;  (* polpo: the export mark, as on x86 *)
     obj := obj.next;
-    IF (obj = NIL) OR (obj^.mode # mode) OR (obj^.typ # typ) THEN EXIT END;
+    IF (obj = NIL) OR (obj^.mode # mode) OR (obj^.typ # typ) OR (obj^.name = "@r") THEN EXIT END;
     Str(", ");
   END;
   Str(": "); WriteType(typ, i + 1, FALSE)
@@ -120,19 +121,20 @@ PROCEDURE WriteParams (param: OBT.Object; res: OBT.Struct);
 BEGIN
   IF (param # NIL) OR (res # OBT.notyp) THEN
     Ch("(");  (* polpo: Name*(..., PROCEDURE(..., as on x86 *)
-    WHILE (param # NIL) DO
+    WHILE (param # NIL) & (param.name # "@r") DO  (* polpo: @r hidden, the result of a HUGEINT function *)
       IF param.mode = OBM.Par THEN Str("VAR ") END;
       IF param.name = "" THEN
         WriteType(param.typ, 0, FALSE);
         param := param.next;
-        IF param # NIL THEN Str(", ") END
+        IF (param # NIL) & (param.name # "@r") THEN Str(", ") END
       ELSE
         WriteFields(param, 0, FALSE);
-        IF param # NIL THEN Str("; ") END
+        IF (param # NIL) & (param.name # "@r") THEN Str("; ") END
       END
     END;
     Ch(")");
   END;
+  IF res = OBT.hptrtyp THEN res := OBT.hinttyp END;
   IF res # OBT.notyp THEN Str(": "); WriteType(res, 0, FALSE) END
 END WriteParams;
 

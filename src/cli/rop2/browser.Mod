@@ -7,7 +7,7 @@ MODULE browser;
 
   IMPORT
     OPM := ROPM, OPS := ROPS, OPT := ROPT, Linux0, Modules, Root,
-    Texts, Oberon := Oberon0, out;
+    Texts, Oberon := Oberon0, out, HugeInt;
 
   CONST
     (* object modes *)
@@ -54,22 +54,27 @@ MODULE browser;
     paren := res OR (par # NIL);
     IF paren THEN Wch("(") END ;
     WHILE par # NIL DO
+      IF (par^.name = "@r") & (option # "x") THEN par := par^.link  (* polpo: hidden, the result of a HUGEINT function *)
+      ELSE
       IF ~first THEN Ws("; ") ELSE first := FALSE END ;
       IF option = "x" THEN Wi(par^.adr); Wch(" ") END ;
       IF par^.mode = VarPar THEN Ws("VAR ") END ;
       Ws(par^.name);
-      WHILE (par^.link # NIL) & (par^.link^.typ = par^.typ) & (par^.link^.mode = par^.mode) DO  (* a, b: T *)
+      WHILE (par^.link # NIL) & (par^.link^.typ = par^.typ) & (par^.link^.mode = par^.mode) &
+          (par^.link^.name # "@r") DO  (* a, b: T *)
         par := par^.link; Ws(", "); IF option = "x" THEN Wi(par^.adr); Wch(" ") END; Ws(par^.name)
       END;
       Ws(": "); Wtype(par^.typ);
       par := par^.link
+      END
     END ;
     IF paren THEN Wch(")") END ;
+    IF result = OPT.hptrtyp THEN result := OPT.hinttyp END ;
     IF res THEN Ws(": "); Wtype(result) END
   END Wsign;
 
   PROCEDURE Objects(obj: OPT.Object; mode: SET);
-    VAR i: LONGINT; m: INTEGER; s: SET; ext: OPT.ConstExt;
+    VAR i: LONGINT; m: INTEGER; s: SET; ext: OPT.ConstExt; h: HugeInt.Huge; str: ARRAY 24 OF CHAR;
   BEGIN
     IF obj # NIL THEN
       Objects(obj^.left, mode);
@@ -77,6 +82,9 @@ MODULE browser;
         CASE obj^.mode OF
         | Con:
             Indent(2); Ws(obj^.name); Mrk(obj^.vis); Ws(" = ");
+            IF obj^.typ = OPT.hinttyp THEN  (* polpo *)
+              HugeInt.Pack(h, obj^.conval^.intval, obj^.conval^.intval2); HugeInt.Str(h, str); Ws(str)
+            ELSE
             CASE obj^.typ^.form OF
             | Bool:
                 IF obj^.conval^.intval = 1 THEN Ws("TRUE") ELSE Ws("FALSE") END
@@ -109,6 +117,7 @@ MODULE browser;
                 Wch(22X); Ws(obj^.conval^.ext^); Wch(22X)
             | NilTyp:
                 Ws("NIL")
+            END
             END ;
             Wch(";"); Wln
         | Typ:

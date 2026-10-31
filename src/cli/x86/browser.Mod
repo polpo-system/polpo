@@ -10,12 +10,12 @@ Refer to the license.txt file provided with this distribution. *)
 MODULE browser;  (** portable, except where noted *)
   IMPORT
     Kernel, Root, Modules := Modules0, OPM, OPS, OPT, OPV,
-    Files, Texts, (*Display,*) Oberon := Oberon0(*, Fonts*), out;
+    Files, Texts, (*Display,*) Oberon := Oberon0(*, Fonts*), out, HugeInt;
 
   CONST
     (*visibility*)  internal=0; external=1; externalR=2;
     (*object modes*)  Var=1; VarPar=2; Con=3; Fld=4; Typ=5; LProc=6; XProc=7; CProc=9; TProc=13;
-    (*structure forms*)  Bool=2; Char=3; SInt=4; Int=5; LInt=6; Real=7; LReal=8; Set=9; String=10; NilTyp=11;
+    (*structure forms*)  Bool=2; Char=3; SInt=4; Int=5; LInt=6; HInt=16; Real=7; LReal=8; Set=9; String=10; NilTyp=11;
     (*structure forms*)  Pointer=13; ProcTyp=14; Comp=15; StaticArr=2; DynArr=4; OpenArr = 5; Record = 6;
 
   VAR
@@ -60,14 +60,18 @@ MODULE browser;  (** portable, except where noted *)
   BEGIN  first:=TRUE; res:=result#OPT.notyp; paren:=res OR (par#NIL);
     IF  paren  THEN  Ch("(")  END;
     WHILE  par#NIL  DO
+      IF par.name = "@r" THEN par := par.link  (* polpo: hidden, the result of a HUGEINT function *)
+      ELSE
       IF  ~first  THEN  Str("; ")  ELSE  first:=FALSE  END;
       IF  par.mode=VarPar  THEN  Str("VAR ")  END;
       Adr(par.adr); Str(par.name);
-      WHILE  (par.link#NIL)&(par.link.typ=par.typ)&(par.link.mode=par.mode)  DO  Str(", "); par:=par.link; Adr(par.adr); Str(par.name)  END;
+      WHILE  (par.link#NIL)&(par.link.typ=par.typ)&(par.link.mode=par.mode)&(par.link.name#"@r")  DO  Str(", "); par:=par.link; Adr(par.adr); Str(par.name)  END;
       Str(": "); TypName(par.typ);
       par:=par.link
+      END
     END;
     IF  paren  THEN  Ch(")")  END;
+    IF result = OPT.hptrtyp THEN result := OPT.hinttyp END;
     IF  res  THEN  Str(": "); TypName(result)  END
   END Signature;
 
@@ -135,7 +139,7 @@ MODULE browser;  (** portable, except where noted *)
   END Structure;
 
   PROCEDURE Objects(obj: OPT.Object);
-    VAR i: LONGINT; m, vis: INTEGER; s: SET; con: OPT.Const; ext: OPT.ConstExt;
+    VAR i: LONGINT; m, vis: INTEGER; s: SET; con: OPT.Const; ext: OPT.ConstExt; h: HugeInt.Huge; hs: ARRAY 24 OF CHAR;
   BEGIN
     IF  obj#NIL  THEN  Objects(obj.left); vis:=obj.vis;
       IF  (obj.mode IN mode) & ((vis#internal) OR show)  THEN
@@ -148,6 +152,7 @@ MODULE browser;  (** portable, except where noted *)
                 IF  (con.intval>=32) & (con.intval<=126)  THEN  Ch(22X); Ch(CHR(con.intval)); Ch(22X)
                 ELSE  Hex(con.intval); Ch("X")  END
             | SInt, Int, LInt:  Dec(con.intval)
+            | HInt:  HugeInt.Pack(h, con.intval, con.intval2); HugeInt.Str(h, hs); Str(hs)  (* polpo *)
             | Set:
                 Ch("{"); i:=0; s:=con.setval;
                 WHILE  i <= MAX(SET)  DO
