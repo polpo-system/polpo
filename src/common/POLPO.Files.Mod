@@ -59,6 +59,7 @@ CONST
 
 TYPE
   File* = POINTER TO FileDesc;
+  Bytes* = POINTER TO ARRAY OF CHAR;  (** the contents of a file in memory, see NewMemory *)
 
   FileName*= ARRAY FnLength OF CHAR;
   Entry = POINTER TO EntryDesc;  (* polpo: a name in a directory, for RemoveTree *)
@@ -71,6 +72,9 @@ TYPE
       disk: LONGINT;  (* polpo: the length on disk of a file mapped shared, -1 for a private mapping *)
       epoch: LONGINT;  (* polpo: the value of epoch when the file was opened, see Reset *)
       changed: BOOLEAN;
+      memory: Bytes;  (* polpo: the contents of a file in memory (addr points to them), else NIL *)
+      capacity: LONGINT;  (* its fixed size *)
+      failed: BOOLEAN;  (* a write went beyond capacity *)
   END;
 
   Rider* = RECORD
@@ -405,6 +409,53 @@ BEGIN
   END;
 END Register;
 
+(** A file in memory of at most capacity bytes, with no name and nothing on disk; a write beyond capacity writes
+nothing and makes MemoryFailed TRUE until Purge. Register, Close and SetDate do nothing with it, GetDate gives
+0, 0. As in voc's Files. *)
+PROCEDURE NewMemory*(capacity: LONGINT): File;
+VAR f: File;
+BEGIN
+  IF capacity < 0 THEN RETURN NIL END;
+  NEW(f); f.Name := ""; f.fd := -1; f.dirfd := -1; f.len := 0; f.disk := -1; f.epoch := epoch; f.changed := FALSE;
+  IF capacity = 0 THEN NEW(f.memory, 1) ELSE NEW(f.memory, capacity) END;
+  f.addr := SYSTEM.ADR(f.memory[0]); f.capacity := capacity; f.failed := FALSE;
+  RETURN f
+END NewMemory;
+
+(** A file in memory holding a copy of data[0..length-1], of that capacity. *)
+PROCEDURE FromBytes*(VAR data: ARRAY OF CHAR; length: LONGINT): File;
+VAR f: File;
+BEGIN
+  IF (length < 0) OR (length > LEN(data)) THEN RETURN NIL END;
+  f := NewMemory(length);
+  IF length > 0 THEN SYSTEM.MOVE(SYSTEM.ADR(data[0]), f.addr, length) END;
+  f.len := length; RETURN f
+END FromBytes;
+
+PROCEDURE IsMemory*(f: File): BOOLEAN;
+BEGIN RETURN (f # NIL) & (f.memory # NIL)
+END IsMemory;
+
+(** a write beyond the capacity of the file in memory f failed (or f is NIL) *)
+PROCEDURE MemoryFailed*(f: File): BOOLEAN;
+BEGIN RETURN (f = NIL) OR (f.memory # NIL) & f.failed
+END MemoryFailed;
+
+(** the contents of the file in memory f, valid up to length, not copied; NIL and 0 for another file or after a
+failed write *)
+PROCEDURE MemoryData*(f: File; VAR length: LONGINT): Bytes;
+BEGIN
+  length := 0;
+  IF ~IsMemory(f) OR f.failed THEN RETURN NIL END;
+  length := f.len; RETURN f.memory
+END MemoryData;
+
+(** f becomes empty: Close or Register writes it so, a file in memory can be written again *)
+PROCEDURE Purge*(f: File);
+BEGIN
+  IF f # NIL THEN f.len := 0; f.failed := FALSE; IF f.memory = NIL THEN f.changed := TRUE END END
+END Purge;
+
 (** Flushes the changes made to a file to disk. Register will automatically Close a file. *)
 (* polpo: a file with a descriptor (registered, or opened with Old) is written if it changed; it
    stays usable and keeps its name (Close cleared the name: a later Register wrote nothing, so the
@@ -456,6 +507,9 @@ END SetDate;
 at different locations in a file. A Rider cannot be positioned beyond the end of a file. *)
 PROCEDURE Set*(VAR r: Rider; f: File; pos: LONGINT);
 BEGIN
+  IF (f # NIL) & (f.memory # NIL) THEN  (* polpo: as voc, inside a file in memory *)
+    IF pos < 0 THEN pos := 0 ELSIF pos > f.len THEN pos := f.len END
+  END;
   r.file:= f;
   r.apos:= pos;
   r.res:= 0;
@@ -582,7 +636,17 @@ END ReadNum;
 PROCEDURE WriteBytes*(VAR r: Rider; VAR x: ARRAY OF SYSTEM.BYTE; n: LONGINT);
 VAR f: File;  lo, ln: LONGINT;
 BEGIN
-  f:=r.file; Fresh(f);
+  f:=r.file;
+  IF f.memory # NIL THEN  (* polpo: a file in memory, see NewMemory *)
+    IF LEN(x)<n THEN HALT(103) END;
+    IF n <= 0 THEN r.res:=0; RETURN END;
+    IF r.apos > f.len THEN r.apos:=f.len END;
+    IF f.failed OR (n > f.capacity - r.apos) THEN f.failed:=TRUE; r.res:=n; RETURN END;
+    SYSTEM.MOVE(SYSTEM.ADR(x[0]), f.addr+r.apos, n); INC(r.apos, n);
+    IF r.apos > f.len THEN f.len:=r.apos END;
+    r.res:=0; r.eof:=r.apos>=f.len; RETURN
+  END;
+  Fresh(f);
   lo:=(f.len+Linux0.PageSize-1)DIV Linux0.PageSize*Linux0.PageSize;  (* the length of the mapping *)
   IF lo=0 THEN lo:= Linux0.PageSize END;
   ln:=(r.apos+n+Linux0.PageSize-1) DIV Linux0.PageSize*Linux0.PageSize;
@@ -624,10 +688,11 @@ Portable routines to write the standard Oberon types.
 *)
 
 PROCEDURE WriteWord(VAR r: Rider; x: LONGINT; n: INTEGER);  (* n bytes of x, least significant first *)
-VAR i: INTEGER;
+VAR i: INTEGER; b: ARRAY 4 OF CHAR;
 BEGIN
   i := 0;
-  WHILE i < n DO Write(r, CHR(SYSTEM.LSH(x, -8*i) MOD 100H)); INC(i) END
+  WHILE i < n DO b[i] := CHR(SYSTEM.LSH(x, -8*i) MOD 100H); INC(i) END;
+  WriteBytes(r, b, n)  (* polpo: in one piece: a file in memory takes all of it or nothing *)
 END WriteWord;
 
 PROCEDURE WriteInt*(VAR r: Rider; x: INTEGER);
@@ -656,12 +721,13 @@ BEGIN
 END WriteReal;
 
 PROCEDURE WriteLReal*(VAR r: Rider; x: LONGREAL);  (* the low word first *)
-VAR lo, hi: LONGINT;
+VAR lo, hi, i: LONGINT; b: ARRAY 8 OF CHAR;
 BEGIN
   SYSTEM.GET(SYSTEM.ADR(x), lo); SYSTEM.GET(SYSTEM.ADR(x) + 4, hi);
-  IF bigEndian THEN WriteWord(r, hi, 4); WriteWord(r, lo, 4)
-  ELSE WriteWord(r, lo, 4); WriteWord(r, hi, 4)
-  END
+  IF bigEndian THEN i := lo; lo := hi; hi := i END;
+  i := 0;
+  WHILE i < 4 DO b[i] := CHR(SYSTEM.LSH(lo, -8*i) MOD 100H); b[i + 4] := CHR(SYSTEM.LSH(hi, -8*i) MOD 100H); INC(i) END;
+  WriteBytes(r, b, 8)
 END WriteLReal;
 
 PROCEDURE WriteString*(VAR r: Rider; x: ARRAY OF CHAR);
