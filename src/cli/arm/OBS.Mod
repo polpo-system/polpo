@@ -1,6 +1,6 @@
 MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *)
 
-  IMPORT DecReal, Texts := Texts0, Oberon := Oberon0;
+  IMPORT SYSTEM, DecReal, HugeInt, Texts := Texts0, Oberon := Oberon0;
 
   (*symbols:
       |  0          1          2           3            4
@@ -30,8 +30,9 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
 
   (*name, numtyp, intval, realval, lrlval are implicit results of Get*)
 
-  VAR numtyp* : INTEGER; (* 1 = char, 2 = integer, 3 = real, 4 = longreal*)
-    intval* : LONGINT;
+  VAR numtyp* : INTEGER; (* 1 = char, 2 = integer, 3 = real, 4 = longreal, 5 = huge *)
+    intval* : LONGINT;  (* the low word of a huge *)
+    intval2* : LONGINT;  (* polpo: the high word of a huge, a number too large for a LONGINT *)
     realval*: REAL;
     lrlval* : LONGREAL;
     scanerr*: BOOLEAN;
@@ -126,7 +127,7 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
 
   PROCEDURE Number;
     VAR i, j, c, e, s, n, extra, res: INTEGER;
-      k: LONGINT;
+      k, lo, hi: LONGINT; v, t, ten, digit: HugeInt.Huge;
       lastCh, expch: CHAR;
       negE, hex, sticky: BOOLEAN;
       d: ARRAY maxDig OF INTEGER;
@@ -189,12 +190,17 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
     ELSIF lastCh = "H" THEN
       GetCh;
       WHILE (j<i) & (d[j] = 0) DO INC(j) END ;
+      numtyp := 2;
       IF i-j <= 8 THEN
         IF (i-j = 8) & (d[j] >= 8) THEN DEC(d[j], 16) END ;
         WHILE j < i DO k := k * 10H + d[j]; INC(j) END
+      ELSIF i-j <= 16 THEN  (* polpo: HUGEINT, 16 digits wrap around as 8 digits of a LONGINT *)
+        numtyp := 5; hi := 0;
+        WHILE j < i DO hi := hi * 10H + SYSTEM.LSH(k, -28); k := k * 10H + d[j]; INC(j) END ;
+        intval2 := hi
       ELSE Mark(203)
       END ;
-      numtyp := 2; intval := k
+      intval := k
     ELSIF lastCh = "X" THEN
       GetCh;
       WHILE j < i DO
@@ -204,13 +210,15 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
       numtyp := 1; intval := k
     ELSE (*decimal integer*)
       IF hex THEN Mark(2) END ;
-      WHILE j < i DO
-        IF k <= (MAX(LONGINT) - d[j]) DIV 10 THEN k := k*10 + d[j]
-        ELSE Mark(203); k := 0
-        END ;
-        INC(j)
+      (* polpo: up to MAX(HUGEINT); larger than MAX(LONGINT) is a huge *)
+      HugeInt.Pack(v, 0, 0); HugeInt.Pack(ten, 10, 0);
+      WHILE j < i DO HugeInt.Pack(digit, d[j], 0);
+        IF HugeInt.MulOvf(t, v, ten) OR HugeInt.AddOvf(v, t, digit) THEN Mark(203); HugeInt.Pack(v, 0, 0); j := i
+        ELSE INC(j)
+        END
       END ;
-      numtyp := 2; intval := k
+      HugeInt.Unpack(v, lo, hi); intval := lo; intval2 := hi;
+      IF (hi # 0) OR (lo < 0) THEN numtyp := 5 ELSE numtyp := 2 END
     END
   END Number;
 

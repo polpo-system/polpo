@@ -44,6 +44,11 @@ CONST
       log: INTEGER;   (*side effect of mant*)
       intSet, realSet: SET;
       modName* : ARRAY 32 OF CHAR; (* name of module *)
+      (* polpo: HUGEINT, compiled by OBH (into calls of HugeInt); see OBH.HugeOp *)
+      hugeOp*: PROCEDURE (op: INTEGER; VAR x, y: OBT.Item);
+      hugeMOp*: PROCEDURE (op: INTEGER; VAR x: OBT.Item);
+      hugeStd1*: PROCEDURE (fctno: LONGINT; VAR x: OBT.Item): BOOLEAN;
+      hugeStd2*: PROCEDURE (fctno: LONGINT; VAR p, x: OBT.Item): BOOLEAN;
 
   PROCEDURE mant(x: LONGINT): LONGINT;  (*x DIV 2^log*)
   BEGIN
@@ -462,6 +467,15 @@ CONST
     END
   END SetIntType;
 
+  (* polpo: x becomes the constant lo, hi (a HUGEINT); a value that fits a LONGINT gets the smallest integer type *)
+  PROCEDURE HugeConst*(VAR x: OBT.Item; lo, hi: LONGINT);
+  BEGIN
+    x.mode := OC.Const; x.a := lo; x.obj := NIL;
+    IF (hi = 0) & (lo >= 0) OR (hi = -1) & (lo < 0) THEN x.b := 0; x.typ := OBT.linttyp; SetIntType(x)
+    ELSE x.b := hi; x.typ := OBT.hinttyp
+    END
+  END HugeConst;
+
   PROCEDURE MakeConstItem*(VAR x: OBT.Item; c : LONGINT; typ : OBT.Struct);
   BEGIN
     x.mode:=OC.Const; x.a:=c; x.typ:=typ; x.obj:=NIL;
@@ -474,6 +488,7 @@ CONST
     f := y.typ.form;
     IF ~(f IN intSet) THEN OBS.Mark(80); y.typ := OBT.inttyp END ;
     IF x.typ = NIL THEN HALT(80) END ;
+    IF x.typ = OBT.hinttyp THEN OBS.Mark(82); x.typ := OBT.undftyp END ;  (* polpo *)
     IF x.lev<0 THEN loadAdr(x); x.mode:=OC.Var; x.a:=0; x.lev:=OBC.level END;
     IF x.typ.form = OC.Array THEN
       eltyp := x.typ.BaseTyp;
@@ -848,6 +863,7 @@ CONST
   PROCEDURE MOp*(op: INTEGER; VAR x: OBT.Item);
     VAR f: INTEGER; a, cc: LONGINT; set : SET; r : REAL; lr : LONGREAL;
   BEGIN f := x.typ.form; 
+    IF (x.typ = OBT.hinttyp) & ((op = OC.minus) OR (op = OC.plus)) & (hugeMOp # NIL) THEN hugeMOp(op, x); RETURN END ;
     CASE op OF
       OC.and: (*&*)
       IF x.mode # OC.CC THEN loadCC(x) END;
@@ -909,7 +925,7 @@ CONST
     END
   END convertRealToLReal;
 
-  PROCEDURE convertLRealToReal(VAR x: OBT.Item);
+  PROCEDURE convertLRealToReal*(VAR x: OBT.Item);
   VAR r:REAL; lr: LONGREAL;
   BEGIN
     IF x.mode = OC.Const THEN
@@ -1050,6 +1066,7 @@ CONST
     END CompBool;
 
   BEGIN
+    IF ((x.typ = OBT.hinttyp) OR (y.typ = OBT.hinttyp)) & (hugeOp # NIL) THEN hugeOp(op, x, y); RETURN END ;
     IF x.typ # y.typ THEN
       g := y.typ.form;
       CASE x.typ.form OF
@@ -1338,6 +1355,7 @@ CONST
   PROCEDURE StPar1*(VAR x: OBT.Item; fctno: LONGINT);
     VAR f : INTEGER; y: OBT.Item;  typ : OBT.Struct; L0, r : LONGINT; lr : LONGREAL; rr: REAL;
   BEGIN f := x.typ.form;
+    IF (hugeStd1 # NIL) & hugeStd1(fctno, x) THEN RETURN END ;  (* polpo: HUGEINT *)
     CASE fctno OF
        OBT.FnHalt, OBT.FnSysHalt: 
           IF (f IN intSet) & (x.mode = OC.Const) THEN
@@ -1587,6 +1605,7 @@ CONST
   PROCEDURE StPar2*(VAR p, x: OBT.Item; fctno: LONGINT);
     VAR f : INTEGER; L, tmpreg, shiftright : LONGINT; y: OBT.Item; typ: OBT.Struct; 
   BEGIN 
+    IF (hugeStd2 # NIL) & hugeStd2(fctno, p, x) THEN RETURN END ;  (* polpo: HUGEINT *)
     f := x.typ.form;
     CASE fctno OF
       OBT.FnInc, OBT.FnDec: 
@@ -1855,7 +1874,8 @@ CONST
     ELSIF fctno >= OBT.FnInc THEN
       IF ((fctno = OBT.FnInc) OR (fctno = OBT.FnDec)) & (parno = 1)  THEN
         MakeConstItem(t,1,OBT.linttyp);
-        IF fctno=OBT.FnInc THEN DPInstrWriteback(OBC.ADD,x,t, TRUE) ELSE DPInstrWriteback(OBC.SUB,x,t, TRUE) END;
+        IF (x.typ = OBT.hinttyp) & (hugeStd2 # NIL) & hugeStd2(fctno, x, t) THEN (* polpo *)
+        ELSIF fctno=OBT.FnInc THEN DPInstrWriteback(OBC.ADD,x,t, TRUE) ELSE DPInstrWriteback(OBC.SUB,x,t, TRUE) END;
         x.typ := OBT.notyp
       ELSIF (fctno = OBT.FnLen) & (parno = 1) THEN 
         IF x.typ.form = OC.DynArr THEN

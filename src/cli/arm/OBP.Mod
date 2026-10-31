@@ -203,10 +203,10 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
 
   PROCEDURE FormalParameters(VAR resTyp: OBT.Struct; VAR psize: LONGINT);
     VAR mode: SHORTINT;
-      adr, size: LONGINT; res: OBT.Item;
-      par, par1: OBT.Object; typ: OBT.Struct;
+      adr, size, psize0: LONGINT; res: OBT.Item;
+      par, par1: OBT.Object; typ: OBT.Struct; name: ARRAY 4 OF CHAR;
   BEGIN
-    par1 := OBT.topScope; adr := 0;
+    par1 := OBT.topScope; adr := 0; psize0 := psize;
     IF (sym = OC.ident) OR (sym = OC.var) THEN
       LOOP
         IF sym = OC.var THEN OBS.Get(sym); mode := OC.Par ELSE mode := OC.Var END ;      
@@ -253,7 +253,12 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       OBS.Get(sym); resTyp := OBT.undftyp;
       IF sym = OC.ident THEN qualident(res);
         IF res.mode = OC.Typ THEN
-          IF (res.typ.form <= OC.ProcTyp) & (res.typ.form # OC.NoTyp) THEN resTyp := res.typ
+          IF res.typ = OBT.hinttyp THEN  (* polpo: the result into an hidden last parameter, see OBH *)
+            resTyp := OBT.hptrtyp;
+            par := OBT.topScope.next; WHILE par # NIL DO INC(par.a0, 4); par := par.next END;
+            name := "@r"; OBT.Insert(name, par); par.mode := OC.Par; par.typ := OBT.hinttyp; par.a0 := psize0;
+            INC(psize, 4)
+          ELSIF (res.typ.form <= OC.ProcTyp) & (res.typ.form # OC.NoTyp) THEN resTyp := res.typ
           ELSE OBS.Mark(54)
           END
         ELSE OBS.Mark(52)
@@ -388,7 +393,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
 
   PROCEDURE ActualParameters(VAR x: OBT.Item; fpar: OBT.Object);
     VAR apar: OBT.Item; R: SET; psize : LONGINT; typ: OBT.Struct; n: Narrowed;
-  BEGIN
+  BEGIN psize := 0;
     IF OBT.IsParam(fpar) THEN
       (* Calculate size of Parameter-Block including both links and return address and align it *)
       psize:=fpar.a0+fpar.typ.size; psize:=(psize+3) DIV 4 * 4; 
@@ -397,7 +402,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       R := OBC.UsedRegisters();
       LOOP
         Expression(apar);
-        IF OBT.IsParam(fpar) THEN
+        IF OBT.IsParam(fpar) & ~OBH.Hidden(fpar) THEN
           (* polpo: a parameter of the procedure itself narrowed by a WITH around the call is passed as
              its declared type, the outermost entry *)
           typ := fpar.typ; n := narrowed;
@@ -412,6 +417,12 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         END
       END
     END ;
+    IF OBH.Hidden(fpar) THEN  (* polpo: a temporary for the HUGEINT result *)
+      IF ~OBT.IsParam(fpar.next) THEN
+        IF psize = 0 THEN psize := fpar.a0 + fpar.typ.size; psize := (psize+3) DIV 4 * 4 END;
+        OBH.HiddenParam(fpar, psize); fpar := fpar.next
+      END
+    END;
     IF OBT.IsParam(fpar) THEN OBS.Mark(65)
     END
   END ActualParameters;
@@ -507,6 +518,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         ActualParameters(x, fpar);
         OBH.Call(x); 
         OBC.RestoreRegisters(gR, gF, x); 
+        IF x.typ = OBT.hptrtyp THEN OBH.HugeResult(x) END;  (* polpo *)
         CheckSym(OC.rparen)
       END
     ELSIF sym = OC.number THEN
@@ -516,6 +528,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       | 2: x.a:=OBS.intval; OBE.SetIntType(x)
       | 3: x.typ := OBT.realtyp; SYSTEM.PUT(SYSTEM.ADR(x.a), OBS.realval)
       | 4: x.typ := OBT.lrltyp; SYSTEM.PUT(SYSTEM.ADR(x.a), OBS.lrlval) 
+      | 5: OBE.HugeConst(x, OBS.intval, OBS.intval2)  (* polpo *)
       END;
     ELSIF sym = OC.string THEN
       x.typ := OBT.stringtyp; x.mode := OC.Const; 
@@ -749,6 +762,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
 
   BEGIN
     LOOP
+      OBH.hugeNext := 0;
       IF sym < OC.ident THEN OBS.Mark(14);
         REPEAT OBS.Get(sym) UNTIL sym >= OC.ident
       END ;
@@ -987,6 +1001,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       OBH.Enter(OC.Mod,0);
     END;
     IF sym = OC.begin THEN OBS.Get(sym); StatSeq END ;
+    OBH.PatchTemps;  (* polpo *)
     CheckSym(OC.end);
   END Block;
 

@@ -4,6 +4,10 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
 
   CONST 
       SFtag = 0F7X; firstStr = 17;
+      (* polpo: HUGEINT is an ARRAY 2 OF LONGINT for the code generator, a predefined type of reference HugeRef in
+        symbol files. A function returning a HUGEINT has an hidden last parameter VAR @r: HUGEINT and returns
+        the address of @r, typed hptrtyp (reference HPtrRef), dereferenced by the caller (see OBH). *)
+      HugeRef = 14; HPtrRef = 15;
       maxEnt = 256; maxStr = 256; maxUDP = 128; maxMod = 24; maxParLev = 6;
       PtrSize = 4; ProcSize = 4; NotYetExp = 0;
       
@@ -123,6 +127,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
   VAR topScope*: Object;
     undftyp*, bytetyp*, booltyp*, chartyp*, sinttyp*, inttyp*, linttyp*,
     realtyp*, lrltyp*, settyp*, stringtyp*, niltyp*, notyp*, sysptrtyp*: Struct;
+    hinttyp*, hptrtyp*: Struct;  (* polpo: HUGEINT, and the result type of a function returning a HUGEINT *)
     nofGmod*, entno*: INTEGER;   (*nof imports, nof entries*)
     GlbMod*:  ARRAY OC.MaxImps OF Object;
     entry*: ARRAY maxEnt OF LONGINT;
@@ -276,7 +281,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
           struct[OC.LInt] := linttyp;  struct[OC.Real] := realtyp;
           struct[OC.LReal] := lrltyp;  struct[OC.Set] := settyp;
           struct[OC.String] := stringtyp; struct[OC.NilTyp] := niltyp; struct[OC.NoTyp] := notyp;
-          struct[OC.SysPtr] := sysptrtyp;
+          struct[OC.SysPtr] := sysptrtyp; struct[HugeRef] := hinttyp; struct[HPtrRef] := hptrtyp;
           LOOP (*read next item from symbol file*)
             Files.Read(R, ch); class := ORD(ch);
             IF R.eof THEN EXIT END ;
@@ -286,6 +291,8 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
               Files.Read(R, ch); s := ORD(ch); obj.typ := struct[s];
               CASE class OF
                 1: obj.mode := OC.Const;
+                    IF obj.typ = hinttyp THEN Files.ReadLInt(R, obj.a0); Files.ReadLInt(R, obj.a1)  (* polpo *)
+                    ELSE
                     CASE obj.typ.form OF
                       OC.SInt, OC.Bool: Files.Read(R, si); obj.a0 := si
                     | OC.Byte, OC.Char: Files.Read(R, ch); obj.a0 := ORD(ch)
@@ -294,6 +301,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
                     | OC.LReal: Files.ReadLInt(R, obj.a0); Files.ReadLInt(R, obj.a1)
                     | OC.String: Files.ReadLInt(R,obj.a1); NEW(obj.ext); Files.ReadString(R, obj.ext.str);
                     | OC.NilTyp: (*NIL*)
+                    END
                     END
               |2,3: obj.mode := OC.Typ; Files.Read(R, ch); m := ORD(ch);
                     IF obj.typ.strobj = NIL THEN obj.typ.strobj := obj END;
@@ -385,6 +393,32 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
     END
   END Import;
 
+  (* polpo: the object name of the imported module mod, without changing OBS.name *)
+  PROCEDURE FindIn*(mod: Object; name: ARRAY OF CHAR): Object;
+    VAR obj: Object;
+  BEGIN obj := mod.dsc;
+    WHILE (obj # NIL) & (obj.name # name) DO obj := obj.next END ;
+    RETURN obj
+  END FindIn;
+
+  (* polpo: the module name, imported for the compiler's own calls (HugeInt) under the alias @name, self the module
+    compiled; NIL if it has no symbol file *)
+  PROCEDURE ImportHidden*(name, self: ARRAY OF CHAR): Object;
+    VAR scope, obj: Object; alias: ARRAY 32 OF CHAR; i: INTEGER;
+  BEGIN
+    alias := "@"; i := 0; WHILE (name[i] # 0X) & (i < LEN(alias) - 2) DO alias[i + 1] := name[i]; INC(i) END ;
+    alias[i + 1] := 0X;
+    scope := topScope; WHILE topScope.a0 > 0 DO topScope := topScope.dsc END ;  (* the scope of the module *)
+    obj := topScope.next; WHILE (obj # NIL) & (obj.name # alias) DO obj := obj.next END ;
+    IF obj = NIL THEN
+      Import(alias, self, name);
+      obj := topScope.next; WHILE (obj # NIL) & (obj.name # alias) DO obj := obj.next END
+    END ;
+    topScope := scope;
+    IF (obj # NIL) & (obj.mode # OC.Mod) THEN obj := NIL END ;
+    RETURN obj
+  END ImportHidden;
+
   (*---------------------- export ------------------------*)
 
   PROCEDURE^ OutStr(VAR W: Files.Rider; typ: Struct);
@@ -468,7 +502,10 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
   BEGIN obj := topScope.next;
     WHILE obj # NIL DO
       IF obj.marked THEN
-        IF obj.mode = OC.Const THEN
+        IF (obj.mode = OC.Const) & (obj.typ = hinttyp) THEN  (* polpo *)
+          Files.Write(W, 1); Files.Write(W, HugeRef); Files.WriteLInt(W, obj.a0); Files.WriteLInt(W, obj.a1);
+          Files.WriteString(W, obj.name)
+        ELSIF obj.mode = OC.Const THEN
           Files.Write(W, 1); f := obj.typ.form; Files.Write(W, SHORT(f));
            CASE f OF
              OC.Undef:
@@ -563,6 +600,16 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
     typ.mno := 0; typ.ref := form; res := typ
   END EnterTyp;
 
+  PROCEDURE EnterHuge;  (* polpo *)
+    VAR obj: Object; name: ARRAY 8 OF CHAR;
+  BEGIN name := "HUGEINT"; Insert(name, obj);
+    NEW(hinttyp); obj.mode := OC.Typ; obj.typ := hinttyp; obj.marked := TRUE;
+    hinttyp.form := OC.Array; hinttyp.BaseTyp := linttyp; hinttyp.strobj := obj; hinttyp.size := 8;
+    hinttyp.mno := 0; hinttyp.ref := HugeRef;
+    NEW(hptrtyp); hptrtyp.form := OC.Pointer; hptrtyp.BaseTyp := hinttyp; hptrtyp.size := PtrSize;
+    hptrtyp.mno := 0; hptrtyp.ref := HPtrRef
+  END EnterHuge;
+
   PROCEDURE EnterProc(name: ARRAY OF CHAR; num: INTEGER);
     VAR obj: Object;
   BEGIN Insert(name, obj); obj.mode := OC.SProc; obj.typ := notyp; obj.a0 := num
@@ -600,7 +647,7 @@ BEGIN
   EnterTyp("SET", OC.Set, 4, settyp);
   EnterTyp("REAL", OC.Real, 4, realtyp);
   EnterTyp("INTEGER", OC.Int, 2, inttyp);
-  EnterTyp("LONGINT",  OC.LInt, 4, linttyp);
+  EnterTyp("LONGINT",  OC.LInt, 4, linttyp); EnterHuge;
   EnterTyp("LONGREAL", OC.LReal, 8, lrltyp);
   EnterTyp("SHORTINT", OC.SInt, 1, sinttyp);
   EnterTyp("BOOLEAN", OC.Bool, 1, booltyp);

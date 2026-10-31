@@ -860,6 +860,29 @@ END PushF;
     RegSetF := tF - RegSetF;
   END SaveRegisters;
 
+  (* polpo: as SaveRegisters; the registers in keep are not saved and stay allocated: they hold the arguments of a
+    call of HugeInt (OBH.HugeCall), used up by the call *)
+  PROCEDURE SaveRegistersKeep*(VAR gR, gF: SET; keep: SET);
+    VAR t, tF: SET;
+  BEGIN
+    t := RegSet; tF := RegSetF;
+    RegSet := RegSet - keep;
+    gR := RegSet; gF := RegSetF;
+    IF RegSet # {} THEN PutBDT(STMDB,SP,RegSet,TRUE) END;
+    IF RegSetF # {} THEN PushF(RegSetF) END;
+    RegSet := t - RegSet;
+    RegSetF := tF - RegSetF;
+  END SaveRegistersKeep;
+
+  (* polpo: the constant of the instruction PutDP1 wrote at loc becomes const; FALSE if it does not fit *)
+  PROCEDURE PatchDP1*(loc, const: LONGINT): BOOLEAN;
+    VAR imm, r: LONGINT;
+  BEGIN
+    IF DecomposeConst(const, imm, r) THEN code[loc] := code[loc] - code[loc] MOD 1000H + r*100H + imm; RETURN TRUE
+    ELSE RETURN FALSE
+    END
+  END PatchDP1;
+
 (*  
   PROCEDURE RestoreRegisters*(gR: SET; VAR x: OBT.Item);
   VAR r : LONGINT; 
