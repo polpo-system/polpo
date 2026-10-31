@@ -309,12 +309,16 @@ MODULE VOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     
     PROCEDURE^ expr(n: OPT.Node);
   
+    PROCEDURE^ Call(n: OPT.Node);
+
     PROCEDURE design(n: OPT.Node);
     BEGIN
       CASE n^.class OF
         Nvar, Nvarpar:
       | Nfield, Nderef, Nguard, Neguard:
           design(n^.left)
+      | Ncall:  (* polpo: the result of a function dereferenced (HUGEINT) *)
+          Call(n)
       | Nindex:
           design(n^.left); expr(n^.right)
       | Nproc, Ncommon:
@@ -427,7 +431,7 @@ MODULE VOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
   PROCEDURE^ expr(n: OPT.Node; VAR x: OPL.Item; rt: LONGINT);  (* rt # -1 indicates the target register to be used *)
 
   PROCEDURE design(n: OPT.Node; VAR x: OPL.Item; rt: LONGINT);
-    VAR obj: OPT.Object; y: OPL.Item; adr: LONGINT;
+    VAR obj: OPT.Object; y: OPL.Item; adr, r: LONGINT;
   BEGIN
     CASE n^.class OF
       Nvar, Nvarpar:
@@ -443,7 +447,16 @@ MODULE VOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     | Nfield:
         design(n^.left, x, rt); OPC.Field(x, n^.obj^.adr, rt)
     | Nderef:
-        design(n^.left, x, rt); OPC.DeRef(x, rt);
+        (* polpo: also the pointer a function returns, as the compiler makes for HUGEINT; moved out of the result
+          register, which MOPC and AOPC also use as a scratch register (T1, T0) *)
+        IF n^.left^.class = Ncall THEN
+          expr(n^.left, x, -1);
+          IF x.mode = OPL.Reg THEN
+            y := x; r := -1; OPL.GetR(OPL.TempReg, r); x.reg := r; OPL.Move(x, y, OPL.LInt)
+          END
+        ELSE design(n^.left, x, rt)
+        END ;
+        OPC.DeRef(x, rt);
     | Nindex:
         design(n^.left, x, -1); expr(n^.right, y, -1); OPC.Index(x, y, rt)
     | Nguard:
@@ -468,8 +481,7 @@ MODULE VOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
     IF n# NIL THEN
       c:=n^.class;
       IF c=Ncall THEN fip:=TRUE;
-      ELSIF c=Nmop THEN HasFunction( n^.left);
-      ELSIF c=Ndop THEN
+      ELSE  (* polpo: also calls inside designators, as in a[f(i)] or f(x)^ (HUGEINT), as in AOPV *)
         HasFunction( n^.left);
         HasFunction( n^.right);
       END;
