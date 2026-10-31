@@ -3,7 +3,7 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
   Peter Matthias
 *)
 
-  IMPORT OPM:=ROPM, DecReal;
+  IMPORT SYSTEM, OPM:=ROPM, DecReal, HugeInt;
   
   CONST
     MaxStrLen* = 256;
@@ -18,8 +18,9 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
   VAR
     name*: Name;
     str*: String;
-    numtyp*: INTEGER; (* 1 = char, 2 = integer, 3 = real, 4 = longreal *)
-    intval*: LONGINT;  (* integer value or string length *)
+    numtyp*: INTEGER; (* 1 = char, 2 = integer, 3 = real, 4 = longreal, 5 = huge *)
+    intval*: LONGINT;  (* integer value or string length; low word of a huge *)
+    intval2*: LONGINT;  (* polpo: high word of a huge, a number too large for a LONGINT *)
     realval*: REAL;
     lrlval*: LONGREAL;
 
@@ -42,7 +43,7 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
 
   CONST
     (* numtyp values *)
-    char = 1; integer = 2; real = 3; longreal = 4;
+    char = 1; integer = 2; real = 3; longreal = 4; huge = 5;
 
     (*symbol values*)
     null = 0; times = 1; slash = 2; div = 3; mod = 4;
@@ -94,6 +95,7 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
 
   PROCEDURE Number;
     VAR i, m, n, d, e, res: INTEGER; dig: ARRAY 24 OF CHAR; expCh: CHAR; neg, sticky: BOOLEAN;
+      v, t, ten, digit: HugeInt.Huge; lo, hi: LONGINT;
 
 
     PROCEDURE Ord(ch: CHAR; hex: BOOLEAN): INTEGER;
@@ -132,15 +134,21 @@ MODULE ROPS;  (* NW, RC 6.3.89 / 18.10.92 *)    (* object model 3.6.92 *)
           IF n <= OPM.MaxHDig THEN
             IF (n = OPM.MaxHDig) & (dig[0] > "7") THEN (* prevent overflow *) intval := -1 END;
             WHILE i < n DO intval := intval*10H + Ord(dig[i], TRUE); INC(i) END
+          ELSIF n <= 2 * OPM.MaxHDig THEN  (* polpo: HUGEINT, 16 digits wrap around as 8 digits of a LONGINT *)
+            numtyp := huge; intval2 := 0;
+            WHILE i < n DO
+              intval2 := intval2*10H + SYSTEM.LSH(intval, -28); intval := intval*10H + Ord(dig[i], TRUE); INC(i)
+            END
           ELSE  err(203)
           END
         ELSE (* decimal *) numtyp := integer;
-          WHILE i < n DO d := Ord(dig[i], FALSE); INC(i);
-            IF intval <= (MAX(LONGINT) - d) DIV 10 THEN intval := intval*10 + d
-            ELSE OPM.LogWNum(i, 8); OPM.LogWNum(n, 8); OPM.LogWNum(intval, 8); OPM.LogWNum(d, 8);  
-                      OPM.LogWHex((MAX(LONGINT) - d) DIV 10);  err(207)
-            END
-          END
+          (* polpo: up to MAX(HUGEINT); larger than MAX(LONGINT) is a huge *)
+          HugeInt.Pack(v, 0, 0); HugeInt.Pack(ten, 10, 0);
+          WHILE i < n DO d := Ord(dig[i], FALSE); INC(i); HugeInt.Pack(digit, d, 0);
+            IF HugeInt.MulOvf(t, v, ten) OR HugeInt.AddOvf(v, t, digit) THEN err(203); HugeInt.Pack(v, 0, 0); i := n END
+          END ;
+          HugeInt.Unpack(v, lo, hi); intval := lo; intval2 := hi;
+          IF (hi # 0) OR (lo < 0) THEN numtyp := huge END
         END
       ELSE err(203)
       END

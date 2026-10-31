@@ -70,12 +70,17 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
     maxImps = 64;  (* must be <= MAX(SHORTINT) *)
     maxStruct = OPM.MaxStruct;  (* must be < MAX(INTEGER) DIV 2 *)
     FirstRef = 16;
+    (* polpo: HUGEINT is an ARRAY 2 OF LONGINT for the code generators, a predefined type of reference HugeRef in
+      symbol files; its constants have the tag HugeRef. A function returning a HUGEINT has an hidden last parameter
+      VAR @r: HUGEINT and returns the address of @r, typed hptrtyp (reference HPtrRef), dereferenced by the caller. *)
+    HugeRef = 15; HPtrRef = 14; HugeFp = 16; HPtrFp = 17;
 
   VAR
     typeSize*:PROCEDURE(typ: Struct);
     topScope*: Object;
     undftyp*, bytetyp*, booltyp*, chartyp*, sinttyp*, inttyp*, linttyp*,
     realtyp*, lrltyp*, settyp*, stringtyp*, niltyp*, notyp*, sysptrtyp*: Struct;
+    hinttyp*, hptrtyp*: Struct;  (* polpo: HUGEINT, and the result type of a function returning a HUGEINT *)
     nofGmod*: SHORTINT;  (*nof imports*)
     GlbMod*: ARRAY maxImps OF Object;  (* ^.right = first object, ^.name = module import name (not alias) *)
     SelfName*: OPS.Name;  (* name of module being compiled *)
@@ -401,8 +406,11 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
       fprint := 0; obj^.fpdone := TRUE;
       OPM.FPrint(fprint, obj^.mode);
       IF obj^.mode = Con THEN
-        f := obj^.typ^.form; OPM.FPrint(fprint, f);
+        f := obj^.typ^.form; IF obj^.typ = hinttyp THEN f := HugeRef END ;
+        OPM.FPrint(fprint, f);
         CASE f OF
+        | HugeRef:
+          OPM.FPrint(fprint, obj^.conval^.intval); OPM.FPrint(fprint, obj^.conval^.intval2)
         | Bool, Char, SInt, Int, LInt:
           OPM.FPrint(fprint, obj^.conval^.intval)
         | Set:
@@ -573,6 +581,8 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
       OPM.SymRCh(ch); conval^.intval := ORD(ch)
     | SInt, Int, LInt:
       conval^.intval := OPM.SymRInt()
+    | HugeRef:
+      conval^.intval := OPM.SymRInt(); conval^.intval2 := OPM.SymRInt()
     | Set:
       OPM.SymRSet(conval^.setval)
     | Real:
@@ -757,7 +767,7 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
       IF ~impCtxt.self THEN obj^.vis := external END  (* type name visible now, obj^.fprint already done *)
     ELSE
       obj := NewObj(); obj^.mnolev := -mno; obj^.vis := external;
-      IF tag <= Pointer THEN  (* Constant *)
+      IF (tag <= Pointer) OR (tag = HugeRef) THEN  (* Constant *)
         obj^.mode := Con; obj^.typ := impCtxt.ref[tag]; obj^.conval := NewConst(); InConstant(tag, obj^.conval)
       ELSIF tag >= Sxpro THEN
         obj^.conval := NewConst();
@@ -838,6 +848,32 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
       END
     END
   END Import;
+
+  (* polpo: the object name of the imported module mod, without changing OPS.name *)
+  PROCEDURE FindIn*(mod: Object; VAR name: OPS.Name; VAR res: Object);
+    VAR obj: Object;
+  BEGIN obj := mod^.scope;
+    WHILE (obj # NIL) & (obj^.name # name) DO
+      IF name < obj^.name THEN obj := obj^.left ELSE obj := obj^.right END
+    END ;
+    IF obj # NIL THEN obj^.used := TRUE END ;
+    res := obj
+  END FindIn;
+
+  (* polpo: the module name, imported for the compiler's own calls (HugeInt) if the module does not import it *)
+  PROCEDURE ImportHidden*(VAR name: OPS.Name): Object;
+    VAR i: INTEGER; scope, obj: Object; alias: OPS.Name; done: BOOLEAN;
+  BEGIN
+    i := 1; WHILE (i < nofGmod) & (GlbMod[i].name # name) DO INC(i) END ;
+    IF (i < nofGmod) & (GlbMod[i].link # NIL) THEN RETURN GlbMod[i].link END ;
+    alias := "@"; i := 0; WHILE (name[i] # 0X) & (i < LEN(alias) - 2) DO alias[i + 1] := name[i]; INC(i) END ;
+    alias[i + 1] := 0X;
+    scope := topScope; topScope := GlbMod[0]; Import(alias, name, done); topScope := scope;
+    IF ~done THEN RETURN NIL END ;
+    i := 1; WHILE (i < nofGmod) & (GlbMod[i].name # name) DO INC(i) END ;
+    obj := NIL; IF i < nofGmod THEN obj := GlbMod[i].link END ;
+    RETURN obj
+  END ImportHidden;
 
 (*-------------------------- Export --------------------------*)
 
@@ -974,12 +1010,15 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
   PROCEDURE OutConstant(obj: Object);
     VAR f: INTEGER; rval: REAL;
   BEGIN
-    f := obj^.typ^.form; OPM.SymWInt(f);
+    f := obj^.typ^.form; IF obj^.typ = hinttyp THEN f := HugeRef END ;
+    OPM.SymWInt(f);
     CASE f OF
     | Bool, Char:
       OPM.SymWCh(CHR(obj^.conval^.intval))
     | SInt, Int, LInt:
       OPM.SymWInt(obj^.conval^.intval)
+    | HugeRef:
+      OPM.SymWInt(obj^.conval^.intval); OPM.SymWInt(obj^.conval^.intval2)
     | Set:
       OPM.SymWSet(obj^.conval^.setval)
     | Real:
@@ -1086,6 +1125,22 @@ MODULE ROPT;  (* NW, RC 6.3.89 / 23.1.92 *)  (* object model 24.2.94 *)
     typ^.idfp := form; typ^.idfpdone := TRUE; res := typ
   END EnterTyp;
 
+  PROCEDURE EnterHuge;  (* polpo *)
+    VAR obj: Object; name: OPS.Name;
+  BEGIN
+    name := "HUGEINT"; Insert(name, obj);
+    hinttyp := NewStr(Comp, Array); hinttyp^.BaseTyp := linttyp; hinttyp^.n := 2; hinttyp^.size := 2 * OPM.LIntSize;
+    obj^.mode := Typ; obj^.typ := hinttyp; obj^.vis := external;
+    hinttyp^.strobj := obj; hinttyp^.ref := HugeRef; hinttyp^.allocated := TRUE;
+    hinttyp^.pbfp := HugeFp; hinttyp^.pvfp := HugeFp; hinttyp^.fpdone := TRUE;
+    hinttyp^.idfp := HugeFp; hinttyp^.idfpdone := TRUE;
+    hptrtyp := NewStr(Pointer, Basic); hptrtyp^.size := OPM.PointerSize;
+    hptrtyp^.BaseTyp := linttyp;  (* not the array: the code generators skip a heap header of arrays in DeRef *)
+    hptrtyp^.strobj := NewObj(); hptrtyp^.ref := HPtrRef; hptrtyp^.allocated := TRUE;
+    hptrtyp^.pbfp := HPtrFp; hptrtyp^.pvfp := HPtrFp; hptrtyp^.fpdone := TRUE;
+    hptrtyp^.idfp := HPtrFp; hptrtyp^.idfpdone := TRUE
+  END EnterHuge;
+
   PROCEDURE EnterProc(name: OPS.Name; num: INTEGER);
     VAR obj: Object;
   BEGIN Insert(name, obj);
@@ -1127,6 +1182,7 @@ BEGIN topScope := NIL; OpenScope(0, NIL); OPM.errpos := 0;
   EnterTyp("REAL", Real, OPM.RealSize, realtyp);
   EnterTyp("INTEGER", Int, OPM.IntSize, inttyp);
   EnterTyp("LONGINT",  LInt, OPM.LIntSize, linttyp);
+  EnterHuge;
   EnterTyp("LONGREAL", LReal, OPM.LRealSize, lrltyp);
   EnterTyp("SHORTINT", SInt, OPM.SIntSize, sinttyp);
   EnterTyp("BOOLEAN", Bool, OPM.BoolSize, booltyp);
@@ -1159,7 +1215,8 @@ BEGIN topScope := NIL; OpenScope(0, NIL); OPM.errpos := 0;
   impCtxt.ref[LInt] := linttyp;  impCtxt.ref[Real] := realtyp;
   impCtxt.ref[LReal] := lrltyp;  impCtxt.ref[Set] := settyp;
   impCtxt.ref[String] := stringtyp; impCtxt.ref[NilTyp] := niltyp;
-  impCtxt.ref[NoTyp] := notyp; impCtxt.ref[Pointer] := sysptrtyp
+  impCtxt.ref[NoTyp] := notyp; impCtxt.ref[Pointer] := sysptrtyp;
+  impCtxt.ref[HugeRef] := hinttyp; impCtxt.ref[HPtrRef] := hptrtyp
 END ROPT.
 
 Objects:

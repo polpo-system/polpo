@@ -11,7 +11,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
     
   CONST
     (* numtyp values *)
-    char = 1; integer = 2; real = 3; longreal = 4;
+    char = 1; integer = 2; real = 3; longreal = 4; huge = 5;
 
     (* symbol values *)
     null = 0; times = 1; slash = 2; div = 3; mod = 4;
@@ -257,7 +257,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
   
   PROCEDURE FormalParameters(VAR firstPar: OPT.Object; VAR resTyp: OPT.Struct);
     VAR mode: SHORTINT;
-        par, first, last, res: OPT.Object; typ: OPT.Struct;
+        par, first, last, res: OPT.Object; typ: OPT.Struct; name: OPS.Name;
   BEGIN first := NIL; last := firstPar;
     IF (sym = ident) OR (sym = var) THEN
       LOOP
@@ -292,7 +292,11 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
       OPS.Get(sym); resTyp := OPT.undftyp;
       IF sym = ident THEN qualident(res);
         IF res^.mode = Typ THEN
-          IF res^.typ^.form < Comp THEN resTyp := res^.typ
+          IF res^.typ = OPT.hinttyp THEN  (* polpo: the result into an hidden parameter, see OPT.HugeRef *)
+            resTyp := OPT.hptrtyp; name := "@r"; OPT.Insert(name, par);
+            par^.mode := VarPar; par^.typ := OPT.hinttyp; par^.link := NIL;
+            IF firstPar = NIL THEN firstPar := par ELSE last^.link := par END
+          ELSIF res^.typ^.form < Comp THEN resTyp := res^.typ
           ELSE err(54)
           END
         ELSE err(52)
@@ -404,7 +408,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
   BEGIN aparlist := NIL; last := NIL;
     IF sym # rparen THEN
       LOOP Expression(apar);
-        IF fpar # NIL THEN
+        IF (fpar # NIL) & ~OPB.Hidden(fpar) THEN
           (* polpo: a parameter of the procedure itself narrowed by a WITH around the call is checked against
              its declared type, the outermost entry *)
           typ := fpar^.typ; n := narrowed;
@@ -419,7 +423,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
         END
       END
     END ;
-    IF fpar # NIL THEN err(65) END
+    IF (fpar # NIL) & ~OPB.Hidden(fpar) THEN err(65) END
   END ActualParameters;
 
   PROCEDURE StandProcCall(VAR x: OPT.Node);
@@ -494,6 +498,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
       | integer: x := OPB.NewIntConst(OPS.intval)
       | real: x := OPB.NewRealConst(OPS.realval, OPT.realtyp)
       | longreal: x := OPB.NewRealConst(OPS.lrlval, OPT.lrltyp)
+      | huge: x := OPB.NewHugeConst(OPS.intval, OPS.intval2)
       END ;
       OPS.Get(sym)
     ELSIF sym = string THEN
@@ -807,7 +812,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
     END CheckBool;
 
   BEGIN stat := NIL; last := NIL;
-    LOOP x := NIL;
+    LOOP x := NIL; OPB.hugeNext := 0;
       IF sym < ident THEN err(14);
         REPEAT OPS.Get(sym) UNTIL sym >= ident
       END ;
@@ -824,7 +829,7 @@ MODULE ROPP;  (* NW, RC 6.3.89 / 10.2.94 *)  (* object model 4.12.93 *)
           IF sym = lparen THEN
             OPS.Get(sym); ActualParameters(apar, fpar); CheckSym(rparen)
           ELSE apar := NIL;
-            IF fpar # NIL THEN err(65) END
+            IF (fpar # NIL) & ~OPB.Hidden(fpar) THEN err(65) END
           END ;
           cproc:=FALSE;
           IF x^.obj#NIL THEN
