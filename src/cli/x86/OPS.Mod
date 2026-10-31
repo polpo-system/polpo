@@ -5,7 +5,7 @@ Refer to the license.txt file provided with this distribution. *)
 (* NW, RC, ejz, rml, pjm, prk*)
 
 MODULE OPS;  (** shared compiler scanner *)
-  IMPORT OPM, DecReal;
+  IMPORT SYSTEM, OPM, DecReal, HugeInt;
 
   CONST
     MaxStrLen* = 256;
@@ -18,7 +18,7 @@ MODULE OPS;  (** shared compiler scanner *)
     GetProc* = PROCEDURE (VAR sym: SHORTINT);
 
     Token = POINTER TO RECORD  pos: LONGINT; sym: SHORTINT; next: Token  END;
-    IntToken = POINTER TO RECORD (Token)  intval: LONGINT; typ: INTEGER  END;
+    IntToken = POINTER TO RECORD (Token)  intval, intval2: LONGINT; typ: INTEGER  END;
     RealToken = POINTER TO RECORD (Token)  realval: REAL  END;
     LRealToken = POINTER TO RECORD (Token)  lrlval: LONGREAL  END;
     StrToken = POINTER TO RECORD (Token)  str: String; len: LONGINT  END;
@@ -31,8 +31,9 @@ MODULE OPS;  (** shared compiler scanner *)
   VAR
     name*: Name;
     str*: String;
-    numtyp*: INTEGER; (* 1 = char, 2 = integer, 3 = real, 4 = longreal *)
-    intval*: LONGINT;  (* integer value or string length *)
+    numtyp*: INTEGER; (* 1 = char, 2 = integer, 3 = real, 4 = longreal, 5 = huge *)
+    intval*: LONGINT;  (* integer value or string length; low word of a huge *)
+    intval2*: LONGINT;  (* polpo: high word of a huge, a number too large for a LONGINT *)
     realval*: REAL;
     lrlval*: LONGREAL;
     Get*: GetProc;
@@ -60,7 +61,7 @@ MODULE OPS;  (** shared compiler scanner *)
 
   CONST
     (* numtyp values *)
-    char = 1; integer = 2; real = 3; longreal = 4;
+    char = 1; integer = 2; real = 3; longreal = 4; huge = 5;
 
     (*symbol values*)
     null* =   0; times* =   1; slash* =   2; div* =   3; mod* =   4; and* =   5;
@@ -86,7 +87,8 @@ MODULE OPS;  (** shared compiler scanner *)
     IF (stream # NIL) & (stream.next # NIL) THEN
       stream := stream.next;
       sym := stream.sym; OPM.errpos := stream.pos;
-      IF stream IS IntToken THEN intval := stream(IntToken).intval; numtyp := stream(IntToken).typ
+      IF stream IS IntToken THEN
+        intval := stream(IntToken).intval; intval2 := stream(IntToken).intval2; numtyp := stream(IntToken).typ
       ELSIF stream IS RealToken THEN realval := stream(RealToken).realval; numtyp := 3
       ELSIF stream IS LRealToken THEN lrlval := stream(LRealToken).lrlval; numtyp := 4
       ELSIF stream IS StrToken THEN str := stream(StrToken).str; intval := stream(StrToken).len
@@ -104,7 +106,7 @@ MODULE OPS;  (** shared compiler scanner *)
     IF sym = number THEN
       IF numtyp = 3 THEN NEW (r); r.realval := realval; s := r
       ELSIF numtyp = 4 THEN NEW (lr); lr.lrlval := lrlval; s := lr
-      ELSE NEW (i); i.intval := intval; i.typ := numtyp; s := i
+      ELSE NEW (i); i.intval := intval; i.intval2 := intval2; i.typ := numtyp; s := i
       END
     ELSIF sym = string THEN NEW (st); st.str := str; st.len := intval; s := st
     ELSIF sym = ident THEN NEW (nam); nam.name := name; s := nam
@@ -183,6 +185,7 @@ MODULE OPS;  (** shared compiler scanner *)
 
     PROCEDURE Number*;
     VAR i, m, n, d, e, res: INTEGER; dig: ARRAY 24 OF CHAR; expCh: CHAR; neg, sticky: BOOLEAN;
+      v, t, ten, digit: HugeInt.Huge; lo, hi: LONGINT;
 
 
     PROCEDURE Ord(ch: CHAR; hex: BOOLEAN): INTEGER;
@@ -221,14 +224,21 @@ MODULE OPS;  (** shared compiler scanner *)
           IF n <= OPM.MaxHDig THEN
             IF (n = OPM.MaxHDig) & (dig[0] > "7") THEN (* prevent overflow *) intval := -1 END;
             WHILE i < n DO intval := intval*10H + Ord(dig[i], TRUE); INC(i) END
+          ELSIF n <= 2 * OPM.MaxHDig THEN  (* polpo: HUGEINT, 16 digits wrap around as 8 digits of a LONGINT *)
+            numtyp := huge; intval2 := 0;
+            WHILE i < n DO
+              intval2 := intval2*10H + SYSTEM.LSH(intval, -28); intval := intval*10H + Ord(dig[i], TRUE); INC(i)
+            END
           ELSE err(203)
           END
         ELSE (* decimal *) numtyp := integer;
-          WHILE i < n DO d := Ord(dig[i], FALSE); INC(i);
-            IF intval <= (MAX(LONGINT) - d) DIV 10 THEN intval := intval*10 + d
-            ELSE err(203)
-            END
-          END
+          (* polpo: up to MAX(HUGEINT); larger than MAX(LONGINT) is a huge *)
+          HugeInt.Pack(v, 0, 0); HugeInt.Pack(ten, 10, 0);
+          WHILE i < n DO d := Ord(dig[i], FALSE); INC(i); HugeInt.Pack(digit, d, 0);
+            IF HugeInt.MulOvf(t, v, ten) OR HugeInt.AddOvf(v, t, digit) THEN err(203); HugeInt.Pack(v, 0, 0); i := n END
+          END ;
+          HugeInt.Unpack(v, lo, hi); intval := lo; intval2 := hi;
+          IF (hi # 0) OR (lo < 0) THEN numtyp := huge END
         END
       ELSE err(203)
       END

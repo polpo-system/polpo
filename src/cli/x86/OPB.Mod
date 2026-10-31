@@ -12,7 +12,7 @@ Refer to the license.txt file provided with this distribution. *)
 *)
 
 MODULE OPB;  (** non-portable *)
-  IMPORT SYSTEM, OPT, OPS, OPM;
+  IMPORT SYSTEM, OPT, OPS, OPM, HugeInt;
 
   CONST
     AwaitIF* = TRUE;
@@ -88,6 +88,8 @@ MODULE OPB;  (** non-portable *)
     exp: INTEGER;  (*side effect of log*)
     maxExp: LONGINT;  (* max n in ASH(1, n) on this machine *)
     InitPar: OPT.Object;    (* list of parameters in the current initialiser, used by NEW, only for active compiler *)
+    hugeNext*: INTEGER;  (* polpo: temporaries of HUGEINT used in the statement, OPP sets 0 before each *)
+    hugeMod, hugeScope: OPT.Object;  (* polpo: the alias of HugeInt, imported for the module of scope hugeScope *)
 
   PROCEDURE err(n: INTEGER);
   BEGIN OPM.err(n)
@@ -393,6 +395,129 @@ MODULE OPB;  (** non-portable *)
     RETURN x
   END log;
 
+  PROCEDURE CheckLeaf(x: OPT.Node; dynArrToo: BOOLEAN);
+  VAR obj: OPT.Object;
+  BEGIN
+    IF (x^.class = Nmop) & (x^.subcl = val) THEN x := x^.left END ;
+    IF x^.class = Nguard THEN x := x^.left END ;  (* skip last (and unique) guard *)
+    IF (x.class = Nvar) & (dynArrToo OR (x.typ.comp # OpenArr)) THEN
+      obj := x.obj;
+      WHILE obj # NIL DO obj.leaf := FALSE;  obj := obj.scope END
+    END
+  END CheckLeaf;
+
+  (* polpo: HUGEINT. This compiler keeps a HUGEINT in two words (form HInt) and compiles its operations into
+    calls of the module HugeInt (imported for the purpose), its constant expressions computed with HugeInt. The
+    functions of HugeInt write the result into a temporary variable of the procedure and return its address:
+    HugeValue builds the call and dereferences it. A constant of type HUGEINT keeps its low word in intval and its
+    high word in intval2; a constant of HUGEINT value that fits a LONGINT gets the smallest integer type, as
+    other integer constants. A function returning a HUGEINT has an hidden last parameter (see OPT.EnterHuge). *)
+
+  PROCEDURE NewLInt(v: LONGINT): OPT.Node;
+    VAR x: OPT.Node;
+  BEGIN x := NewIntConst(v); x^.typ := OPT.linttyp; RETURN x
+  END NewLInt;
+
+  PROCEDURE IsInt(x: OPT.Node): BOOLEAN;
+  BEGIN RETURN (x^.typ^.form IN intSet) OR (x^.typ = OPT.hinttyp)
+  END IsInt;
+
+  (* the words of an integer constant *)
+  PROCEDURE ConstWords(x: OPT.Node; VAR lo, hi: LONGINT);
+  BEGIN lo := x^.conval^.intval;
+    IF x^.typ = OPT.hinttyp THEN hi := x^.conval^.intval2 ELSIF lo < 0 THEN hi := -1 ELSE hi := 0 END
+  END ConstWords;
+
+  (* x becomes the constant v, of the smallest type that holds it *)
+  PROCEDURE SetHuge(x: OPT.Node; VAR v: HugeInt.Huge);
+    VAR lo, hi: LONGINT;
+  BEGIN HugeInt.Unpack(v, lo, hi); x^.conval^.intval := lo;
+    IF (hi = 0) & (lo >= 0) OR (hi = -1) & (lo < 0) THEN x^.conval^.intval2 := 0; SetIntType(x)
+    ELSE x^.conval^.intval2 := hi; x^.typ := OPT.hinttyp
+    END ;
+    x^.obj := NIL
+  END SetHuge;
+
+  PROCEDURE NewHugeConst*(lo, hi: LONGINT): OPT.Node;
+    VAR x: OPT.Node; v: HugeInt.Huge;
+  BEGIN
+    x := OPT.NewNode(Nconst); x^.conval := OPT.NewConst();
+    HugeInt.Pack(v, lo, hi); SetHuge(x, v); RETURN x
+  END NewHugeConst;
+
+  PROCEDURE Hidden*(fp: OPT.Object): BOOLEAN;  (* the hidden parameter of a function returning a HUGEINT *)
+  BEGIN RETURN (fp # NIL) & (fp^.name = "@r")
+  END Hidden;
+
+  PROCEDURE HugeProc(name: ARRAY OF CHAR): OPT.Object;
+    VAR n: OPS.Name; obj: OPT.Object;
+  BEGIN
+    IF (hugeMod = NIL) OR (hugeScope # OPT.modules[0]) THEN
+      n := "HugeInt"; hugeMod := OPT.ImportHidden(n); hugeScope := OPT.modules[0]
+    END ;
+    obj := NIL;
+    IF hugeMod # NIL THEN COPY(name, n); OPT.FindIn(hugeMod, n, obj);
+      IF obj = NIL THEN err(0) END
+    END ;
+    RETURN obj
+  END HugeProc;
+
+  (* a temporary of type HUGEINT, the hugeNext-th of the scope of the procedure, as the FOR limit in OPP *)
+  PROCEDURE HugeTemp(): OPT.Node;
+    VAR t, last, owner: OPT.Object; k: INTEGER;
+  BEGIN
+    owner := OPT.topScope;
+    WHILE (OPT.topScope.left # NIL) & (OPT.topScope.link = OPT.topScope.left.link) DO OPT.topScope := OPT.topScope.left END ;
+    t := OPT.topScope^.scope; last := NIL; k := 0;
+    LOOP
+      IF t = NIL THEN EXIT END ;
+      IF t^.name = "@h" THEN
+        IF k = hugeNext THEN EXIT END ;
+        INC(k)
+      END ;
+      last := t; t := t^.link
+    END ;
+    IF t = NIL THEN
+      OPT.Insert("@@", t); t^.name := "@h";  (* avoid err 1 *)
+      t^.mode := Var; t^.typ := OPT.hinttyp; t^.leaf := FALSE; t^.link := NIL; t.flag := {OPT.used};
+      IF last = NIL THEN OPT.topScope^.scope := t ELSE last^.link := t END ;
+      IF (t.mnolev = 0) & (OPT.topScope.link # NIL) & (OPT.topScope.link.mode = Typ) THEN t.mnolev := 1 END
+    END ;
+    OPT.topScope := owner;
+    INC(hugeNext);
+    RETURN NewLeaf(t)
+  END HugeTemp;
+
+  PROCEDURE Args2(a, b: OPT.Node): OPT.Node;
+  BEGIN a^.link := b; b^.link := NIL; RETURN a
+  END Args2;
+
+  PROCEDURE Args3(a, b, c: OPT.Node): OPT.Node;
+  BEGIN a^.link := b; b^.link := c; c^.link := NIL; RETURN a
+  END Args3;
+
+  (* a call of HugeInt.name with the actual parameters args, of type typ *)
+  PROCEDURE HugeCall(name: ARRAY OF CHAR; args: OPT.Node; typ: OPT.Struct): OPT.Node;
+    VAR proc: OPT.Object; x: OPT.Node;
+  BEGIN
+    proc := HugeProc(name);
+    IF proc = NIL THEN x := NewIntConst(1); x^.typ := OPT.undftyp
+    ELSE
+      x := NewLeaf(proc); BindNodes(Ncall, typ, x, args); x^.obj := proc^.link; x.subcl := 0;
+      IF (OPT.topScope.mnolev > 0) & (OPT.topScope^.link # NIL) THEN OPT.topScope^.link^.leaf := FALSE END
+    END ;
+    RETURN x
+  END HugeCall;
+
+  (* the value of HugeInt.name(args): args begins with the temporary for the result *)
+  PROCEDURE HugeValue(name: ARRAY OF CHAR; args: OPT.Node): OPT.Node;
+    VAR x: OPT.Node;
+  BEGIN
+    x := HugeCall(name, args, OPT.hptrtyp);
+    IF x^.class = Ncall THEN BindNodes(Nderef, OPT.hinttyp, x, NIL); x^.readonly := TRUE END ;
+    RETURN x
+  END HugeValue;
+
   PROCEDURE CheckRealType(f, nr: INTEGER; x: OPT.Const);
     VAR min, max, r: LONGREAL;
   BEGIN
@@ -407,6 +532,26 @@ MODULE OPB;  (** non-portable *)
     x^.intval := OPM.ConstNotAlloc
   END CheckRealType;
 
+  (* polpo: op x, x a HUGEINT; op = plus, minus, abs or odd *)
+  PROCEDURE HugeMOp(op: SHORTINT; VAR x: OPT.Node);
+    VAR a, r: HugeInt.Huge; lo, hi: LONGINT; node: OPT.Node;
+  BEGIN
+    IF x^.class = Nconst THEN
+      ConstWords(x, lo, hi); HugeInt.Pack(a, lo, hi);
+      IF (op = minus) OR (op = abs) & (hi < 0) THEN
+        IF HugeInt.NegOvf(r, a) THEN err(203) ELSE SetHuge(x, r) END
+      ELSIF op = odd THEN
+        x^.conval^.intval := BoolToInt(ODD(lo)); x^.conval^.intval2 := 0; x^.typ := OPT.booltyp
+      END ;
+      x^.obj := NIL
+    ELSIF op = minus THEN x := HugeValue("Neg", Args2(HugeTemp(), x))
+    ELSIF op = abs THEN x := HugeValue("Abs", Args2(HugeTemp(), x))
+    ELSIF op = odd THEN
+      node := OPT.NewNode(Nmop); node^.subcl := odd; node^.typ := OPT.booltyp;
+      node^.left := HugeCall("Short", x, OPT.linttyp); x := node
+    END
+  END HugeMOp;
+
   PROCEDURE MOp*(op: SHORTINT; VAR x: OPT.Node);
     VAR f: INTEGER; typ: OPT.Struct; z: OPT.Node;
 
@@ -420,6 +565,7 @@ MODULE OPB;  (** non-portable *)
   BEGIN z := x;
     IF ((z^.class = Ntype) OR (z^.class = Nproc))  & (op # type) THEN err(126)
     ELSIF (z.class = Nfield) & (z.obj.mode = TProc) THEN err(OPS.lparen)
+    ELSIF (z^.typ = OPT.hinttyp) & ((op = plus) OR (op = minus) OR (op = abs) OR (op = odd)) THEN HugeMOp(op, z)
     ELSE typ := z^.typ; f := typ^.form;
       CASE op OF
         not:
@@ -841,7 +987,9 @@ MODULE OPB;  (** non-portable *)
     IF (x^.class = Ntype) OR (x^.class = Nproc) OR
       (f IN {Undef, String, NoTyp}) THEN err(126)
     END ;
-    IF (x^.class = Nconst) & (typ.comp = Basic) THEN
+    IF (typ = OPT.hinttyp) OR (x^.typ = OPT.hinttyp) THEN  (* polpo: only a variable, in memory *)
+      IF x^.class >= Nconst THEN err(126) ELSE x^.readonly := FALSE; CheckLeaf(x, FALSE) END
+    ELSIF (x^.class = Nconst) & (typ.comp = Basic) THEN
       IF (typ.form = Real) & (f IN intSet) THEN
         x := NewRealConst(SYSTEM.VAL (REAL, x.conval.intval), typ);
       ELSIF (typ.form IN intSet) & (f = Real) THEN
@@ -874,6 +1022,114 @@ MODULE OPB;  (** non-portable *)
     x.typ := typ
   END Val;
 
+  (* polpo: x, an integer or HUGEINT, becomes a HUGEINT the code generator can take: a designator *)
+  PROCEDURE ToHuge(VAR x: OPT.Node);
+    VAR lo, hi: LONGINT;
+  BEGIN
+    IF x^.class = Nconst THEN
+      IF IsInt(x) THEN ConstWords(x, lo, hi) ELSE lo := 0; hi := 0 END ;
+      x := HugeValue("Make", Args3(HugeTemp(), NewLInt(lo), NewLInt(hi)))
+    ELSIF x^.typ # OPT.hinttyp THEN
+      IF (x^.typ^.form IN intSet) & (x^.typ^.form # LInt) THEN Convert(x, OPT.linttyp) END ;
+      x := HugeValue("Long", Args2(HugeTemp(), x))
+    END
+  END ToHuge;
+
+  (* polpo: x, if a HUGEINT, becomes a value of the real type typ *)
+  PROCEDURE HugeToReal(VAR x: OPT.Node; typ: OPT.Struct);
+    VAR lo, hi: LONGINT; v: HugeInt.Huge;
+  BEGIN
+    IF x^.typ = OPT.hinttyp THEN
+      IF x^.class = Nconst THEN
+        ConstWords(x, lo, hi); HugeInt.Pack(v, lo, hi);
+        x^.conval^.realval := HugeInt.Real(v); x^.conval^.intval := OPM.ConstNotAlloc; x^.conval^.intval2 := 0;
+        x^.typ := OPT.lrltyp; x^.obj := NIL
+      ELSE x := HugeCall("Real", x, OPT.lrltyp)
+      END ;
+      IF typ = OPT.realtyp THEN Convert(x, OPT.realtyp) END
+    END
+  END HugeToReal;
+
+  (* polpo: x op y, constant integers, one a HUGEINT *)
+  PROCEDURE HugeConstOp(op: SHORTINT; x, y: OPT.Node);
+    VAR a, b, r: HugeInt.Huge; lo, hi, c: LONGINT; t: BOOLEAN;
+  BEGIN
+    ConstWords(x, lo, hi); HugeInt.Pack(a, lo, hi); ConstWords(y, lo, hi); HugeInt.Pack(b, lo, hi);
+    CASE op OF
+      times: IF HugeInt.MulOvf(r, a, b) THEN err(204) ELSE SetHuge(x, r) END
+    | slash:
+        IF (lo = 0) & (hi = 0) THEN err(205); x^.conval^.realval := 1.0
+        ELSE x^.conval^.realval := HugeInt.Real(a) / HugeInt.Real(b); CheckRealType(Real, 205, x^.conval)
+        END ;
+        x^.conval^.intval2 := 0; x^.typ := OPT.realtyp
+    | div, mod:
+        IF (hi < 0) OR (hi = 0) & (lo = 0) THEN err(237)
+        ELSIF op = div THEN c := HugeInt.Div(r, a, b); SetHuge(x, r)
+        ELSE c := HugeInt.Mod(r, a, b); SetHuge(x, r)
+        END
+    | plus: IF HugeInt.AddOvf(r, a, b) THEN err(206) ELSE SetHuge(x, r) END
+    | minus: IF HugeInt.SubOvf(r, a, b) THEN err(207) ELSE SetHuge(x, r) END
+    | eql, neq, lss, leq, gtr, geq:
+        c := HugeInt.Cmp(a, b);
+        CASE op OF
+          eql: t := c = 0 | neq: t := c # 0 | lss: t := c < 0 | leq: t := c <= 0 | gtr: t := c > 0 | geq: t := c >= 0
+        END ;
+        x^.conval^.intval := BoolToInt(t); x^.conval^.intval2 := 0; x^.typ := OPT.booltyp
+    | and: err(94)
+    | or: err(95)
+    ELSE err(100)
+    END ;
+    x^.obj := NIL
+  END HugeConstOp;
+
+  (* polpo: x op y, integers, one a HUGEINT *)
+  PROCEDURE HugeOp(op: SHORTINT; VAR x: OPT.Node; y: OPT.Node);
+    VAR lo, hi: LONGINT;
+  BEGIN
+    IF ~IsInt(x) OR ~IsInt(y) THEN err(100); x^.typ := OPT.undftyp
+    ELSIF (x^.class = Nconst) & (y^.class = Nconst) THEN HugeConstOp(op, x, y)
+    ELSE
+      CASE op OF
+        times: ToHuge(x); ToHuge(y); x := HugeValue("Mul", Args3(HugeTemp(), x, y))
+      | plus: ToHuge(x); ToHuge(y); x := HugeValue("Add", Args3(HugeTemp(), x, y))
+      | minus: ToHuge(x); ToHuge(y); x := HugeValue("Sub", Args3(HugeTemp(), x, y))
+      | div, mod:
+          IF y^.class = Nconst THEN ConstWords(y, lo, hi);
+            IF (hi < 0) OR (hi = 0) & (lo = 0) THEN err(237) END  (* DIV and MOD want a divisor > 0 *)
+          END ;
+          ToHuge(x); ToHuge(y);
+          IF op = div THEN x := HugeValue("Div", Args3(HugeTemp(), x, y))
+          ELSE x := HugeValue("Mod", Args3(HugeTemp(), x, y))
+          END
+      | slash:
+          HugeToReal(x, OPT.realtyp); HugeToReal(y, OPT.realtyp);
+          IF x^.typ^.form IN intSet THEN Convert(x, OPT.realtyp) END ;
+          IF y^.typ^.form IN intSet THEN Convert(y, OPT.realtyp) END ;
+          BindNodes(Ndop, OPT.realtyp, x, y); x^.subcl := slash
+      | eql, neq, lss, leq, gtr, geq:
+          ToHuge(x); ToHuge(y); x := HugeCall("Cmp", Args2(x, y), OPT.linttyp);
+          BindNodes(Ndop, OPT.booltyp, x, NewLInt(0)); x^.subcl := op
+      | and: err(94); x^.typ := OPT.undftyp
+      | or: err(95); x^.typ := OPT.undftyp
+      ELSE err(100); x^.typ := OPT.undftyp
+      END
+    END
+  END HugeOp;
+
+  (* polpo: x := y, x a HUGEINT *)
+  PROCEDURE HugeAssign(VAR x: OPT.Node; y: OPT.Node);
+    VAR lo, hi: LONGINT;
+  BEGIN
+    IF (y^.typ = OPT.hinttyp) & (y^.class # Nconst) THEN BindNodes(Nassign, OPT.notyp, x, y); x^.subcl := assign
+    ELSIF y^.class = Nconst THEN
+      IF IsInt(y) THEN ConstWords(y, lo, hi) ELSE lo := 0; hi := 0 END ;
+      CheckLeaf(x, FALSE); x := HugeCall("Set", Args3(x, NewLInt(lo), NewLInt(hi)), OPT.notyp)
+    ELSE
+      IF (y^.typ^.form IN intSet) & (y^.typ^.form # LInt) THEN Convert(y, OPT.linttyp) END ;
+      CheckLeaf(x, FALSE); x := HugeCall("SetL", Args2(x, y), OPT.notyp)
+    END
+  END HugeAssign;
+
   PROCEDURE Op*(op: SHORTINT; VAR x: OPT.Node; y: OPT.Node);
     VAR f, g: INTEGER; t, z: OPT.Node; typ: OPT.Struct; do: BOOLEAN; val: LONGINT;
 
@@ -905,6 +1161,13 @@ MODULE OPB;  (** non-portable *)
     END strings;
 
   BEGIN z := x;
+    IF ((z^.typ = OPT.hinttyp) OR (y^.typ = OPT.hinttyp)) & (z^.class # Ntype) & (z^.class # Nproc) &
+        (y^.class # Ntype) & (y^.class # Nproc) THEN  (* polpo *)
+      IF z^.typ^.form IN realSet THEN HugeToReal(y, z^.typ)
+      ELSIF y^.typ^.form IN realSet THEN HugeToReal(z, y^.typ)
+      ELSE HugeOp(op, z, y); x := z; RETURN
+      END
+    END ;
     IF (z^.class = Ntype) OR (z^.class = Nproc) OR (y^.class = Ntype) OR (y^.class = Nproc) THEN err(126)
     ELSIF (z.class = Nfield) & (z.obj.mode = TProc) OR (y.class = Nfield) & (y.obj.mode = TProc) THEN err(100)
     ELSIF (z^.class = Nconst) & (y^.class = Nconst) THEN ConstOp(op, z, y); z^.obj := NIL
@@ -1112,16 +1375,18 @@ MODULE OPB;  (** non-portable *)
       Undef, String:
     | Byte:
         IF ~(g IN {Byte, Char, SInt}) THEN err(113) END
-    | Bool, Char, SInt, Set, HInt:
+    | Bool, Char, SInt, Set:
         IF g # f THEN err(113) END
+    | HInt:  (* polpo *)
+        IF ~(g IN intSet + {HInt}) THEN err(113) END
     | Int:
         IF ~(g IN {SInt, Int}) THEN err(113) END
     | LInt:
         IF ~(g IN intSet) THEN err(113) END
     | Real:
-        IF ~(g IN {SInt..Real}) THEN err(113) END
+        IF ~(g IN {SInt..Real, HInt}) THEN err(113) END
     | LReal:
-        IF ~(g IN {SInt..LReal}) THEN err(113) END
+        IF ~(g IN {SInt..LReal, HInt}) THEN err(113) END
     | Pointer:
         IF (x = y) OR (g = NilTyp) OR (x = OPT.ptrtyp) & (g = Pointer) THEN (* ok *)
         ELSIF g = Pointer THEN
@@ -1169,17 +1434,6 @@ MODULE OPB;  (** non-portable *)
       Convert(ynode, x)
     END
   END CheckAssign;
-
-  PROCEDURE CheckLeaf(x: OPT.Node; dynArrToo: BOOLEAN);
-  VAR obj: OPT.Object;
-  BEGIN
-    IF (x^.class = Nmop) & (x^.subcl = val) THEN x := x^.left END ;
-    IF x^.class = Nguard THEN x := x^.left END ;  (* skip last (and unique) guard *)
-    IF (x.class = Nvar) & (dynArrToo OR (x.typ.comp # OpenArr)) THEN
-      obj := x.obj;
-      WHILE obj # NIL DO obj.leaf := FALSE;  obj := obj.scope END
-    END
-  END CheckLeaf;
 
   PROCEDURE StPar0*(VAR par0: OPT.Node; fctno: INTEGER);  (* par0: first param of standard proc *)
     VAR f: INTEGER; t, ptr, typ: OPT.Struct; x: OPT.Node;
@@ -1266,7 +1520,8 @@ MODULE OPB;  (** non-portable *)
     | oddfn: (*ODD*)
         MOp(odd, x)
     | minfn: (*MIN*)
-        IF x^.class = Ntype THEN
+        IF (x^.class = Ntype) & (x^.typ = OPT.hinttyp) THEN x := NewHugeConst(0, MIN(LONGINT))  (* polpo *)
+        ELSIF x^.class = Ntype THEN
           CASE f OF
             Bool:  x := NewBoolConst(FALSE)
           | Char:  x := NewIntConst(0); x^.typ := OPT.chartyp
@@ -1281,7 +1536,8 @@ MODULE OPB;  (** non-portable *)
         ELSE err(110)
         END
     | maxfn: (*MAX*)
-        IF x^.class = Ntype THEN
+        IF (x^.class = Ntype) & (x^.typ = OPT.hinttyp) THEN x := NewHugeConst(-1, MAX(LONGINT))  (* polpo *)
+        ELSIF x^.class = Ntype THEN
           CASE f OF
             Bool:  x := NewBoolConst(TRUE)
           | Char:  x := NewIntConst(0FFH); x^.typ := OPT.chartyp
@@ -1305,6 +1561,14 @@ MODULE OPB;  (** non-portable *)
         ELSIF f = Int THEN Convert(x, OPT.sinttyp)
         ELSIF f = LInt THEN Convert(x, OPT.inttyp)
         ELSIF f = LReal THEN Convert(x, OPT.realtyp)
+        ELSIF f = HInt THEN  (* polpo: the low word *)
+          IF x^.class = Nconst THEN
+            IF (x^.conval^.intval2 # 0) & (x^.conval^.intval2 # -1) OR (x^.conval^.intval2 = 0) & (x^.conval^.intval < 0) OR
+              (x^.conval^.intval2 = -1) & (x^.conval^.intval >= 0) THEN err(203); x^.conval^.intval := 1
+            END ;
+            x^.conval^.intval2 := 0; x^.typ := OPT.linttyp
+          ELSE x := HugeCall("Short", x, OPT.linttyp)
+          END
         ELSE err(111)
         END
     | longfn: (*LONG*)
@@ -1313,11 +1577,17 @@ MODULE OPB;  (** non-portable *)
         ELSIF f = Int THEN Convert(x, OPT.linttyp)
         ELSIF f = Real THEN Convert(x, OPT.lrltyp)
         ELSIF f = Char THEN Convert(x, OPT.linttyp)
+        ELSIF f = LInt THEN  (* polpo: HUGEINT *)
+          IF x^.class = Nconst THEN
+            IF x^.conval^.intval < 0 THEN x^.conval^.intval2 := -1 ELSE x^.conval^.intval2 := 0 END ;
+            x^.typ := OPT.hinttyp; x^.obj := NIL
+          ELSE ToHuge(x)
+          END
         ELSE err(111)
         END
     | incfn, decfn: (*INC, DEC*)
         IF NotVar(x) THEN err(112)
-        ELSIF ~(f IN intSet) THEN err(111)
+        ELSIF ~(f IN intSet + {HInt}) THEN err(111)
         ELSIF x^.readonly THEN err(76)
         END
     | inclfn, exclfn: (*INCL, EXCL*)
@@ -1342,6 +1612,7 @@ MODULE OPB;  (** non-portable *)
         IF (x^.class = Ntype) OR (x^.class = Nproc) THEN err(126)
         ELSIF f IN intSet THEN
           IF f # LInt THEN Convert(x, OPT.linttyp) END
+        ELSIF f = HInt THEN  (* polpo *)
         ELSE err(111); x^.typ := OPT.linttyp
         END
     | adrfn: (*SYSTEM.ADR*)
@@ -1420,6 +1691,7 @@ MODULE OPB;  (** non-portable *)
   END StPar0;
 
   PROCEDURE StPar1*(VAR par0: OPT.Node; x: OPT.Node; fctno: SHORTINT);  (* x: second parameter of standard proc *)
+    VAR lo, hi: LONGINT; a, r: HugeInt.Huge;
     VAR f, L: INTEGER; typ: OPT.Struct; p, t: OPT.Node; i: LONGINT;
 
     PROCEDURE NewOp(class, subcl: SHORTINT; left, right: OPT.Node): OPT.Node;
@@ -1433,6 +1705,20 @@ MODULE OPB;  (** non-portable *)
     CASE fctno OF
       incfn, decfn: (*INC DEC*)
         IF (x^.class = Ntype) OR (x^.class = Nproc) THEN err(126); p^.typ := OPT.notyp
+        ELSIF p^.typ = OPT.hinttyp THEN  (* polpo *)
+          IF ~IsInt(x) THEN err(111)
+          ELSIF x^.typ = OPT.hinttyp THEN
+            ToHuge(x); CheckLeaf(p, FALSE);
+            IF fctno = incfn THEN p := HugeCall("Inc", Args2(p, x), OPT.notyp)
+            ELSE p := HugeCall("Dec", Args2(p, x), OPT.notyp)
+            END
+          ELSE
+            IF x^.typ^.form # LInt THEN Convert(x, OPT.linttyp) END ;
+            CheckLeaf(p, FALSE);
+            IF fctno = incfn THEN p := HugeCall("IncL", Args2(p, x), OPT.notyp)
+            ELSE p := HugeCall("DecL", Args2(p, x), OPT.notyp)
+            END
+          END
         ELSE
           IF x^.typ # p^.typ THEN
             IF (f IN intSet) & (f < p.typ.form) THEN Convert(x, p^.typ)
@@ -1478,6 +1764,14 @@ MODULE OPB;  (** non-portable *)
         p^.typ := OPT.notyp
     | ashfn: (*ASH*)
         IF (x^.class = Ntype) OR (x^.class = Nproc) THEN err(126)
+        ELSIF (p^.typ = OPT.hinttyp) & (f IN intSet) THEN  (* polpo *)
+          IF (p^.class = Nconst) & (x^.class = Nconst) THEN
+            ConstWords(p, lo, hi); HugeInt.Pack(a, lo, hi);
+            IF HugeInt.AshOvf(r, a, x^.conval^.intval) THEN err(208) ELSE SetHuge(p, r) END
+          ELSE
+            IF f # LInt THEN Convert(x, OPT.linttyp) END ;
+            ToHuge(p); p := HugeValue("Ash", Args3(HugeTemp(), p, x))
+          END
         ELSIF f IN intSet THEN
           IF (p^.class = Nconst) & (x^.class = Nconst) THEN
             IF (-maxExp > x^.conval^.intval) OR (x^.conval^.intval > maxExp) THEN err(208); p^.conval^.intval := 1
@@ -1675,7 +1969,12 @@ MODULE OPB;  (** non-portable *)
       ELSIF (fctno <= sizefn) OR (fctno = shalt) THEN (* 1 param *)
         IF parno < 1 THEN err(65) END
       ELSE (* more than 1 param *)
-        IF ((fctno = incfn) OR (fctno = decfn)) & (parno = 1) THEN (*INC, DEC*)
+        IF ((fctno = incfn) OR (fctno = decfn)) & (parno = 1) & (p^.typ = OPT.hinttyp) THEN  (* polpo *)
+          CheckLeaf(p, FALSE);
+          IF fctno = incfn THEN p := HugeCall("IncL", Args2(p, NewLInt(1)), OPT.notyp)
+          ELSE p := HugeCall("DecL", Args2(p, NewLInt(1)), OPT.notyp)
+          END
+        ELSIF ((fctno = incfn) OR (fctno = decfn)) & (parno = 1) THEN (*INC, DEC*)
           BindNodes(Nassign, OPT.notyp, p, NewIntConst(1)); p^.subcl := fctno; p^.right^.typ := p^.left^.typ
         ELSIF (fctno = lenfn) & (parno = 1) THEN (*LEN*)
           IF p^.typ^.comp IN {DynArr, OpenArr} THEN dim := 0;
@@ -1808,7 +2107,10 @@ MODULE OPB;  (** non-portable *)
         ELSIF (ap^.class >= Nconst) & (ap.class#Ncall) THEN err(59)
         ELSE OpenArrParCheck(fp^.typ, ap^.typ, FALSE)
         END
-      ELSE CheckAssign(fp^.typ, ap)
+      ELSE CheckAssign(fp^.typ, ap);
+        IF fp^.typ = OPT.hinttyp THEN ToHuge(ap)  (* polpo *)
+        ELSIF (ap^.typ = OPT.hinttyp) & (fp^.typ^.form IN realSet) THEN HugeToReal(ap, fp^.typ)
+        END
       END
     END
   END Param;
@@ -1824,7 +2126,7 @@ MODULE OPB;  (** non-portable *)
   END StaticLink;
 
   PROCEDURE Call*(VAR x: OPT.Node; apar: OPT.Node; fp: OPT.Object);
-    VAR typ: OPT.Struct; p: OPT.Node; lev: SHORTINT;
+    VAR typ: OPT.Struct; p, q: OPT.Node; lev: SHORTINT;
   BEGIN
     IF x^.class = Nproc THEN typ := x^.typ;
       lev := x^.obj^.mnolev;
@@ -1836,8 +2138,15 @@ MODULE OPB;  (** non-portable *)
       fp := x^.obj^.link
     ELSE typ := x^.typ^.BaseTyp
     END ;
+    IF typ = OPT.hptrtyp THEN  (* polpo: a temporary for the HUGEINT result, see OPT.EnterHuge *)
+      q := HugeTemp();
+      IF apar = NIL THEN apar := q
+      ELSE p := apar; WHILE p^.link # NIL DO p := p^.link END ; p^.link := q
+      END
+    END ;
     BindNodes(Ncall, typ, x, apar); x^.obj := fp;
-    x.subcl := 0  (* 0 = no assign call *)
+    x.subcl := 0;  (* 0 = no assign call *)
+    IF typ = OPT.hptrtyp THEN BindNodes(Nderef, OPT.hinttyp, x, NIL); x^.readonly := TRUE END
   END Call;
 
   PROCEDURE CopyAndSubst*(VAR new: OPT.Node; old: OPT.Node);
@@ -1878,10 +2187,20 @@ MODULE OPB;  (** non-portable *)
   END Enter;
 
   PROCEDURE Return*(VAR x: OPT.Node; proc: OPT.Object);
-    VAR node: OPT.Node;
+    VAR node, d: OPT.Node; par: OPT.Object;
   BEGIN
     IF proc = NIL THEN (* return from module *)
       IF x # NIL THEN err(124) END
+    ELSIF (proc^.typ = OPT.hptrtyp) & (x # NIL) THEN  (* polpo: x into the hidden parameter, its address returned *)
+      CheckAssign(OPT.hinttyp, x);
+      par := proc^.link; WHILE (par # NIL) & ~Hidden(par) DO par := par^.link END ;
+      IF par # NIL THEN
+        d := NewLeaf(par); HugeAssign(d, x);
+        x := NewLeaf(par); MOp(adr, x); x^.typ := OPT.hptrtyp;
+        node := OPT.NewNode(Nreturn); node^.typ := OPT.notyp; node^.obj := proc; node^.left := x;
+        node^.conval := OPT.NewConst(); node^.conval^.intval := OPM.errpos;
+        d^.link := node; x := d; RETURN
+      END
     ELSE
       IF x # NIL THEN
         IF proc^.typ^.comp = OpenArr THEN    (* same as Param *)
@@ -1908,6 +2227,8 @@ MODULE OPB;  (** non-portable *)
     CheckAssign(x^.typ, y);
     IF x^.readonly THEN err(76) END ;
     OPT.MarkType(x.typ);
+    IF x^.typ = OPT.hinttyp THEN HugeAssign(x, y); RETURN END ;  (* polpo *)
+    IF (y^.typ = OPT.hinttyp) & (x^.typ^.form IN realSet) THEN HugeToReal(y, x^.typ) END ;
     IF x^.typ^.comp = Record THEN
       IF x^.class = Nguard THEN z := x^.left ELSE z := x END ;
       IF (z^.class = Nderef) & (z^.left^.class = Nguard) THEN

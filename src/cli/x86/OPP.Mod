@@ -10,7 +10,7 @@ MODULE OPP;  (** non-portable *)
 
   CONST
     (* numtyp values *)
-    char = 1; integer = 2; real = 3; longreal = 4;
+    char = 1; integer = 2; real = 3; longreal = 4; huge = 5;
 
     (* symbol values *)
     null = OPS.null; times = OPS.times; slash = OPS.slash; div = OPS.div;
@@ -781,6 +781,10 @@ MODULE OPP;  (** non-portable *)
           IF (sysflag # 0) THEN err(200) END
         ELSIF res^.mode = Typ THEN
           IF typ#NIL THEN  resTyp.BaseTyp := res^.typ; resTyp := typ; CheckStruct(typ)
+          ELSIF res^.typ = OPT.hinttyp THEN  (* polpo: the result into an hidden parameter, see OPT.EnterHuge *)
+            resTyp := OPT.hptrtyp; OPT.Insert("@r", par); par.flag := {OPT.param};
+            par^.mode := VarPar; par^.typ := OPT.hinttyp; par^.link := NIL;
+            IF firstPar = NIL THEN firstPar := par ELSE last^.link := par END
           ELSE resTyp := res^.typ
           END;
           IF (sysflag # 0) & (resTyp.form = Comp) THEN err(200) END
@@ -967,7 +971,7 @@ MODULE OPP;  (** non-portable *)
     IF sym # rparen THEN
       LOOP
         Expression(apar);
-        IF fpar # NIL THEN
+        IF (fpar # NIL) & ~OPB.Hidden(fpar) THEN
           UndefFlag := UndefFlag OR (fpar.mode<0);
           IF ~UndefFlag & ~ b THEN
             OPB.Param(apar, fpar); OPB.Link(aparlist, last, apar)
@@ -982,7 +986,7 @@ MODULE OPP;  (** non-portable *)
       END;
       IF aparret#NIL THEN lastret.link:=aparlist; aparlist:=aparret END
     END ;
-    IF (fpar # NIL) & ~UndefFlag & ~ b THEN err(65) END;
+    IF (fpar # NIL) & ~OPB.Hidden(fpar) & ~UndefFlag & ~ b THEN err(65) END;
     UndefFlag := UndefFlag OR b
   END ActualParameters;
 
@@ -1236,6 +1240,7 @@ MODULE OPP;  (** non-portable *)
       | integer: x := OPB.NewIntConst(OPS.intval)
       | real: x := OPB.NewRealConst(OPS.realval, OPT.realtyp)
       | longreal: x := OPB.NewRealConst(OPS.lrlval, OPT.lrltyp)
+      | huge: x := OPB.NewHugeConst(OPS.intval, OPS.intval2)
       END ;
       OPS.Get(sym)
     ELSIF sym = true THEN
@@ -1721,7 +1726,7 @@ OPM.LogWStr("  failed");*)
             IF sym = lparen THEN
               OPS.Get(sym); ActualParameters(apar, fpar); CheckSym(rparen)
             ELSE apar := NIL;
-              IF fpar # NIL THEN err(65) END
+              IF (fpar # NIL) & ~OPB.Hidden(fpar) THEN err(65) END
             END ;
             IF (z.class=Nproc) OR (z.class=Nassembler) THEN
               sysflag := z.obj.sysflag # 0
@@ -1806,7 +1811,7 @@ OPM.LogWStr("  failed");*)
     END SetPos;
 
   BEGIN stat := NIL; last := NIL; UndefFlag := FALSE;
-    LOOP x := NIL;
+    LOOP x := NIL; OPB.hugeNext := 0;
       IF sym < ident THEN err(14);
         REPEAT OPS.Get(sym) UNTIL sym >= ident
       END ;
@@ -1840,7 +1845,7 @@ OPM.LogWStr("  failed");*)
           IF sym = lparen THEN
             OPS.Get(sym); ActualParameters(apar, fpar); CheckSym(rparen)
           ELSE apar := NIL;
-            IF (fpar # NIL) & ~UndefFlag THEN err(65) END
+            IF (fpar # NIL) & ~OPB.Hidden(fpar) & ~UndefFlag THEN err(65) END
           END ;
           IF ~UndefFlag THEN
             IF (x.class=Nproc) OR (x.class=Nassembler) THEN

@@ -160,6 +160,7 @@ MODULE OPT;  (* non-portable *)
     topScope*, objects*: Object;
     undftyp*, bytetyp*, booltyp*, chartyp*, sinttyp*, inttyp*, linttyp*, hinttyp*,
     realtyp*, lrltyp*, settyp*, stringtyp*, niltyp*, notyp*, ptrtyp*: Struct;
+    hptrtyp*: Struct;  (* polpo: the result type of a function returning a HUGEINT, see EnterHuge *)
 
     SYSimported*: BOOLEAN;
     nofmod*: SHORTINT; modules*: ModArr;  (*global for each module being compiled*)
@@ -696,6 +697,7 @@ MODULE OPT;  (* non-portable *)
       f:=obj.typ.form; OPM.FPrint(fp, f); OPM.FPrint(fp, obj.typ.comp);
       CASE f OF
       | Bool, Char, SInt, Int, LInt: OPM.FPrint(fp, obj.conval.intval);
+      | HInt: OPM.FPrint(fp, obj.conval.intval); OPM.FPrint(fp, obj.conval.intval2);  (* polpo *)
       | Set: OPM.FPrintSet(fp, obj.conval.setval);
       | Real: rval:=SHORT(obj.conval.realval); OPM.FPrintReal(fp, rval);
       | LReal: OPM.FPrintLReal(fp, obj.conval.realval);
@@ -902,6 +904,7 @@ MODULE OPT;  (* non-portable *)
           fld.conval:=NewConst(); fld.linkadr := OPM.LANotAlloc;  (* mfix *)
           fld.conval.setval:={hasBody};  (* mfix *)
           InStruct(fld.typ, FALSE); ReadString(R, fld.name);
+          IF fld.typ = hinttyp THEN fld.typ := hptrtyp END;  (* polpo *)
           IF fld.name = "" THEN fld.vis:=internal; ReadString(R, fld.name) END;
           InParList(fld.link);
           IF fld.name = ObjBody THEN
@@ -964,7 +967,8 @@ MODULE OPT;  (* non-portable *)
           Files.ReadNum(R, typ.n)
         | SFtypPointer:
         | SFtypRecord:  InRecord(typ); typ.n := -1;
-        | SFtypProcTyp:  InParList(typ.link)
+        | SFtypProcTyp:  InParList(typ.link);
+          IF typ.BaseTyp = hinttyp THEN typ.BaseTyp := hptrtyp END  (* polpo *)
         END;
         IF impSelf & (tobj.name#"") & (tobj.vis#internal) THEN
           typ.sref:=0;
@@ -1004,6 +1008,7 @@ MODULE OPT;  (* non-portable *)
     BEGIN  NEW(conval); obj.conval:=conval;
       CASE  tag  OF
       | SFtypBool, SFtypChar, SFtypSInt..SFtypLInt:  Files.ReadNum(R, conval.intval)
+      | SFtypHInt:  Files.ReadNum(R, conval.intval); Files.ReadNum(R, conval.intval2)  (* polpo *)
       | SFtypSet:  Files.ReadNum(R, SYSTEM.VAL(LONGINT, conval.setval))
       | SFtypReal:  Files.ReadReal(R, r); conval.realval := r; conval.intval := OPM.ConstNotAlloc
       | SFtypLReal:  Files.ReadLReal(R, conval.realval); conval.intval := OPM.ConstNotAlloc
@@ -1038,12 +1043,14 @@ MODULE OPT;  (* non-portable *)
           IF  tag=SFxproc  THEN  mode:=XProc; Files.ReadNum(R, tag);
             WHILE  tag < SFoperator  DO
               InObj; InParList(obj.link); Files.ReadNum(R, tag);
+              IF obj.typ = hinttyp THEN obj.typ := hptrtyp END;  (* polpo *)
               obj.conval:=NewConst(); obj.conval.setval:={};
             END
           END;
           IF  tag=SFoperator  THEN  mode:=XProc; operator:=TRUE;Files.ReadNum(R, tag);
             WHILE  tag < SFcproc(*SFalias*)  DO
               InObj; InParList(obj.link); obj.conval:=NewConst(); obj.conval.setval:={};
+              IF obj.typ = hinttyp THEN obj.typ := hptrtyp END;  (* polpo *)
               Files.ReadNum(R, tag)
             END;
             operator:=FALSE;
@@ -1092,6 +1099,37 @@ MODULE OPT;  (* non-portable *)
       Imp(impName, selfName, M); M.directImp:=TRUE; ali.scope:=M.right; ali.mnolev:=M.mnolev
     END
   END Import;
+
+  (* polpo: the object name of the imported module mod (its alias), without changing OPS.name *)
+  PROCEDURE FindIn*(mod: Object; VAR name: OPS.Name; VAR res: Object);
+    VAR obj: Object;
+  BEGIN obj := mod^.scope;
+    WHILE (obj # NIL) & (obj^.name # name) DO
+      IF name < obj^.name THEN obj := obj^.left ELSE obj := obj^.right END
+    END ;
+    MarkObj(obj); res := obj
+  END FindIn;
+
+  (* polpo: an alias of the module name, imported for the compiler's own calls (HugeInt) if the module does not
+    import it; NIL if it has no symbol file *)
+  PROCEDURE ImportHidden*(VAR name: OPS.Name): Object;
+    VAR i: INTEGER; scope, ali: Object; alias, self: OPS.Name; direct: BOOLEAN;
+  BEGIN
+    alias := "@"; i := 0; WHILE (name[i] # 0X) & (i < LEN(alias) - 2) DO alias[i + 1] := name[i]; INC(i) END ;
+    alias[i + 1] := 0X;
+    FindInScope(alias, modules[0], ali);
+    IF ali = NIL THEN
+      i := 1; WHILE (i < nofmod) & (modules[i].name # name) DO INC(i) END ;
+      direct := (i < nofmod) & modules[i].directImp;
+      scope := topScope; topScope := modules[0]; self := modules[0].name;
+      Import(alias, name, self); topScope := scope;
+      i := 1; WHILE (i < nofmod) & (modules[i].name # name) DO INC(i) END ;
+      IF i < nofmod THEN modules[i].directImp := direct END ;  (* not in the imports of the symbol file *)
+      FindInScope(alias, modules[0], ali)
+    END ;
+    IF (ali # NIL) & (ali.scope = NIL) THEN ali := NIL END ;
+    RETURN ali
+  END ImportHidden;
 
 (* Export *)
 
@@ -1209,6 +1247,7 @@ MODULE OPT;  (* non-portable *)
   PROCEDURE OutStruct(typ: Struct);
     VAR tag: SHORTINT; mod: Module; tobj: Object;
   BEGIN
+    IF typ = hptrtyp THEN typ := hinttyp END;  (* polpo: a function returning a HUGEINT, see EnterHuge *)
     IF  typ=NIL  THEN  OPM.SymW(0X)
     ELSIF  typ.mno#0  THEN  mod:=modules[typ.mno]; OutMod(mod);
       IF mod.nofstr>0 THEN mod.nofstr:=0 END;
@@ -1245,6 +1284,7 @@ MODULE OPT;  (* non-portable *)
   BEGIN
     CASE  form  OF
     | Bool, Char, SInt..LInt:  OPM.SymWNum(conval.intval)
+    | HInt:  OPM.SymWNum(conval.intval); OPM.SymWNum(conval.intval2)  (* polpo *)
     | Set:  OPM.SymWSet(conval.setval)
     | Real:  OPM.SymWReal(SHORT(conval.realval))
     | LReal:  OPM.SymWLReal(conval.realval)
@@ -1366,6 +1406,16 @@ MODULE OPT;  (* non-portable *)
     obj^.mode := Typ; obj^.typ := typ; obj^.vis := external
   END EnterTypAlias;
 
+  (* polpo: HUGEINT on the 32-bit port: the operations are compiled into calls of HugeInt (see OPB). A function
+    returning a HUGEINT has an hidden last parameter VAR @r: HUGEINT and returns the address of @r, typed hptrtyp
+    and dereferenced by the caller; symbol files show the result as HUGEINT. *)
+  PROCEDURE EnterHuge;
+  BEGIN
+    hptrtyp := NewStr(Pointer, Basic); hptrtyp^.BaseTyp := hinttyp; hptrtyp^.size := OPM.PointerSize;
+    hptrtyp^.strobj := NewObj(); hptrtyp^.tdadr := 0; hptrtyp^.offset := 0;
+    hptrtyp.fpdone := -1; hptrtyp.fp := 117; hptrtyp.pbfp := 117; hptrtyp.pvfp := 117  (* a built-in type *)
+  END EnterHuge;
+
   PROCEDURE EnterProc(name: ARRAY OF CHAR; num: INTEGER);
     VAR obj: Object;
   BEGIN Insert(name, obj);
@@ -1410,7 +1460,7 @@ BEGIN
   EnterTyp("REAL", Real, OPM.RealSize, realtyp, SFtypReal);
   EnterTyp("INTEGER", Int, OPM.IntSize, inttyp, SFtypInt);
   EnterTyp("LONGINT",  LInt, OPM.LIntSize, linttyp, SFtypLInt);
-  EnterTyp("HUGEINT",  HInt, OPM.HIntSize, hinttyp, SFtypHInt);
+  EnterTyp("HUGEINT",  HInt, OPM.HIntSize, hinttyp, SFtypHInt); EnterHuge;
   EnterTyp("LONGREAL", LReal, OPM.LRealSize, lrltyp, SFtypLReal);
   EnterTyp("SHORTINT", SInt, OPM.SIntSize, sinttyp, SFtypSInt);
   EnterTyp("BOOLEAN", Bool, OPM.BoolSize, booltyp, SFtypBool);

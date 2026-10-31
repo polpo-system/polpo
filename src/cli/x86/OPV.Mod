@@ -680,7 +680,8 @@ END TypeName;
           OPC.Field (x, n.obj.adr)
         END
       | Nderef:
-        Designator (n.left, x);
+        (* polpo: also the pointer a function returns, as OPB makes for HUGEINT *)
+        IF n.left.class = Ncall THEN Expression (n.left, x, NIL) ELSE Designator (n.left, x) END;
         OPC.DeRef (x);
       | Nindex:
         Expression (n.right, y, NIL); Designator (n.left, x); OPC.Index (x, y)
