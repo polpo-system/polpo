@@ -66,7 +66,10 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    ARMv7: F(a) DIV b with software division loaded b into R0 over the result of F (punycode, 2026-10-26);
    ROP2: each p.a[i] of an open array on the heap kept the register of p.a reserved to the end of the
    statement; a condition with seven of them took all registers of ARMv7, the compiler stopped in
-   AOPC.Index (PNGImagesTest, 2026-10-28). *)
+   AOPC.Index (PNGImagesTest, 2026-10-28);
+   RISC-V: a shift by a negative variable count, LSH(x, n) or ASH(x, n), negated the count in its own
+   register: a count held in a register (a parameter) changed sign for the rest of the procedure
+   (HugeInt, 2026-10-31). *)
 
 IMPORT SYSTEM, Linux0, out;
 
@@ -791,6 +794,14 @@ BEGIN
   RETURN ok & (r[i].a = 3) & ((r[i].b = 7) OR (r[i + 1].a = 5)) & (r[i + 1].b = 6) & (r[i].a + r[i + 1].b = 9)
 END OpenConds;
 
+(* shifts by the parameter n, used again after them *)
+PROCEDURE Shifts(lo, hi, n: LONGINT): BOOLEAN;
+VAR a, b, c: LONGINT;
+BEGIN
+  a := SYSTEM.LSH(lo, n); b := SYSTEM.LSH(hi, 32 + n); c := ASH(hi, n);
+  RETURN (a = 07FFFFFFH) & (b = -134217728) & (c = -1) & (n = -5)
+END Shifts;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -857,6 +868,7 @@ BEGIN
   Check("registers saved across a call whose arguments call with more arguments", SavedAcross());
   Check("DIV and MOD of a function result by a variable", CallDiv(100, 7));
   Check("a condition of seven elements of open arrays on the heap", OpenConds());
+  Check("shifts by a negative parameter, the parameter used again", Shifts(-2, -1, -5));
   out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
 END Run;
 

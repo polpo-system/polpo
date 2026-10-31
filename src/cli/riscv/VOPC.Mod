@@ -536,8 +536,9 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
     ELSE OPL.Load(y, -1); OPL.Load(x, -1);
       OPL.ReleaseR(y.reg); OPL.ReleaseR(x.reg); OPL.GetR(OPL.TempReg, rt);
       OPL.PutSB( OPL.BGE, y.reg, 0, 4);
-      OPL.PutR( OPL.SUB, y.reg, 0, y.reg);
-      OPL.PutR( srv, rt, x.reg, y.reg);
+      (* polpo: the count negated in T0; negated in its own register it changed a register variable *)
+      OPL.PutR( OPL.SUB, OPL.T0, 0, y.reg);
+      OPL.PutR( srv, rt, x.reg, OPL.T0);
       OPL.PutUJ( OPL.JAL, 0, 2);
       OPL.PutR( OPL.SLL, rt, x.reg, y.reg);
       x.reg:=rt;
