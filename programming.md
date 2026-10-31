@@ -285,7 +285,7 @@ something in between. A module that keeps to the following compiles with all of 
 
     no type-bound procedures (only the x86 compiler takes them, with the option /2);
 
-    no HUGEINT: integers have at most 32 bits, and SET has 32 elements;
+    SET has 32 elements;
 
     EXIT only inside LOOP, and HALT(100) (the ports accept different ranges of trap numbers);
 
@@ -298,6 +298,16 @@ something in between. A module that keeps to the following compiles with all of 
 
 Real literals are converted exactly and rounded to the nearest REAL or LONGREAL, the ends of the
 range and the denormal numbers included; a literal that is not 0 but rounds to 0 is an error.
+
+HUGEINT is a 64-bit integer on every port. The compilers keep it in two words and compile its
+operations into calls of the module HugeInt (src/common/HugeInt.Mod), which a module using HUGEINT
+imports without naming it; arithmetic on LONGINT stays faster. A literal that does not fit a LONGINT
+is a HUGEINT: decimal above 2147483647, or hexadecimal with 9 to 16 digits (0FFFFFFFFH is still the
+LONGINT -1, and 0FFFFFFFFFFFFFFFFH is -1). LONG of a LONGINT gives a HUGEINT and SHORT of a HUGEINT
+its low 32 bits; the smaller integer types and constants mix with HUGEINT in expressions,
+assignments and parameters, and HUGEINT mixes with REAL and LONGREAL. ABS, ODD, ASH, INC, DEC, MIN,
+MAX and SIZE take it, and functions may return it. It cannot index an array, select a CASE, count a
+FOR loop or be an element of a SET, and SYSTEM.VAL takes it only as a variable.
 
 (Note: ORD(ch) is an INTEGER, 16 bits, on x86, so ORD(ch) * 256 can overflow there without a trap;
 write LONG(ORD(ch)) * 256. FOR loops are fine on all five compilers.)
