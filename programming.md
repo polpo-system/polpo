@@ -130,14 +130,15 @@ line or a ~ ends them. Arg returns FALSE when there are no more. In the desktop,
 args ~ written in a text calls the same command with the same parameters, so a console command
 works in both worlds.
 
-Write output with Out, the ETH interface: Out.String, Out.Int(x, width), Out.Hex, Out.Char, Out.Ln,
-and also Out.Real, Out.LongReal and the fixed-point and hexadecimal forms of both. It writes to the
-terminal, and in the desktop into System.Log a line at a time (the rest of a line comes when the
-command has ended); in the desktop Out.Open sends it to a viewer of its own instead, until
-Out.Close. Underneath, Out writes through out (lowercase): the desktop points out.writer, a
-procedure variable, at System.Log, and NIL (the default) means the terminal. A command imports Out,
-not out; out stays for the few modules that read or set out.writer themselves (System, portia,
-logs) or that must import nothing but Linux0 and SYSTEM (the compilers, the linkers, the shell).
+Write output with Out, the ETH interface: Out.String, Out.Int(x, width), Out.Hex(x) (a blank and 8
+digits), Out.Char, Out.Ln, and also Out.Real, Out.LongReal and their fixed-point forms Out.RealFix and
+Out.LongRealFix. It writes to the terminal, and in the desktop into System.Log a line at a time (the
+rest of a line comes when the command has ended); in the desktop Out.Open sends it to a viewer of its
+own instead, until Out.Close. Underneath, Out writes through out (lowercase): the desktop points
+out.writer, a procedure variable, at System.Log, and NIL (the default) means the terminal. A command
+imports Out, not out. out stays for the modules that read or set out.writer themselves (System,
+portia, logs, the ARM and ROP2 compilers) and for the files shared with voc, which import it as
+Out := out: voc's Out.Hex takes two arguments, as out.Hex does.
 
 In reads the parameters of the command (In.Open, then In.Int, In.Name, In.String, In.Real, and
 In.Done to see whether they were there), in the console from the command line and in the desktop
@@ -148,16 +149,15 @@ in the console and in the desktop. Reading the terminal itself (stdin, as the sh
 writing to it directly work only in the console.
 
 Texts, imported above for OpenArgs and Arg, is also Show, ShowPlain, ReplaceIn, DeleteLines and the
-rest of the ETH text interface; it needs Display and Fonts, some 30 to 40 KB of loadable code more
-than console-base alone has. Every package that depends on console (not console-base) already has
-them for other reasons, so using Texts there costs nothing further, and that is almost every
-package. A package that depends on console-base alone, to stay smaller, uses the older module texts
-in place of Texts, still with Out for output (Out costs nothing extra either way): the same
-OpenArgs, Arg, Show, ShowPlain, Replace (texts' name for what Texts calls ReplaceIn, to leave the
-ETH Replace of a live text alone) and DeleteLines, without the parts tied to a live desktop viewer.
-Depend on console-base, not console, in the recipe;
-nothing special is needed to build loksh, since every port compiles both texts and Texts regardless
-of which packages use which, the same way it compiles out and Out.
+rest of the ETH text interface. It needs Display and Fonts, objects of about 55 KB on x86 and up to
+70 KB on ARM that console-base alone does not load. The package console contains Texts, so for
+a package that depends on console, and that is almost every package, Texts costs nothing further.
+A package that depends on console-base alone, to stay smaller, uses the older module texts in place
+of Texts, still with Out for output (Out is part of console-base): the same OpenArgs, Arg, Show,
+ShowPlain, Replace (texts' name for what Texts calls ReplaceIn, to leave the ETH Replace of a live
+text alone) and DeleteLines, without the parts tied to a live desktop viewer. Its recipe depends on
+console-base, not console. Nothing special is needed to build loksh: every port compiles both texts
+and Texts, the same way it compiles out and Out.
 
 When the parameters are missing or wrong, print a line usage: module.Command ... that says what the
 command does. Options are words that start with a slash, after the command or after its
