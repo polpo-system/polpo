@@ -1,4 +1,9 @@
-MODULE out;
+MODULE out;  (** deprecated: import Out instead, which has the same Char, String, Int and Ln and also
+  writer, Hex, Real and LongReal; it costs nothing extra (Texts0 is already part of console-base). out
+  stays underneath Out, and a few modules keep it to read or set writer directly: System (both variants),
+  portia (asking in the desktop makes no sense: out.writer # NIL there), logs (shows nothing in the
+  desktop, where out already writes into the log). The compilers, linkers, shell and system import it
+  under the alias Out := out on purpose, to stay independent of Texts0; leave that alias as it is. *)
 
 IMPORT Linux0, SYSTEM;
 

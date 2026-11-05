@@ -3,7 +3,7 @@ MODULE OocIOTest;  (** loksh OocIOTest.Run alpha "b c": the channels of the OOC 
 (* Writes and reads zq_oocio1.txt (TextRider) and zq_oocio2.bin (a Tmp file, BinaryRider) in the
    current directory, then deletes them; ProgramArgs gives the command name and the arguments. *)
 
-IMPORT oocFiles, TextRider, BinaryRider, ProgramArgs, Files, out, Msg, IOMemory, URI, URIParser,
+IMPORT oocFiles, TextRider, BinaryRider, ProgramArgs, Files, Out, Msg, IOMemory, URI, URIParser,
   URISchemeFile, URISchemeMemory;
 
 VAR fails, checks: LONGINT;
@@ -11,7 +11,7 @@ VAR fails, checks: LONGINT;
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("OocIOTest: failed: "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("OocIOTest: failed: "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE Text;
@@ -106,7 +106,7 @@ BEGIN
   fails := 0; checks := 0;
   Text; Binary; Args; Memory; URIs;
   Files.Delete("./zq_oocio1.txt", res); Files.Delete("./zq_oocio2.bin", res);
-  out.String("OocIOTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("OocIOTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END OocIOTest.

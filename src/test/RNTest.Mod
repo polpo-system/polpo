@@ -1,5 +1,5 @@
 MODULE RNTest;  (** RNTest.Run: uniform numbers in [0, 1) with mean 1/2, exponential ones with mean 1/mu *)
-IMPORT RandomNumbers, out;
+IMPORT RandomNumbers, Out;
 PROCEDURE Run*;
 CONST n = 20000;
 VAR i, fails: LONGINT; x, sum, esum: REAL;
@@ -10,8 +10,8 @@ BEGIN
     IF (x < 0) OR (x >= 1) THEN INC(fails) END;
     sum := sum + x; esum := esum + RandomNumbers.Exp(2.0); INC(i)
   END;
-  IF (sum / n < 0.48) OR (sum / n > 0.52) THEN INC(fails); out.String("FAIL mean of Uniform"); out.Ln END;
-  IF (esum / n < 0.47) OR (esum / n > 0.53) THEN INC(fails); out.String("FAIL mean of Exp(2)"); out.Ln END;
-  out.String("RNTest: "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  IF (sum / n < 0.48) OR (sum / n > 0.52) THEN INC(fails); Out.String("FAIL mean of Uniform"); Out.Ln END;
+  IF (esum / n < 0.47) OR (esum / n > 0.53) THEN INC(fails); Out.String("FAIL mean of Exp(2)"); Out.Ln END;
+  Out.String("RNTest: "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 END RNTest.

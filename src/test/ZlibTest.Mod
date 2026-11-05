@@ -6,7 +6,7 @@ MODULE ZlibTest;  (** loksh ZlibTest.Run: ZlibDeflate.Compress and ZlibInflate.U
   as zlib does), and Compress at level 0 stopped at ASSERT 113 for 65532 bytes and more (FillWindow
   can give twice the window, a stored block is cut at the size of the pending buffer in zlib). *)
 
-IMPORT ZlibDeflate, ZlibInflate, out;
+IMPORT ZlibDeflate, ZlibInflate, Out;
 
 VAR checks, failed: LONGINT;
 
@@ -26,9 +26,9 @@ BEGIN
   WHILE ok & (i < n) DO ok := src[i] = dst[i]; INC(i) END;
   INC(checks);
   IF ~ok THEN
-    INC(failed); out.String("FAIL "); out.Int(n, 0); out.String(" bytes at level "); out.Int(level, 0);
-    out.String(": Compress "); out.Int(cres, 0); out.String(", Uncompress "); out.Int(res.code, 0);
-    out.String(", length "); out.Int(len, 0); out.Ln
+    INC(failed); Out.String("FAIL "); Out.Int(n, 0); Out.String(" bytes at level "); Out.Int(level, 0);
+    Out.String(": Compress "); Out.Int(cres, 0); Out.String(", Uncompress "); Out.Int(res.code, 0);
+    Out.String(", length "); Out.Int(len, 0); Out.Ln
   END
 END Case;
 
@@ -38,7 +38,7 @@ BEGIN
   Case(1, 6, 1); Case(100, 6, 2); Case(32767, 6, 3); Case(32768, 6, 4); Case(65536, 6, 5);
   Case(196864, 6, 6); Case(196864, 2, 7); Case(500000, 9, 8); Case(1000000, 1, 9);
   Case(1000, 0, 10); Case(65531, 0, 11); Case(65532, 0, 12); Case(65536, 0, 13); Case(300000, 0, 14);
-  out.String("ZlibTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(failed, 0); out.String(" failed"); out.Ln
+  Out.String("ZlibTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(failed, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END ZlibTest.

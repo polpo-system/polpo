@@ -1,6 +1,6 @@
 MODULE ClockTest;  (** loksh ClockTest.Run: Kernel.U2OTime, O2UTime and GetClock (UTC) on this port *)
 
-IMPORT SYSTEM, Kernel, Linux0, out;
+IMPORT SYSTEM, Kernel, Linux0, Out;
 
 TYPE Timeval = RECORD sec, usec: LONGINT END;
 
@@ -9,7 +9,7 @@ VAR fails, checks: LONGINT;
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("ClockTest: failed: "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("ClockTest: failed: "); Out.String(what); Out.Ln END
 END Check;
 
 (* unix time t is the Oberon date d and time tm (the dates from Python's datetime, UTC) *)
@@ -40,7 +40,7 @@ BEGIN
   i := Linux0.GetTimeOfDay(SYSTEM.ADR(tv), 0); Kernel.GetClock(t2, d2);
   c := tv.sec; Kernel.U2OTime(c, date, time);
   Check("GetClock is UTC", (d2 = date) & (ABS(Kernel.O2UTime(d2, t2) - tv.sec) <= 2));
-  out.String("ClockTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("ClockTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END ClockTest.

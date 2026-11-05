@@ -17,7 +17,7 @@ MODULE dcs;  (** dcs, the digital command system: a command line Gemini and Spar
    dcs.NewIdent name [mail] [/years n]   make an identity (a P-256 key, self-signed)
    dcs.Help *)
 
-IMPORT SYSTEM, Linux0, Files, Gemini0, Texts, out;
+IMPORT SYSTEM, Linux0, Files, Gemini0, Texts, Out;
 
 CONST
   MaxInput = 3000;  (* a Gemini query is at most 1024 bytes in all *)
@@ -27,28 +27,28 @@ VAR
   url, inputText: ARRAY MaxInput OF CHAR;
 
 PROCEDURE Label(l: ARRAY OF CHAR);
-BEGIN out.String(l)
+BEGIN Out.String(l)
 END Label;
 
 (* the identity id in a line: name <mail> *)
 PROCEDURE Person(id: Gemini0.Ident);
 BEGIN
-  IF id.cn[0] # 0X THEN out.String(id.cn) END;
-  IF id.mail[0] # 0X THEN IF id.cn[0] # 0X THEN out.Char(" ") END; out.Char("<"); out.String(id.mail); out.Char(">") END;
-  IF (id.cn[0] = 0X) & (id.mail[0] = 0X) THEN out.String("(no subject)") END
+  IF id.cn[0] # 0X THEN Out.String(id.cn) END;
+  IF id.mail[0] # 0X THEN IF id.cn[0] # 0X THEN Out.Char(" ") END; Out.Char("<"); Out.String(id.mail); Out.Char(">") END;
+  IF (id.cn[0] = 0X) & (id.mail[0] = 0X) THEN Out.String("(no subject)") END
 END Person;
 
 PROCEDURE Describe(id: Gemini0.Ident);
 VAR short: ARRAY 17 OF CHAR; i: LONGINT;
 BEGIN
   i := 0; WHILE (i < 16) & (id.fingerprint[i] # 0X) DO short[i] := id.fingerprint[i]; INC(i) END; short[i] := 0X;
-  out.String("  "); out.String(short); out.String("  "); Person(id);
-  IF id.notAfter[0] # 0X THEN out.String("  until "); out.String(id.notAfter) END;
-  out.Ln
+  Out.String("  "); Out.String(short); Out.String("  "); Person(id);
+  IF id.notAfter[0] # 0X THEN Out.String("  until "); Out.String(id.notAfter) END;
+  Out.Ln
 END Describe;
 
 PROCEDURE Error(a, b: ARRAY OF CHAR);
-BEGIN Label("error:    "); out.String(a); out.String(b); out.Ln
+BEGIN Label("error:    "); Out.String(a); Out.String(b); Out.Ln
 END Error;
 
 (* the body as it arrived, with CR and other control characters escaped *)
@@ -56,7 +56,7 @@ PROCEDURE ShowBody(r: Gemini0.Response);
 VAR c: Gemini0.Chunk; seg: ARRAY 1024 OF CHAR; i, n: LONGINT; ch: CHAR; last: CHAR; hex: ARRAY 17 OF CHAR;
 
   PROCEDURE Flush;
-  BEGIN seg[n] := 0X; out.String(seg); n := 0
+  BEGIN seg[n] := 0X; Out.String(seg); n := 0
   END Flush;
 
   PROCEDURE Put(x: CHAR);
@@ -78,16 +78,16 @@ BEGIN
     c := c.next
   END;
   Flush;
-  IF last # 0AX THEN out.Ln END
+  IF last # 0AX THEN Out.Ln END
 END ShowBody;
 
 PROCEDURE Head(r: Gemini0.Response);
 VAR name: ARRAY 64 OF CHAR;
 BEGIN
-  Label("url:      "); out.String(r.url); out.Ln;
+  Label("url:      "); Out.String(r.url); Out.Ln;
   Gemini0.StatusName(r.protocol, r.status, name);
-  Label("status:   "); out.Int(r.status, 0); out.String("  "); out.String(name); out.Ln;
-  Label("meta:     "); out.Char(22X); out.String(r.meta); out.Char(22X); out.Ln
+  Label("status:   "); Out.Int(r.status, 0); Out.String("  "); Out.String(name); Out.Ln;
+  Label("meta:     "); Out.Char(22X); Out.String(r.meta); Out.Char(22X); Out.Ln
 END Head;
 
 (* the whole of standard input, or of the file name, into inputText *)
@@ -108,9 +108,9 @@ END ReadInput;
 
 PROCEDURE Usage;
 BEGIN
-  out.String("usage: dcs.Get url [input] [/ident who] [/cert file /key file] [/input file|-]"); out.Ln;
-  out.String("         [/output file] [/save] [/pin sha256] [/tofu] [/follow] [/fingerprint]"); out.Ln;
-  out.String("  dcs.Help tells more"); out.Ln
+  Out.String("usage: dcs.Get url [input] [/ident who] [/cert file /key file] [/input file|-]"); Out.Ln;
+  Out.String("         [/output file] [/save] [/pin sha256] [/tofu] [/follow] [/fingerprint]"); Out.Ln;
+  Out.String("  dcs.Help tells more"); Out.Ln
 END Usage;
 
 (** dcs.Get url [input] [options]: one request (see dcs.Help) *)
@@ -145,7 +145,7 @@ BEGIN
     IF ~ReadInput(inputFile) THEN Error("cannot read ", inputFile); RETURN END
   END;
   IF fingerprint THEN
-    IF Gemini0.Fingerprint(url, fp) THEN out.String(fp); out.Ln ELSE Error("", Gemini0.lastError) END;
+    IF Gemini0.Fingerprint(url, fp) THEN Out.String(fp); Out.Ln ELSE Error("", Gemini0.lastError) END;
     RETURN
   END;
   (* the identity *)
@@ -155,41 +155,41 @@ BEGIN
     id := Gemini0.FindIdent(list, who);
     IF id = NIL THEN
       IF Gemini0.nCandidates > 1 THEN
-        Label("error:    "); out.Char(22X); out.String(who); out.Char(22X); out.String(" matches "); out.Int(Gemini0.nCandidates, 0);
-        out.String(" identities, so it is not clear which one to log in as:"); out.Ln;
+        Label("error:    "); Out.Char(22X); Out.String(who); Out.Char(22X); Out.String(" matches "); Out.Int(Gemini0.nCandidates, 0);
+        Out.String(" identities, so it is not clear which one to log in as:"); Out.Ln;
         i := 0; WHILE i < Gemini0.nCandidates DO Describe(Gemini0.candidates[i]); INC(i) END;
-        out.String("          name one of the above by its fingerprint"); out.Ln
-      ELSE Label("error:    "); out.String("no identity matches "); out.Char(22X); out.String(who); out.Char(22X); out.Ln
+        Out.String("          name one of the above by its fingerprint"); Out.Ln
+      ELSE Label("error:    "); Out.String("no identity matches "); Out.Char(22X); Out.String(who); Out.Char(22X); Out.Ln
       END;
       RETURN
     END;
     COPY(id.cert, cert); COPY(id.key, key);
-    Label("identity: "); Person(id); out.Ln
+    Label("identity: "); Person(id); Out.Ln
   END;
   IF (cert = "") # (key = "") THEN Error("an identity needs both a certificate and a key", ""); RETURN END;
   IF cert # "" THEN
     o.identity := Gemini0.LoadIdentity(cert, key);
-    IF o.identity = NIL THEN Error(cert, ": "); out.String("          "); out.String(Gemini0.lastError); out.Ln; RETURN END
+    IF o.identity = NIL THEN Error(cert, ": "); Out.String("          "); Out.String(Gemini0.lastError); Out.Ln; RETURN END
   END;
   (* the name to save to *)
   IF save & (output = "") THEN
     Gemini0.NameForURL(url, output);
     IF Gemini0.Exists(output) THEN
-      Label("url:      "); out.String(url); out.Ln;
-      Label("error:    "); out.String("would save to "); out.Char(22X); out.String(output); out.Char(22X);
-      out.String(", which exists: name it with /output, or move it first"); out.Ln;
+      Label("url:      "); Out.String(url); Out.Ln;
+      Label("error:    "); Out.String("would save to "); Out.Char(22X); Out.String(output); Out.Char(22X);
+      Out.String(", which exists: name it with /output, or move it first"); Out.Ln;
       RETURN
     END
   END;
   IF follow THEN ok := Gemini0.Fetch(url, inputText, o, r) ELSE ok := Gemini0.Request(url, inputText, o, r) END;
-  IF ~ok THEN Label("url:      "); out.String(url); out.Ln; Error("", Gemini0.lastError); RETURN END;
+  IF ~ok THEN Label("url:      "); Out.String(url); Out.Ln; Error("", Gemini0.lastError); RETURN END;
   Head(r);
   IF (output # "") & (output # "-") & (Gemini0.Kind(r) = 2) THEN
     IF ~r.complete THEN Error("the body is incomplete: not saved", ""); RETURN END;
     IF ~Gemini0.Save(r, output) THEN Error("cannot write ", output); RETURN END;
-    Label("wrote:    "); out.String(output); out.String("  "); out.Int(r.length, 0); out.String(" bytes"); out.Ln
+    Label("wrote:    "); Out.String(output); Out.String("  "); Out.Int(r.length, 0); Out.String(" bytes"); Out.Ln
   ELSIF r.body # NIL THEN
-    out.Ln; ShowBody(r);
+    Out.Ln; ShowBody(r);
     IF ~r.complete THEN Error("the body is incomplete (the connection was cut)", "") END
   END
 END Get;
@@ -199,8 +199,8 @@ PROCEDURE Idents*;
 VAR dir: ARRAY PathLen OF CHAR; id: Gemini0.Ident;
 BEGIN
   Gemini0.IdentsDir(dir); id := Gemini0.LoadIdents(dir);
-  IF id = NIL THEN out.String("no identities in "); out.String(dir); out.Ln; RETURN END;
-  out.String("identities in "); out.String(dir); out.String(":"); out.Ln;
+  IF id = NIL THEN Out.String("no identities in "); Out.String(dir); Out.Ln; RETURN END;
+  Out.String("identities in "); Out.String(dir); Out.String(":"); Out.Ln;
   WHILE id # NIL DO Describe(id); id := id.next END
 END Idents;
 
@@ -219,12 +219,12 @@ BEGIN
     END
   END;
   IF (cn = "") OR (years < 1) THEN
-    out.String("usage: dcs.NewIdent name [mail] [/years n]   (100 years if not given)"); out.Ln; RETURN
+    Out.String("usage: dcs.NewIdent name [mail] [/years n]   (100 years if not given)"); Out.Ln; RETURN
   END;
   Gemini0.IdentsDir(dir);
   IF Gemini0.NewIdent(dir, cn, mail, years, id) THEN
-    out.String("identity: "); Person(id); out.Ln;
-    out.String("  "); out.String(id.cert); out.Ln; out.String("  "); out.String(id.key); out.Ln
+    Out.String("identity: "); Person(id); Out.Ln;
+    Out.String("  "); Out.String(id.cert); Out.Ln; Out.String("  "); Out.String(id.key); Out.Ln
   ELSE Error("", Gemini0.lastError)
   END
 END NewIdent;
@@ -232,33 +232,33 @@ END NewIdent;
 PROCEDURE Help*;
 VAR dir: ARRAY PathLen OF CHAR;
 BEGIN
-  out.String("dcs, the digital command system: a Gemini and Spartan client"); out.Ln; out.Ln;
-  out.String("  dcs.Get url [input] [options]   one request; it prints the URL, the status, the meta"); out.Ln;
-  out.String("      and the body as it arrived (CR and control characters escaped). input is sent as"); out.Ln;
-  out.String("      the query (Gemini, percent-encoded) or as the data (Spartan)."); out.Ln;
-  out.String("    /ident who               log in with an identity: a prefix of its fingerprint, its"); out.Ln;
-  out.String("                             name, its mail, or part of them (it must be one)"); out.Ln;
-  out.String("    /cert file /key file     log in with a certificate and key (ECDSA P-256 or RSA)"); out.Ln;
-  out.String("    /input file              the input from a file, or from standard input as -"); out.Ln;
-  out.String("    /output file             save the body to file (a success only)"); out.Ln;
-  out.String("    /save                    save it to a file named after the URL; never overwrites"); out.Ln;
-  out.String("    /pin sha256              require this server certificate"); out.Ln;
-  out.String("    /tofu                    trust a server on first use ($HOME/.gemini_hosts); without"); out.Ln;
-  out.String("                             /pin or /tofu a self-signed server is not checked"); out.Ln;
-  out.String("    /follow                  follow redirects (at most 5)"); out.Ln;
-  out.String("    /fingerprint             print the SHA-256 of the server certificate and stop"); out.Ln;
-  out.String("  dcs.Idents                  list the identities"); out.Ln;
-  out.String("  dcs.NewIdent name [mail] [/years n]   make an identity: a new P-256 key and a"); out.Ln;
-  out.String("                             self-signed certificate (100 years)"); out.Ln; out.Ln;
+  Out.String("dcs, the digital command system: a Gemini and Spartan client"); Out.Ln; Out.Ln;
+  Out.String("  dcs.Get url [input] [options]   one request; it prints the URL, the status, the meta"); Out.Ln;
+  Out.String("      and the body as it arrived (CR and control characters escaped). input is sent as"); Out.Ln;
+  Out.String("      the query (Gemini, percent-encoded) or as the data (Spartan)."); Out.Ln;
+  Out.String("    /ident who               log in with an identity: a prefix of its fingerprint, its"); Out.Ln;
+  Out.String("                             name, its mail, or part of them (it must be one)"); Out.Ln;
+  Out.String("    /cert file /key file     log in with a certificate and key (ECDSA P-256 or RSA)"); Out.Ln;
+  Out.String("    /input file              the input from a file, or from standard input as -"); Out.Ln;
+  Out.String("    /output file             save the body to file (a success only)"); Out.Ln;
+  Out.String("    /save                    save it to a file named after the URL; never overwrites"); Out.Ln;
+  Out.String("    /pin sha256              require this server certificate"); Out.Ln;
+  Out.String("    /tofu                    trust a server on first use ($HOME/.gemini_hosts); without"); Out.Ln;
+  Out.String("                             /pin or /tofu a self-signed server is not checked"); Out.Ln;
+  Out.String("    /follow                  follow redirects (at most 5)"); Out.Ln;
+  Out.String("    /fingerprint             print the SHA-256 of the server certificate and stop"); Out.Ln;
+  Out.String("  dcs.Idents                  list the identities"); Out.Ln;
+  Out.String("  dcs.NewIdent name [mail] [/years n]   make an identity: a new P-256 key and a"); Out.Ln;
+  Out.String("                             self-signed certificate (100 years)"); Out.Ln; Out.Ln;
   Gemini0.IdentsDir(dir);
-  out.String("  Identities are the pairs <fingerprint>.crt and .key in"); out.Ln;
-  out.String("    "); out.String(dir); out.Ln; out.Ln;
-  out.String("  Examples:"); out.Ln;
-  out.String("    loksh dcs.Get gemini://geminiprotocol.net/"); out.Ln;
-  out.String("    loksh dcs.Get gemini://geminiprotocol.net/ /save"); out.Ln;
-  out.String("    loksh dcs.Get gemini://bbs.geminispace.org/ /ident ada"); out.Ln;
-  out.String("    loksh dcs.Get gemini://example.org/search stones"); out.Ln;
-  out.String("    loksh dcs.Get spartan://mozz.us/"); out.Ln
+  Out.String("  Identities are the pairs <fingerprint>.crt and .key in"); Out.Ln;
+  Out.String("    "); Out.String(dir); Out.Ln; Out.Ln;
+  Out.String("  Examples:"); Out.Ln;
+  Out.String("    loksh dcs.Get gemini://geminiprotocol.net/"); Out.Ln;
+  Out.String("    loksh dcs.Get gemini://geminiprotocol.net/ /save"); Out.Ln;
+  Out.String("    loksh dcs.Get gemini://bbs.geminispace.org/ /ident ada"); Out.Ln;
+  Out.String("    loksh dcs.Get gemini://example.org/search stones"); Out.Ln;
+  Out.String("    loksh dcs.Get spartan://mozz.us/"); Out.Ln
 END Help;
 
 BEGIN

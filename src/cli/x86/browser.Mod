@@ -10,7 +10,7 @@ Refer to the license.txt file provided with this distribution. *)
 MODULE browser;  (** portable, except where noted *)
   IMPORT
     Kernel, Root, Modules := Modules0, OPM, OPS, OPT, OPV,
-    Files, Texts, (*Display,*) Oberon := Oberon0(*, Fonts*), out, HugeInt;
+    Files, Texts, (*Display,*) Oberon := Oberon0(*, Fonts*), Out, HugeInt;
 
   CONST
     (*visibility*)  internal=0; external=1; externalR=2;
@@ -324,16 +324,16 @@ MODULE browser;  (** portable, except where noted *)
         Texts.OpenReader(R, T, 0);
         WHILE ~R.eot DO
           Texts.Read(R, ch);
-           IF ch=0DX THEN out.Ln ELSIF ch # 0X THEN out.Char(ch) END  (* polpo: not the 0X at the end *)
+           IF ch=0DX THEN Out.Ln ELSIF ch # 0X THEN Out.Char(ch) END  (* polpo: not the 0X at the end *)
         END;
-        out.Ln
+        Out.Ln
       ELSE  (* polpo: said only in Kernel.Log *)
-        out.String("browser: no module "); out.String(name); out.String(" (no "); out.String(name);
-        out.String(".Obj in obj/x86/ of the current directory or of the root)"); out.Ln
+        Out.String("browser: no module "); Out.String(name); Out.String(" (no "); Out.String(name);
+        Out.String(".Obj in obj/x86/ of the current directory or of the root)"); Out.Ln
       END;
       OPM.outputPath:=""
     ELSE
-      out.String("Browser: module name expected"); out.Ln
+      Out.String("Browser: module name expected"); Out.Ln
     END
   END ShowDef;
 
@@ -341,7 +341,7 @@ PROCEDURE ShowScope*;  (** non-portable *)
   VAR vname: ARRAY 32 OF CHAR; R: Texts.Reader; ch: CHAR;
   BEGIN
     IF ~OPT.ScopeActive() THEN
-      out.String("Browser: no current compiler scope"); out.Ln; RETURN
+      Out.String("Browser: no current compiler scope"); Out.Ln; RETURN
     END;
     show := TRUE; extend := TRUE;  hidden := TRUE; vname := "CURRENT";
     theMod := OPT.topScope.right;
@@ -351,21 +351,21 @@ PROCEDURE ShowScope*;  (** non-portable *)
     Texts.OpenReader(R, T, 0);
     WHILE ~R.eot DO
       Texts.Read(R, ch);
-       IF ch = 0DX THEN out.Ln ELSE out.Char(ch) END
+       IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END
     END;
-    out.Ln
+    Out.Ln
 END ShowScope;
 
 PROCEDURE Help*;
 BEGIN
-  out.String("browser: the interface (definition) of a module, from its symbol file (x86 objects)"); out.Ln;
-  out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); out.Ln;
-  out.String("     /d  with field offsets, addresses and parameter offsets"); out.Ln;
-  out.String("     /e  records with the fields of their base types written out"); out.Ln;
-  out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); out.Ln;
-  out.String("  browser.ShowScope   the scope of the compiler (while compiling)"); out.Ln;
-  out.String("  In the desktop: XBrowser.ShowDef ^ (the selected name) shows it in a viewer."); out.Ln;
-  out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); out.Ln
+  Out.String("browser: the interface (definition) of a module, from its symbol file (x86 objects)"); Out.Ln;
+  Out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); Out.Ln;
+  Out.String("     /d  with field offsets, addresses and parameter offsets"); Out.Ln;
+  Out.String("     /e  records with the fields of their base types written out"); Out.Ln;
+  Out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); Out.Ln;
+  Out.String("  browser.ShowScope   the scope of the compiler (while compiling)"); Out.Ln;
+  Out.String("  In the desktop: XBrowser.ShowDef ^ (the selected name) shows it in a viewer."); Out.Ln;
+  Out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); Out.Ln
 END Help;
 
 BEGIN

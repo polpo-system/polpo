@@ -7,7 +7,7 @@ MODULE zip;  (** zip archives in the console, with Zip of ETH Oberon *)
    The archives are those of zip and unzip (deflate or stored, no encryption). ZipTool is the
    desktop tool. *)
 
-IMPORT Files, Zip, Texts, out;
+IMPORT Files, Zip, Texts, Out;
 
 CONST MaxFiles = 128;
 
@@ -24,17 +24,17 @@ END Args;
 
 PROCEDURE Error(VAR archive, entry: ARRAY OF CHAR; res: LONGINT);
 BEGIN
-  out.String("zip: "); out.String(archive); IF entry # "" THEN out.String(", "); out.String(entry) END; out.String(": ");
-  IF res = Zip.FileError THEN out.String("no such file")
-  ELSIF res = Zip.NotZipArchiveError THEN out.String("not a zip archive")
-  ELSIF res = Zip.EntryNotFound THEN out.String("no such entry")
-  ELSIF res = Zip.EntryAlreadyExists THEN out.String("the entry exists")
-  ELSIF res = Zip.NotSupportedError THEN out.String("compression method not supported, or encrypted")
-  ELSIF res = Zip.DataError THEN out.String("damaged")
-  ELSIF res = Zip.BadName THEN out.String("bad name")
-  ELSE out.String("error "); out.Int(res, 0)
+  Out.String("zip: "); Out.String(archive); IF entry # "" THEN Out.String(", "); Out.String(entry) END; Out.String(": ");
+  IF res = Zip.FileError THEN Out.String("no such file")
+  ELSIF res = Zip.NotZipArchiveError THEN Out.String("not a zip archive")
+  ELSIF res = Zip.EntryNotFound THEN Out.String("no such entry")
+  ELSIF res = Zip.EntryAlreadyExists THEN Out.String("the entry exists")
+  ELSIF res = Zip.NotSupportedError THEN Out.String("compression method not supported, or encrypted")
+  ELSIF res = Zip.DataError THEN Out.String("damaged")
+  ELSIF res = Zip.BadName THEN Out.String("bad name")
+  ELSE Out.String("error "); Out.Int(res, 0)
   END;
-  out.Ln
+  Out.Ln
 END Error;
 
 PROCEDURE MakeDirs(VAR path: ARRAY OF CHAR);  (* the directories of the file path *)
@@ -50,31 +50,31 @@ END MakeDirs;
 PROCEDURE Directory*;
 VAR archive: Name; files: ARRAY 1 OF Name; n: INTEGER; arc: Zip.Archive; e: Zip.Entry; res: LONGINT; none: Name;
 BEGIN
-  IF ~Args(archive, files, n) THEN out.String("usage: zip.Directory archive.zip"); out.Ln; RETURN END;
+  IF ~Args(archive, files, n) THEN Out.String("usage: zip.Directory archive.zip"); Out.Ln; RETURN END;
   arc := Zip.OpenArchive(archive, res); none := "";
   IF arc = NIL THEN Error(archive, none, res); RETURN END;
   e := Zip.FirstEntry(arc);
   WHILE e # NIL DO
-    out.String(e.name); out.String("  "); out.Int(e.uncompSize, 0); out.String(" bytes, "); out.Int(e.compSize, 0); out.String(" compressed"); out.Ln;
+    Out.String(e.name); Out.String("  "); Out.Int(e.uncompSize, 0); Out.String(" bytes, "); Out.Int(e.compSize, 0); Out.String(" compressed"); Out.Ln;
     e := Zip.NextEntry(e)
   END;
-  out.String("zip: "); out.Int(arc.nofEntries, 0); out.String(" entries"); out.Ln
+  Out.String("zip: "); Out.Int(arc.nofEntries, 0); Out.String(" entries"); Out.Ln
 END Directory;
 
 PROCEDURE Add*;
 VAR archive: Name; files: ARRAY MaxFiles OF Name; n, i: INTEGER; arc: Zip.Archive; res: LONGINT; f: Files.File; R: Files.Rider; none: Name;
 BEGIN
-  IF ~Args(archive, files, n) OR (n = 0) THEN out.String("usage: zip.Add archive.zip file ..."); out.Ln; RETURN END;
+  IF ~Args(archive, files, n) OR (n = 0) THEN Out.String("usage: zip.Add archive.zip file ..."); Out.Ln; RETURN END;
   none := ""; arc := Zip.OpenArchive(archive, res);
   IF arc = NIL THEN arc := Zip.CreateArchive(archive, res) END;
   IF arc = NIL THEN Error(archive, none, res); RETURN END;
   i := 0;
   WHILE i < n DO
     f := Files.Old(files[i]);
-    IF f = NIL THEN out.String("zip: no "); out.String(files[i]); out.Ln
+    IF f = NIL THEN Out.String("zip: no "); Out.String(files[i]); Out.Ln
     ELSE
       Files.Set(R, f, 0); Zip.AddEntry(arc, files[i], R, Files.Length(f), Zip.DefaultCompression, Zip.DefaultStrategy, res);
-      IF res = Zip.Ok THEN out.String("zip: added "); out.String(files[i]); out.Ln ELSE Error(archive, files[i], res) END
+      IF res = Zip.Ok THEN Out.String("zip: added "); Out.String(files[i]); Out.Ln ELSE Error(archive, files[i], res) END
     END;
     INC(i)
   END
@@ -96,11 +96,11 @@ END Safe;
 PROCEDURE ExtractOne(arc: Zip.Archive; e: Zip.Entry; VAR archive: ARRAY OF CHAR);
 VAR f: Files.File; R: Files.Rider; res: LONGINT; i: LONGINT;
 BEGIN
-  IF ~Safe(e.name) THEN out.String("zip: skipped "); out.String(e.name); out.String(", outside the directory"); out.Ln; RETURN END;
+  IF ~Safe(e.name) THEN Out.String("zip: skipped "); Out.String(e.name); Out.String(", outside the directory"); Out.Ln; RETURN END;
   i := 0; WHILE e.name[i] # 0X DO INC(i) END;
   IF (i > 0) & (e.name[i-1] = "/") THEN MakeDirs(e.name); RETURN END;  (* a directory *)
   MakeDirs(e.name); f := Files.New(e.name); Files.Set(R, f, 0); Zip.ExtractEntry(arc, e, R, res);
-  IF res = Zip.Ok THEN Files.Register(f); out.String("zip: extracted "); out.String(e.name); out.Ln
+  IF res = Zip.Ok THEN Files.Register(f); Out.String("zip: extracted "); Out.String(e.name); Out.Ln
   ELSE Error(archive, e.name, res)
   END
 END ExtractOne;
@@ -108,7 +108,7 @@ END ExtractOne;
 PROCEDURE Extract*;
 VAR archive: Name; files: ARRAY MaxFiles OF Name; n, i: INTEGER; arc: Zip.Archive; e: Zip.Entry; res: LONGINT; none: Name;
 BEGIN
-  IF ~Args(archive, files, n) THEN out.String("usage: zip.Extract archive.zip [file ...]"); out.Ln; RETURN END;
+  IF ~Args(archive, files, n) THEN Out.String("usage: zip.Extract archive.zip [file ...]"); Out.Ln; RETURN END;
   none := ""; arc := Zip.OpenArchive(archive, res);
   IF arc = NIL THEN Error(archive, none, res); RETURN END;
   IF n = 0 THEN
@@ -126,14 +126,14 @@ END Extract;
 PROCEDURE Delete*;
 VAR archive: Name; files: ARRAY MaxFiles OF Name; n, i: INTEGER; arc: Zip.Archive; e: Zip.Entry; res: LONGINT; none: Name;
 BEGIN
-  IF ~Args(archive, files, n) OR (n = 0) THEN out.String("usage: zip.Delete archive.zip file ..."); out.Ln; RETURN END;
+  IF ~Args(archive, files, n) OR (n = 0) THEN Out.String("usage: zip.Delete archive.zip file ..."); Out.Ln; RETURN END;
   none := ""; arc := Zip.OpenArchive(archive, res);
   IF arc = NIL THEN Error(archive, none, res); RETURN END;
   i := 0;
   WHILE i < n DO
     e := Zip.GetEntry(arc, files[i], res);
     IF e = NIL THEN Error(archive, files[i], res)
-    ELSE Zip.DeleteEntry(arc, e, res); IF res = Zip.Ok THEN out.String("zip: deleted "); out.String(files[i]); out.Ln ELSE Error(archive, files[i], res) END
+    ELSE Zip.DeleteEntry(arc, e, res); IF res = Zip.Ok THEN Out.String("zip: deleted "); Out.String(files[i]); Out.Ln ELSE Error(archive, files[i], res) END
     END;
     INC(i)
   END

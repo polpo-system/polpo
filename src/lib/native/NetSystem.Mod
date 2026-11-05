@@ -22,7 +22,7 @@ MODULE NetSystem;  (** the NetSystem of ETH Native Oberon, over Sockets and DNS 
    - Start and Stop only set started; Show prints to the terminal (Out), not to the Log.
    - Only IPv4: IPAdr has 32 bits, as in Native Oberon. *)
 
-IMPORT Sockets, DNS, Linux0, Out := out, SYSTEM;
+IMPORT Sockets, DNS, Linux0, Out, SYSTEM;
 
 CONST
   anyport* = 0;  (** any port value *)

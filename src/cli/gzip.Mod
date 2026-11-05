@@ -4,7 +4,7 @@ MODULE gzip;  (** gzip files in the console, with the zlib of ETH Oberon (GZRead
    gzip.Decompress file.gz [file]   decompresses (default output: the name without .gz)
    The files are those of gzip (RFC 1952): the ones of gzip -d and tar -z. *)
 
-IMPORT Files, GZReaders, GZWriters, Texts, out;
+IMPORT Files, GZReaders, GZWriters, Texts, Out;
 
 CONST BufLen = 8192;
 
@@ -23,9 +23,9 @@ END Args;
 PROCEDURE Compress*;
 VAR in, name: Name; f, g: Files.File; r: Files.Rider; w: GZWriters.Writer; buf: ARRAY BufLen OF CHAR; n, written, total: LONGINT;
 BEGIN
-  IF ~Args(in, name) THEN out.String("usage: gzip.Compress file [file.gz]"); out.Ln; RETURN END;
+  IF ~Args(in, name) THEN Out.String("usage: gzip.Compress file [file.gz]"); Out.Ln; RETURN END;
   IF name = "" THEN COPY(in, name); n := Len(name); name[n] := "."; name[n+1] := "g"; name[n+2] := "z"; name[n+3] := 0X END;
-  f := Files.Old(in); IF f = NIL THEN out.String("gzip: no "); out.String(in); out.Ln; RETURN END;
+  f := Files.Old(in); IF f = NIL THEN Out.String("gzip: no "); Out.String(in); Out.Ln; RETURN END;
   g := Files.New(name); GZWriters.Open(w, GZWriters.DefaultCompression, GZWriters.DefaultStrategy, g);
   Files.Set(r, f, 0); total := 0;
   LOOP
@@ -36,26 +36,26 @@ BEGIN
   END;
   GZWriters.Close(w);
   IF w.res = GZWriters.Ok THEN
-    Files.Register(g); out.String("gzip: "); out.String(name); out.String(", "); out.Int(total, 0); out.String(" bytes to ");
-    out.Int(Files.Length(g), 0)
-  ELSE out.String("gzip: compression failed, "); out.Int(w.res, 0)
+    Files.Register(g); Out.String("gzip: "); Out.String(name); Out.String(", "); Out.Int(total, 0); Out.String(" bytes to ");
+    Out.Int(Files.Length(g), 0)
+  ELSE Out.String("gzip: compression failed, "); Out.Int(w.res, 0)
   END;
-  out.Ln
+  Out.Ln
 END Compress;
 
 PROCEDURE Decompress*;
 VAR in, name: Name; f, g: Files.File; w: Files.Rider; r: GZReaders.Reader; buf: ARRAY BufLen OF CHAR; n, total, i: LONGINT;
 BEGIN
-  IF ~Args(in, name) THEN out.String("usage: gzip.Decompress file.gz [file]"); out.Ln; RETURN END;
+  IF ~Args(in, name) THEN Out.String("usage: gzip.Decompress file.gz [file]"); Out.Ln; RETURN END;
   IF name = "" THEN
     COPY(in, name); i := Len(name);
     IF (i > 3) & (name[i-3] = ".") & (name[i-2] = "g") & (name[i-1] = "z") THEN name[i-3] := 0X
-    ELSE out.String("gzip: name the output (no .gz in "); out.String(in); out.String(")"); out.Ln; RETURN
+    ELSE Out.String("gzip: name the output (no .gz in "); Out.String(in); Out.String(")"); Out.Ln; RETURN
     END
   END;
-  f := Files.Old(in); IF f = NIL THEN out.String("gzip: no "); out.String(in); out.Ln; RETURN END;
+  f := Files.Old(in); IF f = NIL THEN Out.String("gzip: no "); Out.String(in); Out.Ln; RETURN END;
   GZReaders.Open(r, f);
-  IF r.res # GZReaders.Ok THEN out.String("gzip: "); out.String(in); out.String(" is not a gzip file"); out.Ln; RETURN END;
+  IF r.res # GZReaders.Ok THEN Out.String("gzip: "); Out.String(in); Out.String(" is not a gzip file"); Out.Ln; RETURN END;
   g := Files.New(name); Files.Set(w, g, 0); total := 0;
   LOOP
     GZReaders.ReadBytes(r, buf, 0, BufLen, n);
@@ -63,10 +63,10 @@ BEGIN
     IF (n < BufLen) OR (r.res # GZReaders.Ok) THEN EXIT END
   END;
   IF (r.res = GZReaders.Ok) OR (r.res = GZReaders.StreamEnd) THEN
-    Files.Register(g); out.String("gzip: "); out.String(name); out.String(", "); out.Int(total, 0); out.String(" bytes")
-  ELSE out.String("gzip: "); out.String(in); out.String(" is damaged, "); out.Int(r.res, 0)
+    Files.Register(g); Out.String("gzip: "); Out.String(name); Out.String(", "); Out.Int(total, 0); Out.String(" bytes")
+  ELSE Out.String("gzip: "); Out.String(in); Out.String(" is damaged, "); Out.Int(r.res, 0)
   END;
-  GZReaders.Close(r); out.Ln
+  GZReaders.Close(r); Out.Ln
 END Decompress;
 
 END gzip.

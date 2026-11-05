@@ -4,7 +4,7 @@ MODULE DecRealTest;  (** loksh DecRealTest.Run: DecReal.Long and Short, bit for 
    fractions; the results: 0 ok, 1 overflow, 2 underflow (a value # 0 that rounds to 0). The cases are
    the ends of the range, denormal numbers, halfway cases and literals that were off before. *)
 
-IMPORT SYSTEM, DecReal, out;
+IMPORT SYSTEM, DecReal, Out;
 
 VAR fails, checks: LONGINT;
 
@@ -23,8 +23,8 @@ VAR x: LONGREAL; h, l: LONGINT; r, n: INTEGER;
 BEGIN n := 0; WHILE dig[n] # 0X DO INC(n) END;
   r := DecReal.Long(dig, n, FALSE, e, x); Words(x, h, l); INC(checks);
   IF (h # hi) OR (l # lo) OR (r # res) THEN INC(fails);
-    out.String("FAIL Long "); out.String(dig); out.String("E"); out.Int(e, 0); out.String(": ");
-    out.Hex(h, 8); out.Hex(l, 8); out.Int(r, 2); out.String(", expected "); out.Hex(hi, 8); out.Hex(lo, 8); out.Int(res, 2); out.Ln
+    Out.String("FAIL Long "); Out.String(dig); Out.String("E"); Out.Int(e, 0); Out.String(": ");
+    Out.Hex(h); Out.Hex(l); Out.Int(r, 2); Out.String(", expected "); Out.Hex(hi); Out.Hex(lo); Out.Int(res, 2); Out.Ln
   END
 END L;
 
@@ -33,8 +33,8 @@ VAR x: REAL; b: LONGINT; r, n: INTEGER;
 BEGIN n := 0; WHILE dig[n] # 0X DO INC(n) END;
   r := DecReal.Short(dig, n, FALSE, e, x); SYSTEM.GET(SYSTEM.ADR(x), b); INC(checks);
   IF (b # bits) OR (r # res) THEN INC(fails);
-    out.String("FAIL Short "); out.String(dig); out.String("E"); out.Int(e, 0); out.String(": ");
-    out.Hex(b, 8); out.Int(r, 2); out.String(", expected "); out.Hex(bits, 8); out.Int(res, 2); out.Ln
+    Out.String("FAIL Short "); Out.String(dig); Out.String("E"); Out.Int(e, 0); Out.String(": ");
+    Out.Hex(b); Out.Int(r, 2); Out.String(", expected "); Out.Hex(bits); Out.Int(res, 2); Out.Ln
   END
 END S;
 
@@ -118,7 +118,7 @@ BEGIN fails := 0; checks := 0;
   S("1", -401, 000000000H, 2);
   L("12345678901234567890123", -30, 03E4A831BH, 0D731A289H, 0);
   S("12345678901234567890123", -30, 0325418DFH, 0);
-  out.String("DecRealTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("DecRealTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END DecRealTest.

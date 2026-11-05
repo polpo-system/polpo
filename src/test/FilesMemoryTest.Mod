@@ -5,14 +5,14 @@ MODULE FilesMemoryTest;  (** loksh FilesMemoryTest.Run: files in memory (Files.N
   Close, Register and GetDate do nothing; FromBytes copies. Then the same rider operations on a file on
   disk, and Purge of it. *)
 
-IMPORT Files, out;
+IMPORT Files, Out;
 
 VAR checks, failed: LONGINT; phase: ARRAY 64 OF CHAR;
 
 PROCEDURE Check(ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(failed); out.String("FAIL "); out.String(phase); out.String(", check "); out.Int(checks, 0); out.Ln END
+  IF ~ok THEN INC(failed); Out.String("FAIL "); Out.String(phase); Out.String(", check "); Out.Int(checks, 0); Out.Ln END
 END Check;
 
 PROCEDURE Equal(VAR a, b: ARRAY OF CHAR; length: LONGINT): BOOLEAN;
@@ -111,7 +111,7 @@ PROCEDURE Run*;
 BEGIN
   checks := 0; failed := 0;
   Memory; Disk;
-  out.String("FilesMemoryTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(failed, 0); out.String(" failed"); out.Ln
+  Out.String("FilesMemoryTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(failed, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END FilesMemoryTest.

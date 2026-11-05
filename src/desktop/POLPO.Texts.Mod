@@ -1,6 +1,6 @@
 MODULE Texts;
 
-  IMPORT Objects, Display, Fonts, Files, Reals, Texts0, Oberon0, out;
+  IMPORT Objects, Display, Fonts, Files, Reals, Texts0, Oberon0, Out;
 
   CONST
     Inval* = Texts0.Inval; Name* = Texts0.Name; String* = Texts0.String;
@@ -209,9 +209,9 @@ END MainSize;
 (* VT100 attribute: ESC [ n m *)
 PROCEDURE Attr(n: INTEGER);
 BEGIN
-  out.Char(ESC); out.Char("[");
-  IF n >= 10 THEN out.Char(CHR(ORD("0") + n DIV 10)) END;
-  out.Char(CHR(ORD("0") + n MOD 10)); out.Char("m")
+  Out.Char(ESC); Out.Char("[");
+  IF n >= 10 THEN Out.Char(CHR(ORD("0") + n DIV 10)) END;
+  Out.Char(CHR(ORD("0") + n MOD 10)); Out.Char("m")
 END Attr;
 
 (** the colours 0..15 of the default Oberon palette (share/Default.Pal); FALSE for 15, the
@@ -229,8 +229,8 @@ PROCEDURE Color(col: SHORTINT);
 VAR r, g, b: LONGINT;
 BEGIN
   IF PaletteRGB(col, r, g, b) THEN
-    out.Char(ESC); out.String("[38;2;"); out.Int(r, 0); out.Char(";"); out.Int(g, 0); out.Char(";");
-    out.Int(b, 0); out.Char("m")
+    Out.Char(ESC); Out.String("[38;2;"); Out.Int(r, 0); Out.Char(";"); Out.Int(g, 0); Out.Char(";");
+    Out.Int(b, 0); Out.Char("m")
   END
 END Color;
 
@@ -243,7 +243,7 @@ VAR f: Files.File; T: Text; R: Reader; ch: CHAR;
   size, main: INTEGER; bold, italic, curBold, curItalic: BOOLEAN; col, curCol: SHORTINT;
 BEGIN
   f := Files.Old(name);
-  IF f = NIL THEN out.String(name); out.String(" not found"); out.Ln; RETURN END;
+  IF f = NIL THEN Out.String(name); Out.String(" not found"); Out.Ln; RETURN END;
   Files.ReleaseRead(f);
   NEW(T); Open(T, name);
   IF rich THEN main := MainSize(T) END;
@@ -261,8 +261,8 @@ BEGIN
       END
     END;
     IF IsCharacterLibrary(R.lib) THEN
-      IF (ch >= " ") OR (ch = 09X) THEN out.Char(ch)
-      ELSIF ch = 0DX THEN out.Ln
+      IF (ch >= " ") OR (ch = 09X) THEN Out.Char(ch)
+      ELSIF ch = 0DX THEN Out.Ln
       END
     END;
     Read(R, ch)
@@ -288,8 +288,8 @@ BEGIN
   i := 0;
   WHILE ~R.eot & (ch # 0DX) & (ch # 0AX) & (quoted & (ch # 22X) OR ~quoted & (ch # " ") & (ch # 09X)) DO
     IF i >= LEN(s) - 1 THEN
-      s[i] := 0X; out.String("Texts: argument too long (at most "); out.Int(LEN(s) - 1, 0);
-      out.String(" characters): "); out.String(s); out.String("..."); out.Ln;
+      s[i] := 0X; Out.String("Texts: argument too long (at most "); Out.Int(LEN(s) - 1, 0);
+      Out.String(" characters): "); Out.String(s); Out.String("..."); Out.Ln;
       RETURN FALSE
     END;
     s[i] := ch; INC(i); Read(R, ch)
@@ -331,12 +331,12 @@ PROCEDURE OpenEdit(VAR name: ARRAY OF CHAR; VAR T: Text; VAR plain: BOOLEAN): BO
 VAR f: Files.File; R: Files.Rider; ch: CHAR;
 BEGIN
   f := Files.Old(name);
-  IF f = NIL THEN out.String(name); out.String(" not found"); out.Ln; RETURN FALSE END;
+  IF f = NIL THEN Out.String(name); Out.String(" not found"); Out.Ln; RETURN FALSE END;
   Files.Set(R, f, 0); Files.Read(R, ch); Files.ReleaseRead(f);
   plain := (Files.Length(f) = 0) OR (ch # 0F0X) & (ch # 0F7X) & (ch # 01X);
   NEW(T); Open(T, name);
   IF ~OnlyCharacters(T) THEN
-    out.String(name); out.String(" contains objects, edit it in Oberon"); out.Ln; RETURN FALSE
+    Out.String(name); Out.String(" contains objects, edit it in Oberon"); Out.Ln; RETURN FALSE
   END;
   RETURN TRUE
 END OpenEdit;
@@ -347,7 +347,7 @@ PROCEDURE StoreFile*(VAR name: ARRAY OF CHAR; T: Text; plain: BOOLEAN);
 VAR f: Files.File; W: Files.Rider; R: Reader; ch: CHAR; bak: ARRAY 256 OF CHAR; i, res: INTEGER; len: LONGINT;
 BEGIN
   f := Files.New(name);
-  IF f = NIL THEN out.String(name); out.String(" cannot be written"); out.Ln; RETURN END;
+  IF f = NIL THEN Out.String(name); Out.String(" cannot be written"); Out.Ln; RETURN END;
   Files.Set(W, f, 0);
   IF plain THEN
     OpenReader(R, T, 0); Read(R, ch);
@@ -372,9 +372,9 @@ VAR A: Reader; name, old, new: ARRAY 256 OF CHAR; T: Text; R: Reader; W: Writer;
 BEGIN
   OpenArgs(A);
   IF ~Arg(A, name) OR ~Arg(A, old) OR ~Arg(A, new) THEN  (* deleting needs an explicit "" *)
-    out.String("usage: Texts.ReplaceIn file old new ~   (quote texts with blanks)"); out.Ln; RETURN
+    Out.String("usage: Texts.ReplaceIn file old new ~   (quote texts with blanks)"); Out.Ln; RETURN
   END;
-  IF old = "" THEN out.String("Texts.ReplaceIn: old text is empty"); out.Ln; RETURN END;
+  IF old = "" THEN Out.String("Texts.ReplaceIn: old text is empty"); Out.Ln; RETURN END;
   IF OpenEdit(name, T, plain) THEN
     oldlen := 0; WHILE old[oldlen] # 0X DO INC(oldlen) END;
     newlen := 0; WHILE new[newlen] # 0X DO INC(newlen) END;
@@ -386,7 +386,7 @@ BEGIN
       IF newlen > 0 THEN WriteString(W, new); Insert(T, pos, W.buf) END;
       INC(n); pos := Find(T, pos + newlen, old)
     END;
-    out.String(name); out.Char(" "); out.Int(n, 0); out.String(" replaced"); out.Ln;
+    Out.String(name); Out.Char(" "); Out.Int(n, 0); Out.String(" replaced"); Out.Ln;
     IF n > 0 THEN StoreFile(name, T, plain) END
   END
 END ReplaceIn;
@@ -399,7 +399,7 @@ VAR A: Reader; name, pat: ARRAY 256 OF CHAR; T: Text; R: Reader; ch: CHAR; plain
 BEGIN
   OpenArgs(A);
   IF ~Arg(A, name) OR ~Arg(A, pat) OR (pat = "") THEN
-    out.String("usage: Texts.DeleteLines file text ~   (quote texts with blanks)"); out.Ln; RETURN
+    Out.String("usage: Texts.DeleteLines file text ~   (quote texts with blanks)"); Out.Ln; RETURN
   END;
   IF OpenEdit(name, T, plain) THEN
     n := 0; beg := 0; m := Find(T, 0, pat);
@@ -412,7 +412,7 @@ BEGIN
       IF ~R.eot THEN INC(end) END;  (* with its line end *)
       Delete(T, beg, end); INC(n); m := Find(T, beg, pat)
     END;
-    out.String(name); out.Char(" "); out.Int(n, 0); out.String(" lines deleted"); out.Ln;
+    Out.String(name); Out.Char(" "); Out.Int(n, 0); Out.String(" lines deleted"); Out.Ln;
     IF n > 0 THEN StoreFile(name, T, plain) END
   END
 END DeleteLines;

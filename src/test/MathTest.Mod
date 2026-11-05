@@ -1,6 +1,6 @@
 MODULE MathTest;  (** MathTest.Run: Math and MathL against known values *)
 
-IMPORT Math, MathL, out;
+IMPORT Math, MathL, Out;
 
 VAR fails: LONGINT;
 
@@ -10,7 +10,7 @@ BEGIN
   d := x - want; IF d < 0 THEN d := -d END;
   IF want < 0 THEN want := -want END;
   IF want > 1 THEN d := d / want END;  (* relative above 1 *)
-  IF d > tol THEN INC(fails); out.String("FAIL "); out.String(what); out.Ln END
+  IF d > tol THEN INC(fails); Out.String("FAIL "); Out.String(what); Out.Ln END
 END Near;
 
 PROCEDURE Run*;
@@ -41,7 +41,7 @@ BEGIN
   Near("lnL(0.25)", MathL.ln(0.25D0), -1.386294361119891D0, tl);
   Near("expL(1)", MathL.exp(1.0D0), 2.718281828459045D0, tl);
   Near("expL(-3)", MathL.exp(-3.0D0), 0.049787068367864D0, tl);
-  out.String("MathTest: "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("MathTest: "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END MathTest.

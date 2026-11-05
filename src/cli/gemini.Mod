@@ -8,7 +8,7 @@ MODULE gemini;  (** Gemini downloads (gemini://, port 1965), on Gemini0 and the 
    Redirects (3x) are followed, up to 5; a body is complete only when the server ended with TLS
    close_notify, an incomplete one is not saved. dcs is the client with identities and input. *)
 
-IMPORT Texts, Gemini0, out;
+IMPORT Texts, Gemini0, Out;
 
 (* the file name for url: the last part of the path, index.gmi for a directory *)
 PROCEDURE DefaultName(VAR url, name: ARRAY OF CHAR);
@@ -26,11 +26,11 @@ END DefaultName;
 PROCEDURE Fetch(VAR url: ARRAY OF CHAR; name: ARRAY OF CHAR);
 VAR o: Gemini0.Options; r: Gemini0.Response; c: Gemini0.Chunk; i: LONGINT; seg: ARRAY 1025 OF CHAR; n: LONGINT;
 BEGIN
-  IF Gemini0.Protocol(url) # Gemini0.Gemini THEN out.String("gemini: gemini:// expected: "); out.String(url); out.Ln; RETURN END;
+  IF Gemini0.Protocol(url) # Gemini0.Gemini THEN Out.String("gemini: gemini:// expected: "); Out.String(url); Out.Ln; RETURN END;
   o := Gemini0.NewOptions();
-  IF ~Gemini0.Fetch(url, "", o, r) THEN out.String("gemini: "); out.String(Gemini0.lastError); out.Ln; RETURN END;
-  IF r.firstUse THEN out.String("gemini: trusting the key of the server on first use: "); out.String(r.keyPin); out.Ln END;
-  IF r.url # url THEN out.String("gemini: redirected to "); out.String(r.url); out.Ln END;
+  IF ~Gemini0.Fetch(url, "", o, r) THEN Out.String("gemini: "); Out.String(Gemini0.lastError); Out.Ln; RETURN END;
+  IF r.firstUse THEN Out.String("gemini: trusting the key of the server on first use: "); Out.String(r.keyPin); Out.Ln END;
+  IF r.url # url THEN Out.String("gemini: redirected to "); Out.String(r.url); Out.Ln END;
   IF Gemini0.Kind(r) = 2 THEN
     IF name = "" THEN
       c := r.body; n := 0;
@@ -38,25 +38,25 @@ BEGIN
         i := 0;
         WHILE i < c.len DO
           IF c.data[i] # 0DX THEN seg[n] := c.data[i]; INC(n) END;
-          IF n = 1024 THEN seg[n] := 0X; out.String(seg); n := 0 END;
+          IF n = 1024 THEN seg[n] := 0X; Out.String(seg); n := 0 END;
           INC(i)
         END;
         c := c.next
       END;
-      seg[n] := 0X; out.String(seg);
-      IF ~r.complete THEN out.Ln; out.String("gemini: the body is incomplete (no close_notify)"); out.Ln END
+      seg[n] := 0X; Out.String(seg);
+      IF ~r.complete THEN Out.Ln; Out.String("gemini: the body is incomplete (no close_notify)"); Out.Ln END
     ELSE
       IF name = "?" THEN DefaultName(r.url, name) END;
-      out.Int(r.status, 0); out.Char(" "); out.String(r.meta); out.String(", "); out.Int(r.length, 0); out.String(" bytes");
-      IF ~r.complete THEN out.String(", incomplete (no close_notify): not saved")
-      ELSIF Gemini0.Save(r, name) THEN out.String(" in "); out.String(name)
-      ELSE out.String(": "); out.String(Gemini0.lastError)
+      Out.Int(r.status, 0); Out.Char(" "); Out.String(r.meta); Out.String(", "); Out.Int(r.length, 0); Out.String(" bytes");
+      IF ~r.complete THEN Out.String(", incomplete (no close_notify): not saved")
+      ELSIF Gemini0.Save(r, name) THEN Out.String(" in "); Out.String(name)
+      ELSE Out.String(": "); Out.String(Gemini0.lastError)
       END;
-      out.Ln
+      Out.Ln
     END
-  ELSIF Gemini0.Kind(r) = 1 THEN out.String("gemini: the server asks for input (dcs.Get url input): "); out.String(r.meta); out.Ln
-  ELSIF Gemini0.Kind(r) = 6 THEN out.String("gemini: a client certificate is required (dcs.Get url /ident who): "); out.String(r.meta); out.Ln
-  ELSE out.Int(r.status, 0); out.Char(" "); out.String(r.meta); out.Ln
+  ELSIF Gemini0.Kind(r) = 1 THEN Out.String("gemini: the server asks for input (dcs.Get url input): "); Out.String(r.meta); Out.Ln
+  ELSIF Gemini0.Kind(r) = 6 THEN Out.String("gemini: a client certificate is required (dcs.Get url /ident who): "); Out.String(r.meta); Out.Ln
+  ELSE Out.Int(r.status, 0); Out.Char(" "); Out.String(r.meta); Out.Ln
   END
 END Fetch;
 
@@ -65,7 +65,7 @@ PROCEDURE Get*;
 VAR A: Texts.Reader; url, name: ARRAY Gemini0.MaxURL OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, url) THEN out.String("usage: gemini.Get gemini://host/path [file]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, url) THEN Out.String("usage: gemini.Get gemini://host/path [file]"); Out.Ln; RETURN END;
   IF ~Texts.Arg(A, name) THEN name := "?" END;  (* a name is made from the url *)
   Fetch(url, name)
 END Get;
@@ -75,7 +75,7 @@ PROCEDURE Show*;
 VAR A: Texts.Reader; url: ARRAY Gemini0.MaxURL OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, url) THEN out.String("usage: gemini.Show gemini://host/path"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, url) THEN Out.String("usage: gemini.Show gemini://host/path"); Out.Ln; RETURN END;
   Fetch(url, "")
 END Show;
 

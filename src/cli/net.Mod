@@ -12,7 +12,7 @@ MODULE net;  (** minimal network tools over Sockets and DNS *)
    net.Address text ...           IP addresses in normal form (no lookup)
    A host is a name or an IPv4 or IPv6 address; its addresses are tried in turn. *)
 
-IMPORT Texts, Sockets, DNS, Oberon := Oberon0, out;
+IMPORT Texts, Sockets, DNS, Oberon := Oberon0, Out;
 
 CONST MaxAddrs = 8;
 
@@ -28,7 +28,7 @@ BEGIN
 END Number;
 
 PROCEDURE Ln(s: ARRAY OF CHAR);
-BEGIN out.String(s); out.Ln
+BEGIN Out.String(s); Out.Ln
 END Ln;
 
 (** net.Help -- what the commands do *)
@@ -54,7 +54,7 @@ BEGIN
 END Help;
 
 PROCEDURE Error(what: ARRAY OF CHAR; res: LONGINT);
-BEGIN out.String("net: "); out.String(what); out.String(" failed, error "); out.Int(-res, 0); out.Ln
+BEGIN Out.String("net: "); Out.String(what); Out.String(" failed, error "); Out.Int(-res, 0); Out.Ln
 END Error;
 
 (* print everything s receives until the other side closes *)
@@ -63,7 +63,7 @@ VAR buf: ARRAY 4096 OF CHAR; n, i: LONGINT;
 BEGIN
   n := Sockets.Receive(s, buf, LEN(buf));
   WHILE n > 0 DO
-    i := 0; WHILE i < n DO IF buf[i] # 0DX THEN out.Char(buf[i]) END; INC(i) END;  (* CR LF: out.Char(0DX) is a line end *)
+    i := 0; WHILE i < n DO IF buf[i] # 0DX THEN Out.Char(buf[i]) END; INC(i) END;  (* CR LF: Out.Char(0DX) is a line end *)
     n := Sockets.Receive(s, buf, LEN(buf))
   END;
   IF n < 0 THEN Error("receive", n) END
@@ -71,20 +71,20 @@ END Print;
 
 PROCEDURE LookupError(VAR name: ARRAY OF CHAR);
 BEGIN
-  out.String("net: "); out.String(name);
-  IF DNS.res = DNS.NotFound THEN out.String(" not found")
-  ELSIF DNS.res = DNS.BadName THEN out.String(" is not a host name")
-  ELSE out.String(": no answer from the name servers")
+  Out.String("net: "); Out.String(name);
+  IF DNS.res = DNS.NotFound THEN Out.String(" not found")
+  ELSIF DNS.res = DNS.BadName THEN Out.String(" is not a host name")
+  ELSE Out.String(": no answer from the name servers")
   END;
-  out.Ln
+  Out.Ln
 END LookupError;
 
 (* the host and port arguments: the host's addresses in a[0..n), the host in host *)
 PROCEDURE Target(VAR A: Texts.Reader; usage: ARRAY OF CHAR; VAR host: ARRAY OF CHAR; VAR a: ARRAY OF Sockets.Address; VAR n, port: LONGINT): BOOLEAN;
 VAR s: ARRAY 256 OF CHAR;
 BEGIN
-  IF ~Texts.Arg(A, host) OR ~Texts.Arg(A, s) THEN out.String("usage: "); Ln(usage); RETURN FALSE END;
-  IF ~Number(s, port) THEN out.String("net: "); out.String(s); Ln(" is not a port number"); RETURN FALSE END;
+  IF ~Texts.Arg(A, host) OR ~Texts.Arg(A, s) THEN Out.String("usage: "); Ln(usage); RETURN FALSE END;
+  IF ~Number(s, port) THEN Out.String("net: "); Out.String(s); Ln(" is not a port number"); RETURN FALSE END;
   DNS.Lookup(host, DNS.Any, a, n);
   IF n = 0 THEN LookupError(host); RETURN FALSE END;
   RETURN TRUE
@@ -158,14 +158,14 @@ BEGIN
   l := Sockets.Listen(Sockets.Inet6, port, 8);
   IF l = NIL THEN Error("listen", Sockets.res); RETURN END;
   listener := l;
-  out.String("net: echoing on port "); out.Int(port, 0); out.String(", "); out.Int(count, 0);
-  out.String(" connection(s); Ctrl+C stops"); out.Ln;
+  Out.String("net: echoing on port "); Out.Int(port, 0); Out.String(", "); Out.Int(count, 0);
+  Out.String(" connection(s); Ctrl+C stops"); Out.Ln;
   WHILE count > 0 DO
     c := Sockets.Accept(l, a, pport);
     IF c = NIL THEN Error("accept", l.res); count := 0
     ELSE
       conn := c; Sockets.AddressToString(a, peer);
-      out.String("net: connection from "); out.String(peer); out.String(" port "); out.Int(pport, 0); out.Ln;
+      Out.String("net: connection from "); Out.String(peer); Out.String(" port "); Out.Int(pport, 0); Out.Ln;
       n := Sockets.Receive(c, buf, LEN(buf));
       WHILE n > 0 DO r := Sockets.Send(c, buf, n); n := Sockets.Receive(c, buf, LEN(buf)) END;
       Sockets.Close(c); conn := NIL; DEC(count)
@@ -191,8 +191,8 @@ BEGIN
     n := Sockets.ReceiveFrom(s, text, LEN(text), from, fport);
     IF n < 0 THEN Error("receive", n)
     ELSE
-      Sockets.AddressToString(from, t); out.String(t); out.String(" port "); out.Int(fport, 0); out.String(": ");
-      i := 0; WHILE i < n DO out.Char(text[i]); INC(i) END; out.Ln
+      Sockets.AddressToString(from, t); Out.String(t); Out.String(" port "); Out.Int(fport, 0); Out.String(": ");
+      i := 0; WHILE i < n DO Out.Char(text[i]); INC(i) END; Out.Ln
     END
   END;
   Sockets.Close(s)
@@ -208,12 +208,12 @@ BEGIN
     DNS.Lookup(name, family, a, n);
     IF n = 0 THEN LookupError(name)
     ELSE
-      out.String(name); out.String(":");
-      i := 0; WHILE i < n DO Sockets.AddressToString(a[i], t); out.Char(" "); out.String(t); INC(i) END;
-      out.Ln
+      Out.String(name); Out.String(":");
+      i := 0; WHILE i < n DO Sockets.AddressToString(a[i], t); Out.Char(" "); Out.String(t); INC(i) END;
+      Out.Ln
     END
   END;
-  IF k = 0 THEN out.String("usage: "); Ln(usage) END
+  IF k = 0 THEN Out.String("usage: "); Ln(usage) END
 END Names;
 
 (** net.Lookup name ... -- the IPv6 and IPv4 addresses of each name *)
@@ -238,8 +238,8 @@ BEGIN
   Texts.OpenArgs(A); k := 0;
   WHILE Texts.Arg(A, arg) DO
     INC(k);
-    IF ~Sockets.ParseAddress(arg, a) THEN out.String("net: not an address: "); Ln(arg)
-    ELSIF DNS.Reverse(a, name) THEN out.String(arg); out.String(": "); Ln(name)
+    IF ~Sockets.ParseAddress(arg, a) THEN Out.String("net: not an address: "); Ln(arg)
+    ELSIF DNS.Reverse(a, name) THEN Out.String(arg); Out.String(": "); Ln(name)
     ELSE LookupError(arg)
     END
   END;
@@ -252,11 +252,11 @@ VAR A: Texts.Reader; arg, t: ARRAY 256 OF CHAR; a: Sockets.Address; k: LONGINT;
 BEGIN
   Texts.OpenArgs(A); k := 0;
   WHILE Texts.Arg(A, arg) DO
-    INC(k); out.String(arg);
-    IF Sockets.ParseAddress(arg, a) THEN Sockets.AddressToString(a, t); out.String(" -> "); out.String(t)
-    ELSE out.String(": not an IP address (net.Lookup "); out.String(arg); out.String(" finds the addresses of a name)")
+    INC(k); Out.String(arg);
+    IF Sockets.ParseAddress(arg, a) THEN Sockets.AddressToString(a, t); Out.String(" -> "); Out.String(t)
+    ELSE Out.String(": not an IP address (net.Lookup "); Out.String(arg); Out.String(" finds the addresses of a name)")
     END;
-    out.Ln
+    Out.Ln
   END;
   IF k = 0 THEN Ln("usage: net.Address addr ...  (e.g. 2001:db8:0:0::1 -> 2001:db8::1; no name lookup)") END
 END Address;

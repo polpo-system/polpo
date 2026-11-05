@@ -2,21 +2,21 @@ MODULE GeminiTest;  (* GeminiTest.Run: the core of the Gemini clients without a 
   absolute, file names for URLs, input encoding, status names, gemtext lines, and identities made,
   listed and found (in the directory zq_idents, made here) *)
 
-IMPORT SYSTEM, Linux0, Gemini0, Gemtext0, out;
+IMPORT SYSTEM, Linux0, Gemini0, Gemtext0, Out;
 
 VAR fails, checks: LONGINT;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("FAIL "); out.String(what); out.String(" (case "); out.Int(checks, 0); out.String(")"); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("FAIL "); Out.String(what); Out.String(" (case "); Out.Int(checks, 0); Out.String(")"); Out.Ln END
 END Check;
 
 PROCEDURE Res(base, target, want: ARRAY OF CHAR);
 VAR u: ARRAY Gemini0.MaxURL OF CHAR;
 BEGIN
   IF ~Gemini0.Resolve(base, target, u) THEN u := "-" END;
-  IF u # want THEN out.String("  resolve "); out.String(target); out.String(" -> "); out.String(u); out.Ln END;
+  IF u # want THEN Out.String("  resolve "); Out.String(target); Out.String(" -> "); Out.String(u); Out.Ln END;
   Check("resolve", u = want)
 END Res;
 
@@ -24,7 +24,7 @@ PROCEDURE Name(url, want: ARRAY OF CHAR);
 VAR n: ARRAY 256 OF CHAR;
 BEGIN
   Gemini0.NameForURL(url, n);
-  IF n # want THEN out.String("  name "); out.String(url); out.String(" -> "); out.String(n); out.Ln END;
+  IF n # want THEN Out.String("  name "); Out.String(url); Out.String(" -> "); Out.String(n); Out.Ln END;
   Check("name", n = want)
 END Name;
 
@@ -128,7 +128,7 @@ PROCEDURE Run*;
 BEGIN
   fails := 0; checks := 0;
   URLs; Lines; Idents;
-  out.String("GeminiTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("GeminiTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END GeminiTest.

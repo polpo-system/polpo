@@ -7,7 +7,7 @@ MODULE HugeTest;  (** loksh HugeTest.Run: HUGEINT, 64-bit integers, as the compi
   parameters, functions returning a HUGEINT (recursive, through procedure variables, imported from HugeTest0),
   records, arrays and open arrays of HUGEINT, temporaries in long expressions and loops. *)
 
-IMPORT SYSTEM, out, HugeTest0;
+IMPORT SYSTEM, Out, HugeTest0;
 
 CONST
   Two32 = 4294967296;
@@ -46,7 +46,7 @@ END Str;
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(failed); out.String("FAIL "); out.String(what); out.Ln END
+  IF ~ok THEN INC(failed); Out.String("FAIL "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE Equal(what: ARRAY OF CHAR; x, y: HUGEINT);
@@ -54,8 +54,8 @@ VAR s: ARRAY 32 OF CHAR;
 BEGIN
   INC(checks);
   IF x # y THEN
-    INC(failed); out.String("FAIL "); out.String(what); out.String(": "); Str(x, s); out.String(s);
-    out.String(", not "); Str(y, s); out.String(s); out.Ln
+    INC(failed); Out.String("FAIL "); Out.String(what); Out.String(": "); Str(x, s); Out.String(s);
+    Out.String(", not "); Str(y, s); Out.String(s); Out.Ln
   END
 END Equal;
 
@@ -247,7 +247,7 @@ BEGIN
   checks := 0; failed := 0;
   Literals; Pairs; Compare; Conversions; Ops; Calls; Structures; Loops;
   Equal("global", global, -1);
-  out.String("HugeTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(failed, 0); out.String(" failed"); out.Ln
+  Out.String("HugeTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(failed, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 BEGIN global := MIN(LONGINT); global := global + MAX(LONGINT)

@@ -7,7 +7,7 @@ MODULE browser;
 
   IMPORT
     OPM := ROPM, OPS := ROPS, OPT := ROPT, Linux0, Modules, Root,
-    Texts, Oberon := Oberon0, out, HugeInt;
+    Texts, Oberon := Oberon0, Out, HugeInt;
 
   CONST
     (* object modes *)
@@ -333,7 +333,7 @@ MODULE browser;
   BEGIN
     detail := FALSE; ext := FALSE;
     Texts.OpenArgs(A);
-    IF ~Texts.Arg(A, arg) THEN out.String("usage: browser.ShowDef module [/d] [/e]  (browser.Help)"); out.Ln; RETURN END;
+    IF ~Texts.Arg(A, arg) THEN Out.String("usage: browser.ShowDef module [/d] [/e]  (browser.Help)"); Out.Ln; RETURN END;
     WHILE Texts.Arg(A, opt) DO  (* /d /e, also \d or -d *)
       IF (opt[0] = "/") OR (opt[0] = "\") OR (opt[0] = "-") THEN
         i := 1; WHILE opt[i] # 0X DO
@@ -350,21 +350,21 @@ MODULE browser;
     NEW(T); Texts.Open(T, "");
     IF Definition(name, detail, ext, T) THEN
       Texts.OpenReader(R, T, 0); Texts.Read(R, ch);
-      WHILE ~R.eot DO IF ch = 0DX THEN out.Ln ELSE out.Char(ch) END; Texts.Read(R, ch) END
+      WHILE ~R.eot DO IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END; Texts.Read(R, ch) END
     ELSE
-      out.String("browser: no module "); out.String(name); out.String(" (no "); out.String(name);
-      out.String(".Sym in "); out.String(OPM.Dir); out.String(")"); out.Ln
+      Out.String("browser: no module "); Out.String(name); Out.String(" (no "); Out.String(name);
+      Out.String(".Sym in "); Out.String(OPM.Dir); Out.String(")"); Out.Ln
     END
   END ShowDef;
 
   PROCEDURE Help*;
   BEGIN
-    out.String("browser: the interface (definition) of a module, from its symbol file"); out.Ln;
-    out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); out.Ln;
-    out.String("     /d  with offsets, addresses, sizes and method numbers"); out.Ln;
-    out.String("     /e  records with the fields of their base types written out"); out.Ln;
-    out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); out.Ln;
-    out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); out.Ln
+    Out.String("browser: the interface (definition) of a module, from its symbol file"); Out.Ln;
+    Out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); Out.Ln;
+    Out.String("     /d  with offsets, addresses, sizes and method numbers"); Out.Ln;
+    Out.String("     /e  records with the fields of their base types written out"); Out.Ln;
+    Out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); Out.Ln;
+    Out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); Out.Ln
   END Help;
 
 BEGIN

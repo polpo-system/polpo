@@ -4,14 +4,14 @@ MODULE ByteOrderTest;  (** loksh ByteOrderTest.Run: the numbers of files are lit
    on little- and big-endian machines alike, and reads them back. The bytes written are compared
    with the expected ones, then read back with the Read procedures. *)
 
-IMPORT Files, out;
+IMPORT Files, Out;
 
 VAR fails, checks: LONGINT;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("ByteOrderTest: failed: "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("ByteOrderTest: failed: "); Out.String(what); Out.Ln END
 END Check;
 
 (* the next n bytes of R are the hex digits of s, two per byte *)
@@ -62,7 +62,7 @@ BEGIN
   Files.ReadLReal(R, y); Check("ReadLReal -0.1", y = -0.1D0);
   Files.ReadNum(R, l); Check("ReadNum 300", l = 300);
   Files.Close(f); Files.Delete("zq_order.bin", i);
-  out.String("ByteOrderTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("ByteOrderTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END ByteOrderTest.

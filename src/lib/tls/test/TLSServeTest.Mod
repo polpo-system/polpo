@@ -1,7 +1,7 @@
 MODULE TLSServeTest;  (* TLSServeTest.Run cert.pem key.pem port [n]: a TLS 1.3 server for tests (TLS13Server);
   it answers n connections (default 1) with an HTTP/1.0 response: the host name the client asked
   for and what it sent first; "big" in the request adds 100 000 bytes *)
-IMPORT TLS13Server, TLS13Live, Sockets, Texts, out, Oberon := Oberon0;
+IMPORT TLS13Server, TLS13Live, Sockets, Texts, Out, Oberon := Oberon0;
 
 VAR listener: Sockets.Socket;
 
@@ -52,14 +52,14 @@ VAR
 BEGIN
   Texts.OpenArgs(A);
   IF ~Texts.Arg(A, cert) OR ~Texts.Arg(A, key) OR ~Texts.Arg(A, arg) THEN
-    out.String("usage: TLSServeTest.Run cert.pem key.pem port [n]"); out.Ln; RETURN
+    Out.String("usage: TLSServeTest.Run cert.pem key.pem port [n]"); Out.Ln; RETURN
   END;
   port := Int(arg); n := 1;
   IF Texts.Arg(A, arg) THEN n := Int(arg) END;
-  IF ~TLS13Server.Load(cert, key, id) THEN out.String(TLS13Server.lastError); out.Ln; RETURN END;
+  IF ~TLS13Server.Load(cert, key, id) THEN Out.String(TLS13Server.lastError); Out.Ln; RETURN END;
   Close; Oberon.OnStop(Close);
   listener := Sockets.Listen(Sockets.Inet6, port, 8);
-  IF listener = NIL THEN out.String("cannot listen"); out.Ln; RETURN END;
+  IF listener = NIL THEN Out.String("cannot listen"); Out.Ln; RETURN END;
   k := 0;
   WHILE k < n DO
     c := Sockets.Accept(listener, peer, peerPort);
@@ -68,8 +68,8 @@ BEGIN
       IF TLS13Server.Accept(c.fd, id, s) THEN
         IF TLS13Live.ReadAppMax(s, req, 1024, got) THEN Reply(s, req) END;
         TLS13Live.Disconnect(s);
-        out.String("served "); out.String(TLS13Server.serverName); out.Ln
-      ELSE out.String("handshake failed: "); out.String(TLS13Server.lastError); out.Ln
+        Out.String("served "); Out.String(TLS13Server.serverName); Out.Ln
+      ELSE Out.String("handshake failed: "); Out.String(TLS13Server.lastError); Out.Ln
       END
     END;
     INC(k)

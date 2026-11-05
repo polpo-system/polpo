@@ -1,14 +1,14 @@
 MODULE StrConstTest;  (** loksh StrConstTest.Run: 120 string constants of 100 characters (12 KB) in one
   module, more than the 4 KB the ARM compiler allowed before; each one read through its address *)
 
-IMPORT out;
+IMPORT Out;
 
 VAR sum, chars, fails, checks: LONGINT;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("StrConstTest: failed: "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("StrConstTest: failed: "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE Add(s: ARRAY OF CHAR);
@@ -143,7 +143,7 @@ BEGIN
   Add("s119 BO1erER4huHU7kxKXanAN0dqDQ3gtGT6jwJW9mzMZcpCP2fsFS5ivIV8lyLYboBO1erER4huHU7kxKXanAN0dqDQ3gtGT6j");
   Check("all characters", chars = 12000);
   Check("the sum of the strings", sum = 91010);
-  out.String("StrConstTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("StrConstTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END StrConstTest.

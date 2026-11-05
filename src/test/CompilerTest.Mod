@@ -71,7 +71,7 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    register: a count held in a register (a parameter) changed sign for the rest of the procedure
    (HugeInt, 2026-10-31). *)
 
-IMPORT SYSTEM, Linux0, out;
+IMPORT SYSTEM, Linux0, Out;
 
 TYPE
   Small = RECORD a: LONGINT; pad: ARRAY 4 OF CHAR; b: LONGINT END;  (* 12 bytes *)
@@ -101,7 +101,7 @@ VAR
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("FAIL "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("FAIL "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE ^Twice(x: LONGINT): LONGINT;
@@ -869,7 +869,7 @@ BEGIN
   Check("DIV and MOD of a function result by a variable", CallDiv(100, 7));
   Check("a condition of seven elements of open arrays on the heap", OpenConds());
   Check("shifts by a negative parameter, the parameter used again", Shifts(-2, -1, -5));
-  out.String("CompilerTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END CompilerTest.

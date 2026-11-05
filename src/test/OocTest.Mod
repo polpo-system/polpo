@@ -1,14 +1,14 @@
 MODULE OocTest;  (** loksh OocTest.Run: the OOC library on this port (strings, conversions, math, time) *)
 
 IMPORT SYSTEM, Ascii, Strings := oocStrings, Strings2, LongStrings, oocUnicode, IntStr, RealStr, LRealStr, ConvTypes,
-  LowReal, LowLReal, RealMath, LRealMath, ComplexMath, JulianDay, SysClock, out;
+  LowReal, LowLReal, RealMath, LRealMath, ComplexMath, JulianDay, SysClock, Out;
 
 VAR fails, checks: LONGINT;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("OocTest: failed: "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("OocTest: failed: "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE Near(x, y, eps: LONGREAL): BOOLEAN;
@@ -93,7 +93,7 @@ PROCEDURE Run*;
 BEGIN
   fails := 0; checks := 0;
   Strs; Longs; Convs; Maths; Times;
-  out.String("OocTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("OocTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END OocTest.

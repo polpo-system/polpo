@@ -13,7 +13,7 @@ MODULE browser;  (* the console browser of the ARM port: the interface of a modu
   2015-07-07  using OBM.prefix:="arm/" 
 *)
 
-IMPORT OBT, OBS, OBM, Files, Root, Texts, Oberon := Oberon0, out, SYSTEM, HugeInt;
+IMPORT OBT, OBS, OBM, Files, Root, Texts, Oberon := Oberon0, Out, SYSTEM, HugeInt;
 
 CONST
 
@@ -301,8 +301,8 @@ BEGIN
     Texts.Insert(T, syspos, W.buf);
   END;
   Texts.OpenReader(R, T, 0); Texts.Read(R, ch);
-  WHILE ~R.eot DO IF ch = 0DX THEN out.Ln ELSIF ch # 0X THEN out.Char(ch) END; Texts.Read(R, ch) END;
-  out.Ln
+  WHILE ~R.eot DO IF ch = 0DX THEN Out.Ln ELSIF ch # 0X THEN Out.Char(ch) END; Texts.Read(R, ch) END;
+  Out.Ln
 END DisplayW;
 
   (* ------------------------ symbol file ------------------- *)
@@ -344,7 +344,7 @@ PROCEDURE ShowDef*;
 BEGIN
   OBS.scanerr := FALSE; option := {};
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, arg) THEN out.String("usage: browser.ShowDef module [/d] [/e]  (browser.Help)"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, arg) THEN Out.String("usage: browser.ShowDef module [/d] [/e]  (browser.Help)"); Out.Ln; RETURN END;
   WHILE Texts.Arg(A, opt) DO  (* /d /e, also \d or -d *)
     IF (opt[0] = "/") OR (opt[0] = "\") OR (opt[0] = "-") THEN
       i := 1;
@@ -362,22 +362,22 @@ BEGIN
   Root.Obj("arm", OBM.prefix);  (* obj/arm/ of the current directory, else of the root *)
   OBM.MakeFileName(mod, symname, OBM.SFext); f := Files.Old(symname);
   IF f = NIL THEN
-    out.String("browser: no module "); out.String(mod); out.String(" (no "); out.String(symname); out.String(")"); out.Ln; RETURN
+    Out.String("browser: no module "); Out.String(mod); Out.String(" (no "); Out.String(symname); Out.String(")"); Out.Ln; RETURN
   END;
   ReadSym(mod);
   IF ~OBS.scanerr THEN showObj := FALSE; WriteModule(mod); DisplayW
-  ELSE out.String("browser: cannot read "); out.String(symname); out.Ln
+  ELSE Out.String("browser: cannot read "); Out.String(symname); Out.Ln
   END
 END ShowDef;
 
 PROCEDURE Help*;
 BEGIN
-  out.String("browser: the interface (definition) of a module, from its symbol file"); out.Ln;
-  out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); out.Ln;
-  out.String("     /d  with addresses and offsets"); out.Ln;
-  out.String("     /e  records with the fields of their base types written out"); out.Ln;
-  out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); out.Ln;
-  out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); out.Ln
+  Out.String("browser: the interface (definition) of a module, from its symbol file"); Out.Ln;
+  Out.String("  browser.ShowDef module [/d] [/e]   what module exports: types, variables, procedures"); Out.Ln;
+  Out.String("     /d  with addresses and offsets"); Out.Ln;
+  Out.String("     /e  records with the fields of their base types written out"); Out.Ln;
+  Out.String("     module can be a path: browser.ShowDef src/cli/net.Mod"); Out.Ln;
+  Out.String("examples: browser.ShowDef fs   browser.ShowDef Oberon0 /e"); Out.Ln
 END Help;
 
 BEGIN

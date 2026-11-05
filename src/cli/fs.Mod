@@ -15,7 +15,7 @@ MODULE fs;  (** directories and files of Linux in the console: cd, pwd, ls, mkdi
    find plain names in the new directory first (then on the search path of the root). The names
    are used as they are, as by Linux (Files accepts fewer). *)
 
-IMPORT SYSTEM, Linux0, Kernel, Files, Texts, out;
+IMPORT SYSTEM, Linux0, Kernel, Files, Texts, Out;
 
 CONST
   NameLen = 256; Block = 8192;
@@ -42,16 +42,16 @@ END Append;
 
 PROCEDURE Error(what: ARRAY OF CHAR; VAR name: ARRAY OF CHAR; res: LONGINT);
 BEGIN
-  out.String("fs: "); out.String(what); out.String(" "); out.String(name);
-  IF res = -2 THEN out.String(": no such file or directory")
-  ELSIF res = -13 THEN out.String(": permission denied")
-  ELSIF res = -17 THEN out.String(": exists")
-  ELSIF res = -20 THEN out.String(": not a directory")
-  ELSIF res = -21 THEN out.String(": is a directory")
-  ELSIF res = -39 THEN out.String(": not empty")
-  ELSE out.String(": error "); out.Int(-res, 0)
+  Out.String("fs: "); Out.String(what); Out.String(" "); Out.String(name);
+  IF res = -2 THEN Out.String(": no such file or directory")
+  ELSIF res = -13 THEN Out.String(": permission denied")
+  ELSIF res = -17 THEN Out.String(": exists")
+  ELSIF res = -20 THEN Out.String(": not a directory")
+  ELSIF res = -21 THEN Out.String(": is a directory")
+  ELSIF res = -39 THEN Out.String(": not empty")
+  ELSE Out.String(": error "); Out.Int(-res, 0)
   END;
-  out.Ln
+  Out.Ln
 END Error;
 
 (* ~ at the start of path is $HOME *)
@@ -87,7 +87,7 @@ END Cwd;
 
 PROCEDURE Pwd*;
 VAR s: ARRAY 1024 OF CHAR;
-BEGIN Cwd(s); out.String(s); out.Ln
+BEGIN Cwd(s); Out.String(s); Out.Ln
 END Pwd;
 
 (* the entries of the directory path, sorted; FALSE if it is not one (res: the error) *)
@@ -120,22 +120,22 @@ BEGIN
 END Read;
 
 PROCEDURE Two(n: LONGINT);
-BEGIN out.Char(CHR(n DIV 10 MOD 10 + ORD("0"))); out.Char(CHR(n MOD 10 + ORD("0")))
+BEGIN Out.Char(CHR(n DIV 10 MOD 10 + ORD("0"))); Out.Char(CHR(n MOD 10 + ORD("0")))
 END Two;
 
 (* one line of ls -l for path, shown as name *)
 PROCEDURE Long(VAR path, name: ARRAY OF CHAR; type: CHAR);
 VAR st: Linux0.Status; t, date, time: LONGINT;
 BEGIN
-  IF type = DirType THEN out.Char("d") ELSIF type = LinkType THEN out.Char("l") ELSE out.Char("-") END;
+  IF type = DirType THEN Out.Char("d") ELSIF type = LinkType THEN Out.Char("l") ELSE Out.Char("-") END;
   IF Linux0.FStatat0(Linux0.ATFDCWD, SYSTEM.ADR(path[0]), SYSTEM.ADR(st), 0) = 0 THEN
-    out.Int(st.size, 12); out.String("  ");
+    Out.Int(st.size, 12); Out.String("  ");
     t := st.mtime; Kernel.U2OTime(t, date, time);
-    out.Int(date DIV 512 + 1900, 4); out.Char("-"); Two(date DIV 32 MOD 16); out.Char("-"); Two(date MOD 32);
-    out.Char(" "); Two(time DIV 4096); out.Char(":"); Two(time DIV 64 MOD 64)
-  ELSE out.String("           ?                  ")
+    Out.Int(date DIV 512 + 1900, 4); Out.Char("-"); Two(date DIV 32 MOD 16); Out.Char("-"); Two(date MOD 32);
+    Out.Char(" "); Two(time DIV 4096); Out.Char(":"); Two(time DIV 64 MOD 64)
+  ELSE Out.String("           ?                  ")
   END;
-  out.String("  "); out.String(name); IF type = DirType THEN out.Char("/") END; out.Ln
+  Out.String("  "); Out.String(name); IF type = DirType THEN Out.Char("/") END; Out.Ln
 END Long;
 
 PROCEDURE List(VAR path: ARRAY OF CHAR; long, all, title: BOOLEAN);
@@ -143,12 +143,12 @@ VAR list, e: Entry; res, w, cols, col, n, k: LONGINT; full: ARRAY 2 * NameLen OF
 BEGIN
   IF ~Read(path, all, list, res) THEN
     IF res = 0 THEN  (* a file *)
-      IF long THEN Long(path, path, 0X) ELSE out.String(path); out.Ln END
+      IF long THEN Long(path, path, 0X) ELSE Out.String(path); Out.Ln END
     ELSE Error("ls", path, res)
     END;
     RETURN
   END;
-  IF title THEN out.String(path); out.String(":"); out.Ln END;
+  IF title THEN Out.String(path); Out.String(":"); Out.Ln END;
   IF long THEN
     e := list;
     WHILE e # NIL DO
@@ -160,10 +160,10 @@ BEGIN
     cols := 80 DIV (w + 2); IF cols < 1 THEN cols := 1 END;
     col := 0; e := list;
     WHILE e # NIL DO
-      out.String(e.name); n := Len(e.name); IF e.type = DirType THEN out.Char("/"); INC(n) END;
+      Out.String(e.name); n := Len(e.name); IF e.type = DirType THEN Out.Char("/"); INC(n) END;
       INC(col);
-      IF (col = cols) OR (e.next = NIL) THEN out.Ln; col := 0
-      ELSE k := n; WHILE k < w + 2 DO out.Char(" "); INC(k) END
+      IF (col = cols) OR (e.next = NIL) THEN Out.Ln; col := 0
+      ELSE k := n; WHILE k < w + 2 DO Out.Char(" "); INC(k) END
       END;
       e := e.next
     END
@@ -185,7 +185,7 @@ BEGIN
   IF n = 0 THEN paths[0] := "."; n := 1 END;
   i := 0;
   WHILE i < n DO
-    IF (i > 0) & (n > 1) THEN out.Ln END;
+    IF (i > 0) & (n > 1) THEN Out.Ln END;
     List(paths[i], long, all, n > 1); INC(i)
   END
 END Ls;
@@ -233,7 +233,7 @@ PROCEDURE Mv*;
 VAR A: Texts.Reader; old, new: Name; r: LONGINT;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, old) OR ~Texts.Arg(A, new) THEN out.String("usage: fs.Mv old new"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, old) OR ~Texts.Arg(A, new) THEN Out.String("usage: fs.Mv old new"); Out.Ln; RETURN END;
   Expand(old); Expand(new); Target(old, new);
   r := Linux0.Renameat0(Linux0.ATFDCWD, SYSTEM.ADR(old[0]), Linux0.ATFDCWD, SYSTEM.ADR(new[0]), 0);
   IF r # 0 THEN Error("mv", old, r) END
@@ -243,7 +243,7 @@ PROCEDURE Cp*;
 VAR A: Texts.Reader; from, to: Name; in, dst, n, w, r, total: LONGINT; buf: ARRAY Block OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, from) OR ~Texts.Arg(A, to) THEN out.String("usage: fs.Cp from to"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, from) OR ~Texts.Arg(A, to) THEN Out.String("usage: fs.Cp from to"); Out.Ln; RETURN END;
   Expand(from); Expand(to); Target(from, to);
   in := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(from[0]), Linux0.ORDonly, 0);
   IF in <= 0 THEN Error("cp", from, in); RETURN END;

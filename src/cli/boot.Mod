@@ -11,7 +11,7 @@ MODULE boot;  (** loksh as the first process of a Linux system *)
   The first process must never end: when the command ends, or the desktop quits (System.Quit),
   boot syncs the disks and powers the machine off. *)
 
-IMPORT SYSTEM, Linux0, Kernel, Files, Root, Oberon0, Texts, out;
+IMPORT SYSTEM, Linux0, Kernel, Files, Root, Oberon0, Texts, Out;
 
 CONST
   MagicA = -18751827;  (* LINUX_REBOOT_MAGIC1, 0FEE1DEADH *)
@@ -27,7 +27,7 @@ BEGIN
   Files.CreateDirectory(dir, r);
   res := Linux0.Mount0(SYSTEM.ADR(src), SYSTEM.ADR(dir), SYSTEM.ADR(type), 0, 0);
   IF (res < 0) & (res # -16) THEN  (* -16: mounted already *)
-    out.String("boot: mounting "); out.String(dir); out.String(" failed, error "); out.Int(-res, 0); out.Ln
+    Out.String("boot: mounting "); Out.String(dir); Out.String(" failed, error "); Out.Int(-res, 0); Out.Ln
   END
 END Mount;
 
@@ -47,15 +47,15 @@ PROCEDURE Load(VAR path: ARRAY OF CHAR);  (* one kernel module *)
 VAR full: ARRAY 256 OF CHAR; fd, res: LONGINT;
 BEGIN
   IF path[0] = "/" THEN COPY(path, full) ELSE Root.Join(path, full) END;
-  out.String("boot: module "); out.String(full);
+  Out.String("boot: module "); Out.String(full);
   fd := Linux0.Openat0(Linux0.ATFDCWD, SYSTEM.ADR(full), 0, 0);
-  IF fd < 0 THEN out.String(" not found")
+  IF fd < 0 THEN Out.String(" not found")
   ELSE
     res := Linux0.FinitModule0(fd, SYSTEM.ADR(""), 0);
-    IF (res < 0) & (res # -17) THEN out.String(" failed, error "); out.Int(-res, 0) END;  (* -17: loaded already *)
+    IF (res < 0) & (res # -17) THEN Out.String(" failed, error "); Out.Int(-res, 0) END;  (* -17: loaded already *)
     res := Linux0.Close0(fd)
   END;
-  out.Ln
+  Out.Ln
 END Load;
 
 PROCEDURE Modules;  (* the modules of boot.modules *)
@@ -98,12 +98,12 @@ BEGIN
   Mount("proc", "/proc", "proc"); Mount("sysfs", "/sys", "sysfs");
   Mount("devtmpfs", "/dev", "devtmpfs"); Mount("tmpfs", "/tmp", "tmpfs");
   Console;
-  out.String("boot: polpo as the first process, then "); out.String(cmd); out.Ln;
+  Out.String("boot: polpo as the first process, then "); Out.String(cmd); Out.Ln;
   Modules;
   first := TRUE; Kernel.InstallTermHandler(Off);
   NEW(par); NEW(par.text); Texts.Open(par.text, ""); par.pos := 0;
   Oberon0.Call(cmd, par, FALSE, res);
-  IF res # 0 THEN out.String("boot: "); out.String(cmd); out.String(" not found, error "); out.Int(res, 0); out.Ln END;
+  IF res # 0 THEN Out.String("boot: "); Out.String(cmd); Out.String(" not found, error "); Out.Int(res, 0); Out.Ln END;
   Kernel.Shutdown(1)
 END Init;
 

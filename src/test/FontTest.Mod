@@ -4,7 +4,7 @@ MODULE FontTest;  (** DISPLAY=... loksh FontTest.Run: damaged and missing fonts 
    substitute has to come from Oberon10.Scn.Fnt or the empty font. The damaged files are copies of
    Oberon10.Scn.Fnt with one field changed, written to zq_*.Scn.Fnt in the current directory. *)
 
-IMPORT Files, Fonts, Objects, out;
+IMPORT Files, Fonts, Objects, Out;
 
 CONST Good = "Oberon10.Scn.Fnt";
   RunsAt = 14;  (* byte offset of the number of runs: id, type, family, variant, 5 integers *)
@@ -15,7 +15,7 @@ VAR fails, checks: LONGINT;
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("FontTest: failed: "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("FontTest: failed: "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE Int(a: LONGINT): INTEGER;  (* the little endian integer of the good font at a *)
@@ -74,7 +74,7 @@ BEGIN
     Delete("zq_Cut10.Scn.Fnt"); Delete("zq_NegRuns10.Scn.Fnt"); Delete("zq_HugeRuns10.Scn.Fnt");
     Delete("zq_DescRun10.Scn.Fnt"); Delete("zq_BadBox10.Scn.Fnt"); Delete("zq_BigBox10.Scn.Fnt")
   END;
-  out.String("FontTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("FontTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END FontTest.

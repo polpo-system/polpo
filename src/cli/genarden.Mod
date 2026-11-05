@@ -11,7 +11,7 @@ MODULE genarden;  (** the recipes of the base system of polpo for the package tr
    tree made by portia.Sync (it has COMMIT) is refused: changes go into a git clone of arden.
    Run it after changing the build recipes, then portia.Check. *)
 
-IMPORT Kernel, Files, FATFiles, Root, Texts0, Oberon := Oberon0, Texts, TOML, out;
+IMPORT Kernel, Files, FATFiles, Root, Texts0, Oberon := Oberon0, Texts, TOML, Out;
 
 CONST
   NameLen = 256; MaxArchs = 7; MaxLine = 1024;
@@ -238,7 +238,7 @@ VAR path: Name; T: Texts0.Text; R: Texts0.Reader; ch: CHAR; line: ARRAY MaxLine 
       j := 0; WHILE line[i] > " " DO src[j] := line[i]; INC(i); INC(j) END; src[j] := 0X;
       IF (j > 4) & (src[j-4] = ".") & (src[j-3] = "M") THEN
         p := PackageOf(src);
-        IF p = NIL THEN out.String("genarden: no package for "); out.String(src); out.Ln; INC(problems)
+        IF p = NIL THEN Out.String("genarden: no package for "); Out.String(src); Out.Ln; INC(problems)
         ELSE AddSource(p, src, a, Pos(line, " /x ") >= 0, Pos(line, " /2 ") >= 0); INCL(p.built, a)
         END
       END
@@ -253,7 +253,7 @@ VAR path: Name; T: Texts0.Text; R: Texts0.Reader; ch: CHAR; line: ARRAY MaxLine 
 
 BEGIN
   path := "tools/"; Append(path, name); Append(path, ".Tool"); Root.Join(path, path);
-  IF Files.Old(path) = NIL THEN out.String("genarden: no "); out.String(path); out.Ln; INC(problems); RETURN END;
+  IF Files.Old(path) = NIL THEN Out.String("genarden: no "); Out.String(path); Out.Ln; INC(problems); RETURN END;
   NEW(T); Texts0.Open(T, path); Texts0.OpenReader(R, T, 0); n := 0; Texts0.Read(R, ch);
   WHILE ~R.eot DO
     IF (ch = 0DX) OR (ch = 0AX) THEN line[n] := 0X; Line; n := 0
@@ -330,7 +330,7 @@ VAR cat, desc, author, lic, path, tok: Name; all, l, it, files, deps, x: Item; a
   none: BOOLEAN; tf: TOML.Field;
 BEGIN
   IF ~Field(p.sec, "category", cat) OR ~Field(p.sec, "description", desc) THEN
-    out.String("genarden: "); out.String(p.name); out.String(" needs a category and a description"); out.Ln; INC(problems); RETURN
+    Out.String("genarden: "); Out.String(p.name); Out.String(" needs a category and a description"); Out.Ln; INC(problems); RETURN
   END;
   IF ~Field(p.sec, "author", author) THEN author := "polpo" END;
   IF ~Field(p.sec, "license", lic) THEN lic := "GPL-3" END;
@@ -439,12 +439,12 @@ BEGIN
   i := Len(tree); IF (i > 0) & (tree[i-1] # "/") THEN Append(tree, "/") END;
   COPY(tree, path); Append(path, "COMMIT");
   IF Files.Old(path) # NIL THEN
-    out.String("genarden: "); out.String(tree); out.String(" is a copy made by portia.Sync; give a git clone of arden (../arden)"); out.Ln; RETURN
+    Out.String("genarden: "); Out.String(tree); Out.String(" is a copy made by portia.Sync; give a git clone of arden (../arden)"); Out.Ln; RETURN
   END;
   COPY(tree, path); Append(path, "tools/base.toml");
-  IF ~ReadFile(path, buf) THEN out.String("genarden: no "); out.String(path); out.Ln; RETURN END;
+  IF ~ReadFile(path, buf) THEN Out.String("genarden: no "); Out.String(path); Out.Ln; RETURN END;
   doc := TOML.Parse(buf^);
-  IF doc.errors > 0 THEN out.String("genarden: "); out.String(path); out.Char(":"); out.Int(doc.errorLine, 0); out.String(": "); out.String(doc.error); out.Ln; RETURN END;
+  IF doc.errors > 0 THEN Out.String("genarden: "); Out.String(path); Out.Char(":"); Out.Int(doc.errorLine, 0); Out.String(": "); Out.String(doc.error); Out.Ln; RETURN END;
   packages := NIL; last := NIL; s := doc.first;
   WHILE s # NIL DO
     IF s.name # "" THEN
@@ -478,10 +478,10 @@ BEGIN
   Files.Register(f);
   Bases;
   i := 0; it := index; WHILE it # NIL DO INC(i); it := it.next END;
-  out.String("genarden: "); out.Int(i, 0); out.String(" recipes in the INDEX of "); out.String(tree);
-  out.String(", portia.base.<arch> in the polpo root");
-  IF problems > 0 THEN out.String(", "); out.Int(problems, 0); out.String(" problems") END;
-  out.Ln
+  Out.String("genarden: "); Out.Int(i, 0); Out.String(" recipes in the INDEX of "); Out.String(tree);
+  Out.String(", portia.base.<arch> in the polpo root");
+  IF problems > 0 THEN Out.String(", "); Out.Int(problems, 0); Out.String(" problems") END;
+  Out.Ln
 END Run;
 
 BEGIN

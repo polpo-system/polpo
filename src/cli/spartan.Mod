@@ -6,7 +6,7 @@ MODULE spartan;  (** Spartan downloads (spartan://, port 300): plain TCP, no TLS
    the MIME type), 3 redirect (meta: a path on the same host, followed up to 5 times), 4 client
    error, 5 server error. The body ends with the connection. dcs sends data (input). *)
 
-IMPORT Texts, Gemini0, out;
+IMPORT Texts, Gemini0, Out;
 
 (* the file name for url: the last part of the path, index.gmi for a directory *)
 PROCEDURE DefaultName(VAR url, name: ARRAY OF CHAR);
@@ -24,10 +24,10 @@ END DefaultName;
 PROCEDURE Fetch(VAR url: ARRAY OF CHAR; name: ARRAY OF CHAR);
 VAR o: Gemini0.Options; r: Gemini0.Response; c: Gemini0.Chunk; i: LONGINT; seg: ARRAY 1025 OF CHAR; n: LONGINT;
 BEGIN
-  IF Gemini0.Protocol(url) # Gemini0.Spartan THEN out.String("spartan: spartan:// expected: "); out.String(url); out.Ln; RETURN END;
+  IF Gemini0.Protocol(url) # Gemini0.Spartan THEN Out.String("spartan: spartan:// expected: "); Out.String(url); Out.Ln; RETURN END;
   o := Gemini0.NewOptions();
-  IF ~Gemini0.Fetch(url, "", o, r) THEN out.String("spartan: "); out.String(Gemini0.lastError); out.Ln; RETURN END;
-  IF r.url # url THEN out.String("spartan: redirected to "); out.String(r.url); out.Ln END;
+  IF ~Gemini0.Fetch(url, "", o, r) THEN Out.String("spartan: "); Out.String(Gemini0.lastError); Out.Ln; RETURN END;
+  IF r.url # url THEN Out.String("spartan: redirected to "); Out.String(r.url); Out.Ln END;
   IF Gemini0.Kind(r) = 2 THEN
     IF name = "" THEN
       c := r.body; n := 0;
@@ -35,23 +35,23 @@ BEGIN
         i := 0;
         WHILE i < c.len DO
           IF c.data[i] # 0DX THEN seg[n] := c.data[i]; INC(n) END;
-          IF n = 1024 THEN seg[n] := 0X; out.String(seg); n := 0 END;
+          IF n = 1024 THEN seg[n] := 0X; Out.String(seg); n := 0 END;
           INC(i)
         END;
         c := c.next
       END;
-      seg[n] := 0X; out.String(seg);
-      IF ~r.complete THEN out.Ln; out.String("spartan: the body is incomplete"); out.Ln END
+      seg[n] := 0X; Out.String(seg);
+      IF ~r.complete THEN Out.Ln; Out.String("spartan: the body is incomplete"); Out.Ln END
     ELSE
       IF name = "?" THEN DefaultName(r.url, name) END;
-      out.Int(r.status, 0); out.Char(" "); out.String(r.meta); out.String(", "); out.Int(r.length, 0); out.String(" bytes");
-      IF ~r.complete THEN out.String(", incomplete: not saved")
-      ELSIF Gemini0.Save(r, name) THEN out.String(" in "); out.String(name)
-      ELSE out.String(": "); out.String(Gemini0.lastError)
+      Out.Int(r.status, 0); Out.Char(" "); Out.String(r.meta); Out.String(", "); Out.Int(r.length, 0); Out.String(" bytes");
+      IF ~r.complete THEN Out.String(", incomplete: not saved")
+      ELSIF Gemini0.Save(r, name) THEN Out.String(" in "); Out.String(name)
+      ELSE Out.String(": "); Out.String(Gemini0.lastError)
       END;
-      out.Ln
+      Out.Ln
     END
-  ELSE out.Int(r.status, 0); out.Char(" "); out.String(r.meta); out.Ln
+  ELSE Out.Int(r.status, 0); Out.Char(" "); Out.String(r.meta); Out.Ln
   END
 END Fetch;
 
@@ -60,7 +60,7 @@ PROCEDURE Get*;
 VAR A: Texts.Reader; url, name: ARRAY Gemini0.MaxURL OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, url) THEN out.String("usage: spartan.Get spartan://host/path [file]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, url) THEN Out.String("usage: spartan.Get spartan://host/path [file]"); Out.Ln; RETURN END;
   IF ~Texts.Arg(A, name) THEN name := "?" END;  (* a name is made from the url *)
   Fetch(url, name)
 END Get;
@@ -70,7 +70,7 @@ PROCEDURE Show*;
 VAR A: Texts.Reader; url: ARRAY Gemini0.MaxURL OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, url) THEN out.String("usage: spartan.Show spartan://host/path"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, url) THEN Out.String("usage: spartan.Show spartan://host/path"); Out.Ln; RETURN END;
   Fetch(url, "")
 END Show;
 

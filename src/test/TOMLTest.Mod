@@ -1,13 +1,13 @@
 MODULE TOMLTest;  (* TOMLTest.Dump file: the sections and fields TOML reads, for comparing *)
-IMPORT Texts, Files, TOML, out;
+IMPORT Texts, Files, TOML, Out;
 
 PROCEDURE Dump*;
 VAR A: Texts.Reader; name: ARRAY 256 OF CHAR; f: Files.File; R: Files.Rider; buf: POINTER TO ARRAY OF CHAR;
   n, i: LONGINT; doc: TOML.Doc; s: TOML.Section; fl: TOML.Field; it: TOML.Item;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, name) THEN out.String("usage: TOMLTest.Dump file"); out.Ln; RETURN END;
-  f := Files.Old(name); IF f = NIL THEN out.String("no file"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, name) THEN Out.String("usage: TOMLTest.Dump file"); Out.Ln; RETURN END;
+  f := Files.Old(name); IF f = NIL THEN Out.String("no file"); Out.Ln; RETURN END;
   n := Files.Length(f); NEW(buf, n + 1); Files.Set(R, f, 0);
   i := 0; WHILE i < n DO Files.Read(R, buf[i]); INC(i) END; buf[n] := 0X;
   doc := TOML.Parse(buf^);
@@ -15,18 +15,18 @@ BEGIN
   WHILE s # NIL DO
     fl := s.first;
     WHILE fl # NIL DO
-      out.String(s.name); out.String(" | "); out.String(fl.key); out.String(" | "); out.Int(fl.kind, 0); out.String(" | ");
+      Out.String(s.name); Out.String(" | "); Out.String(fl.key); Out.String(" | "); Out.Int(fl.kind, 0); Out.String(" | ");
       IF fl.kind = TOML.Array THEN
-        it := fl.items; WHILE it # NIL DO out.Char("<"); out.String(it.value); out.Char(">"); it := it.next END
-      ELSE out.Char("<"); out.String(fl.value); out.Char(">")
+        it := fl.items; WHILE it # NIL DO Out.Char("<"); Out.String(it.value); Out.Char(">"); it := it.next END
+      ELSE Out.Char("<"); Out.String(fl.value); Out.Char(">")
       END;
-      out.Ln; fl := fl.next
+      Out.Ln; fl := fl.next
     END;
     s := s.next
   END;
-  out.String("errors "); out.Int(doc.errors, 0);
-  IF doc.errors > 0 THEN out.String(" line "); out.Int(doc.errorLine, 0); out.String(": "); out.String(doc.error) END;
-  out.Ln
+  Out.String("errors "); Out.Int(doc.errors, 0);
+  IF doc.errors > 0 THEN Out.String(" line "); Out.Int(doc.errorLine, 0); Out.String(": "); Out.String(doc.error) END;
+  Out.Ln
 END Dump;
 
 END TOMLTest.

@@ -10,7 +10,7 @@ MODULE fetch;  (** HTTP downloads with the http module *)
    An incomplete body (shorter than its length, no last chunk, or a TLS connection that ended
    without close_notify) is not saved. *)
 
-IMPORT Texts, Files, http, httpsPure, TLS13Live, strTypes, out;
+IMPORT Texts, Files, http, httpsPure, TLS13Live, strTypes, Out;
 
 VAR secure: BOOLEAN;  (* the last Split saw https *)
 
@@ -23,7 +23,7 @@ BEGIN
   IF (url[i] = ":") & (url[i + 1] = "/") & (url[i + 2] = "/") THEN
     IF (i >= 4) & (CAP(url[0]) = "H") & (CAP(url[1]) = "T") & (CAP(url[2]) = "T") & (CAP(url[3]) = "P")
       & ((i = 4) OR (i = 5) & (CAP(url[4]) = "S")) THEN secure := i = 5
-    ELSE out.String("fetch: http:// or https:// expected"); out.Ln; RETURN FALSE
+    ELSE Out.String("fetch: http:// or https:// expected"); Out.Ln; RETURN FALSE
     END;
     INC(i, 3)
   ELSE i := 0
@@ -51,7 +51,7 @@ END Split;
 PROCEDURE Fetch(VAR url: ARRAY OF CHAR; VAR h: http.Client): BOOLEAN;
 VAR host, port, path: ARRAY 1024 OF CHAR; body: strTypes.pstring;
 BEGIN
-  IF ~Split(url, host, port, path) THEN out.String("fetch: bad url "); out.String(url); out.Ln; RETURN FALSE END;
+  IF ~Split(url, host, port, path) THEN Out.String("fetch: bad url "); Out.String(url); Out.Ln; RETURN FALSE END;
   IF secure THEN h := httpsPure.Create(host, port, path) ELSE h := http.Create(host, port, path) END;
   body := h.Get(h);
   RETURN body # NIL
@@ -62,22 +62,22 @@ PROCEDURE Get*;
 VAR A: Texts.Reader; url, name: ARRAY 1024 OF CHAR; h: http.Client; f: Files.File; R: Files.Rider; i: LONGINT;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, url) THEN out.String("usage: fetch.Get url [file]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, url) THEN Out.String("usage: fetch.Get url [file]"); Out.Ln; RETURN END;
   IF ~Fetch(url, h) THEN RETURN END;
-  IF h.rspnFirstLine = NIL THEN out.String("fetch: no answer from the server"); out.Ln; RETURN END;
-  out.String(h.rspnFirstLine^); out.String(", "); out.Int(h.rspnContentLength, 0); out.String(" bytes");
-  IF ~h.rspnComplete THEN out.String(", incomplete: not saved"); out.Ln; RETURN END;
+  IF h.rspnFirstLine = NIL THEN Out.String("fetch: no answer from the server"); Out.Ln; RETURN END;
+  Out.String(h.rspnFirstLine^); Out.String(", "); Out.Int(h.rspnContentLength, 0); Out.String(" bytes");
+  IF ~h.rspnComplete THEN Out.String(", incomplete: not saved"); Out.Ln; RETURN END;
   IF Texts.Arg(A, name) THEN
     f := Files.New(name);
-    IF f = NIL THEN out.String(", cannot create "); out.String(name)
+    IF f = NIL THEN Out.String(", cannot create "); Out.String(name)
     ELSE
       Files.Set(R, f, 0); i := 0;
       WHILE i < h.rspnContentLength DO Files.Write(R, h.rspnBody[i]); INC(i) END;
-      Files.Register(f); out.String(" in "); out.String(name)
+      Files.Register(f); Out.String(" in "); Out.String(name)
     END
   ELSE h.Save(h)
   END;
-  out.Ln
+  Out.Ln
 END Get;
 
 (** fetch.Verbose -- print the TLS handshake in detail *)
@@ -95,15 +95,15 @@ PROCEDURE Show*;
 VAR A: Texts.Reader; url: ARRAY 1024 OF CHAR; h: http.Client; i: LONGINT;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, url) THEN out.String("usage: fetch.Show url"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, url) THEN Out.String("usage: fetch.Show url"); Out.Ln; RETURN END;
   IF ~Fetch(url, h) THEN RETURN END;
-  IF h.rspnFirstLine = NIL THEN out.String("fetch: no answer from the server"); out.Ln; RETURN END;
+  IF h.rspnFirstLine = NIL THEN Out.String("fetch: no answer from the server"); Out.Ln; RETURN END;
   i := 0;
   WHILE i < h.rspnContentLength DO
-    IF h.rspnBody[i] # 0DX THEN out.Char(h.rspnBody[i]) END;  (* out.Char(0DX) is a line end *)
+    IF h.rspnBody[i] # 0DX THEN Out.Char(h.rspnBody[i]) END;  (* Out.Char(0DX) is a line end *)
     INC(i)
   END;
-  IF ~h.rspnComplete THEN out.Ln; out.String("fetch: the body is incomplete"); out.Ln END
+  IF ~h.rspnComplete THEN Out.Ln; Out.String("fetch: the body is incomplete"); Out.Ln END
 END Show;
 
 END fetch.

@@ -10,7 +10,7 @@ MODULE arc;  (** Oberon archives (.Arc of Compress) in the console *)
    The archives are those of Compress of ETH Oberon (LZSS, names of at most 31 characters); the
    work is done by Compress0. *)
 
-IMPORT Files, Modules, Texts, Compress0, out;
+IMPORT Files, Modules, Texts, Compress0, Out;
 
 CONST MaxFiles = 128; MaxEntries = 1024;
 
@@ -21,22 +21,22 @@ VAR count: LONGINT; noCipher: BOOLEAN;
 
 PROCEDURE Error(VAR archive: ARRAY OF CHAR; entry: ARRAY OF CHAR; res: INTEGER);
 BEGIN
-  out.String("arc: "); out.String(archive);
-  IF entry # "" THEN out.String(", "); out.String(entry) END; out.String(": ");
+  Out.String("arc: "); Out.String(archive);
+  IF entry # "" THEN Out.String(", "); Out.String(entry) END; Out.String(": ");
   CASE res OF
-    Compress0.ArchiveNotFound: out.String("no such archive")
-  | Compress0.ErrorInArchive: out.String("error in the archive")
-  | Compress0.EntryNotFound: out.String("no such entry")
-  | Compress0.ArchiveExists: out.String("the archive exists")
-  | Compress0.FileError: out.String("file error")
-  | Compress0.KeyNeeded: out.String("encrypted, a key is needed")
-  ELSE out.String("error "); out.Int(res, 0)
+    Compress0.ArchiveNotFound: Out.String("no such archive")
+  | Compress0.ErrorInArchive: Out.String("error in the archive")
+  | Compress0.EntryNotFound: Out.String("no such entry")
+  | Compress0.ArchiveExists: Out.String("the archive exists")
+  | Compress0.FileError: Out.String("file error")
+  | Compress0.KeyNeeded: Out.String("encrypted, a key is needed")
+  ELSE Out.String("error "); Out.Int(res, 0)
   END;
-  out.Ln
+  Out.Ln
 END Error;
 
 PROCEDURE Usage(s: ARRAY OF CHAR);
-BEGIN IF ~noCipher THEN out.String(s); out.Ln END
+BEGIN IF ~noCipher THEN Out.String(s); Out.Ln END
 END Usage;
 
 (* the command install (module.Command) exists; Compress0.InstallCrypt traps when it does not *)
@@ -49,7 +49,7 @@ BEGIN
     mod := Modules.ThisMod(name);
     IF (mod # NIL) & (Modules.ThisCommand(mod, cmd) # NIL) THEN RETURN TRUE END
   END;
-  out.String("arc: no cipher "); out.String(install); out.String(" (module.Install, as CompressCrypt.Install)"); out.Ln;
+  Out.String("arc: no cipher "); Out.String(install); Out.String(" (module.Install, as CompressCrypt.Install)"); Out.Ln;
   RETURN FALSE
 END Cipher;
 
@@ -73,21 +73,21 @@ VAR archive: Name; files: ARRAY 1 OF Name; n, res: INTEGER;
 BEGIN
   IF ~Args(archive, files, n) THEN Usage("usage: arc.Create archive"); RETURN END;
   Compress0.CreateArchive(archive, res);
-  IF res = Compress0.Done THEN out.String("arc: "); out.String(archive); out.String(" created"); out.Ln ELSE Error(archive, "", res) END
+  IF res = Compress0.Done THEN Out.String("arc: "); Out.String(archive); Out.String(" created"); Out.Ln ELSE Error(archive, "", res) END
 END Create;
 
 PROCEDURE Two(n: LONGINT);  (* two digits *)
-BEGIN out.Char(CHR(n DIV 10 MOD 10 + ORD("0"))); out.Char(CHR(n MOD 10 + ORD("0")))
+BEGIN Out.Char(CHR(n DIV 10 MOD 10 + ORD("0"))); Out.Char(CHR(n MOD 10 + ORD("0")))
 END Two;
 
 PROCEDURE ShowEntry(h: Compress0.Header; VAR stop: BOOLEAN);
 BEGIN
-  out.String(h.name); out.String("  "); out.Int(h.length, 0); out.String(" bytes compressed (");
-  out.Int(ENTIER(h.ratio), 0); out.String("%)  ");
-  out.Int(h.date DIV 512 + 1900, 0); out.Char("-"); Two(h.date DIV 32 MOD 16); out.Char("-"); Two(h.date MOD 32);
-  out.Char(" "); Two(h.time DIV 4096); out.Char(":"); Two(h.time DIV 64 MOD 64);
-  IF Compress0.encryption IN h.extensions THEN out.String("  encrypted") END;
-  out.Ln; INC(count); stop := FALSE
+  Out.String(h.name); Out.String("  "); Out.Int(h.length, 0); Out.String(" bytes compressed (");
+  Out.Int(ENTIER(h.ratio), 0); Out.String("%)  ");
+  Out.Int(h.date DIV 512 + 1900, 0); Out.Char("-"); Two(h.date DIV 32 MOD 16); Out.Char("-"); Two(h.date MOD 32);
+  Out.Char(" "); Two(h.time DIV 4096); Out.Char(":"); Two(h.time DIV 64 MOD 64);
+  IF Compress0.encryption IN h.extensions THEN Out.String("  encrypted") END;
+  Out.Ln; INC(count); stop := FALSE
 END ShowEntry;
 
 PROCEDURE Directory*;
@@ -95,7 +95,7 @@ VAR archive: Name; files: ARRAY 1 OF Name; n, res: INTEGER;
 BEGIN
   IF ~Args(archive, files, n) THEN Usage("usage: arc.Directory archive"); RETURN END;
   count := 0; Compress0.Enumerate(archive, ShowEntry, TRUE, res);
-  IF res = Compress0.Done THEN out.String("arc: "); out.Int(count, 0); out.String(" entries"); out.Ln ELSE Error(archive, "", res) END
+  IF res = Compress0.Done THEN Out.String("arc: "); Out.Int(count, 0); Out.String(" entries"); Out.Ln ELSE Error(archive, "", res) END
 END Directory;
 
 PROCEDURE Add*;
@@ -106,11 +106,11 @@ BEGIN
   i := 0;
   WHILE i < n DO
     f := Files.Old(files[i]);
-    IF f = NIL THEN out.String("arc: no "); out.String(files[i]); out.Ln
+    IF f = NIL THEN Out.String("arc: no "); Out.String(files[i]); Out.Ln
     ELSE
       COPY(files[i], entry); Compress0.DeleteFile(archive, entry, res);  (* replaced if there *)
       Files.Set(R, f, 0); Compress0.AddFile(archive, entry, R, Files.Length(f), res);
-      IF res = Compress0.Done THEN out.String("arc: added "); out.String(entry); out.Ln ELSE Error(archive, files[i], res) END
+      IF res = Compress0.Done THEN Out.String("arc: added "); Out.String(entry); Out.Ln ELSE Error(archive, files[i], res) END
     END;
     INC(i)
   END
@@ -137,9 +137,9 @@ END Collect;
 PROCEDURE ExtractOne(VAR archive, name: ARRAY OF CHAR): BOOLEAN;
 VAR f: Files.File; R: Files.Rider; res: INTEGER;
 BEGIN
-  IF ~Safe(name) THEN out.String("arc: skipped "); out.String(name); out.String(", outside the directory"); out.Ln; RETURN TRUE END;
+  IF ~Safe(name) THEN Out.String("arc: skipped "); Out.String(name); Out.String(", outside the directory"); Out.Ln; RETURN TRUE END;
   f := Files.New(name); Files.Set(R, f, 0); Compress0.ExtractFile(archive, name, R, res);
-  IF res = Compress0.Done THEN Files.Register(f); out.String("arc: extracted "); out.String(name); out.Ln
+  IF res = Compress0.Done THEN Files.Register(f); Out.String("arc: extracted "); Out.String(name); Out.Ln
   ELSE Error(archive, name, res)
   END;
   RETURN res # Compress0.KeyNeeded
@@ -153,7 +153,7 @@ BEGIN
     count := 0; Compress0.Enumerate(archive, Collect, FALSE, res);
     IF res # Compress0.Done THEN Error(archive, "", res); RETURN END;
     i := 0; WHILE (i < count) & ExtractOne(archive, entries[i]) DO INC(i) END;
-    IF count = MaxEntries THEN out.String("arc: only the first "); out.Int(MaxEntries, 0); out.String(" entries"); out.Ln END
+    IF count = MaxEntries THEN Out.String("arc: only the first "); Out.Int(MaxEntries, 0); Out.String(" entries"); Out.Ln END
   ELSE
     i := 0; WHILE (i < n) & ExtractOne(archive, files[i]) DO INC(i) END
   END
@@ -166,7 +166,7 @@ BEGIN
   i := 0;
   WHILE i < n DO
     Compress0.DeleteFile(archive, files[i], res);
-    IF res = Compress0.Done THEN out.String("arc: deleted "); out.String(files[i]); out.Ln ELSE Error(archive, files[i], res) END;
+    IF res = Compress0.Done THEN Out.String("arc: deleted "); Out.String(files[i]); Out.Ln ELSE Error(archive, files[i], res) END;
     INC(i)
   END
 END Delete;

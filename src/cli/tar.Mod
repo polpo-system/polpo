@@ -11,7 +11,7 @@ MODULE tar;  (** tar archives, plain or gzip compressed, in the console *)
    are entries that would land outside dir. Pack writes ustar, with GNU long names for paths of
    more than 100 characters that no prefix splits; the archives are those of tar and tar -z. *)
 
-IMPORT Kernel, Files, FATFiles, GZReaders, GZWriters, Texts, out;
+IMPORT Kernel, Files, FATFiles, GZReaders, GZWriters, Texts, Out;
 
 CONST Block = 512; NameLen = 256;
 
@@ -32,7 +32,7 @@ PROCEDURE Open(VAR name: ARRAY OF CHAR): BOOLEAN;
 VAR f: Files.File; c0, c1: CHAR;
 BEGIN
   f := Files.Old(name);
-  IF f = NIL THEN out.String("tar: no "); out.String(name); out.Ln; RETURN FALSE END;
+  IF f = NIL THEN Out.String("tar: no "); Out.String(name); Out.Ln; RETURN FALSE END;
   Files.Set(fr, f, 0); Files.Read(fr, c0); Files.Read(fr, c1);
   gz := (c0 = 1FX) & (c1 = 8BX); eof := FALSE;
   IF gz THEN GZReaders.Open(zr, f) ELSE Files.Set(fr, f, 0) END;
@@ -159,8 +159,8 @@ BEGIN
         END
       ELSIF (type = "g") OR ~extract & (type # "0") & (type # 0X) & (type # "5") THEN Skip(size)
       ELSIF (type = "0") OR (type = 0X) OR (type = "7") THEN  (* a file *)
-        IF ~extract THEN out.String(name); out.String("  "); out.Int(size, 0); out.Ln; Skip(size)
-        ELSIF Strip(name, strip) & ~Safe(name) THEN out.String("tar: skipped "); out.String(name); out.String(", outside the directory"); out.Ln; Skip(size)
+        IF ~extract THEN Out.String(name); Out.String("  "); Out.Int(size, 0); Out.Ln; Skip(size)
+        ELSIF Strip(name, strip) & ~Safe(name) THEN Out.String("tar: skipped "); Out.String(name); Out.String(", outside the directory"); Out.Ln; Skip(size)
         ELSIF Strip(name, 0) THEN
           COPY(dir, full); Append(full, name); MakeDirs(full);
           f := Files.New(full); Files.Set(w, f, 0); k := size;
@@ -173,7 +173,7 @@ BEGIN
         ELSE Skip(size)
         END
       ELSIF type = "5" THEN  (* a directory *)
-        IF ~extract THEN out.String(name); out.Ln
+        IF ~extract THEN Out.String(name); Out.Ln
         ELSIF Strip(name, strip) & Safe(name) THEN COPY(dir, full); Append(full, name); MakeDirs(full); INC(dirs)
         END;
         Skip(size)
@@ -183,7 +183,7 @@ BEGIN
   END;
   IF gz THEN GZReaders.Close(zr) END;
   IF extract THEN
-    out.String("tar: "); out.Int(files, 0); out.String(" files, "); out.Int(dirs, 0); out.String(" directories in "); out.String(dir); out.Ln
+    Out.String("tar: "); Out.Int(files, 0); Out.String(" files, "); Out.Int(dirs, 0); Out.String(" directories in "); Out.String(dir); Out.Ln
   END
 END Walk;
 
@@ -191,7 +191,7 @@ PROCEDURE List*;
 VAR A: Texts.Reader; archive, dir: Name;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, archive) THEN out.String("usage: tar.List archive"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, archive) THEN Out.String("usage: tar.List archive"); Out.Ln; RETURN END;
   dir := ""; Walk(archive, dir, 0, FALSE)
 END List;
 
@@ -199,7 +199,7 @@ PROCEDURE Unpack*;
 VAR A: Texts.Reader; archive, dir, n: Name; strip, i: INTEGER;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, archive) OR ~Texts.Arg(A, dir) THEN out.String("usage: tar.Unpack archive dir [n]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, archive) OR ~Texts.Arg(A, dir) THEN Out.String("usage: tar.Unpack archive dir [n]"); Out.Ln; RETURN END;
   strip := 0;
   IF Texts.Arg(A, n) THEN i := 0; WHILE (n[i] >= "0") & (n[i] <= "9") DO strip := strip * 10 + ORD(n[i]) - ORD("0"); INC(i) END END;
   i := 0; WHILE dir[i] # 0X DO INC(i) END; IF (i > 0) & (dir[i-1] # "/") THEN Append(dir, "/") END;
@@ -314,19 +314,19 @@ PROCEDURE Pack1(VAR path: ARRAY OF CHAR);
 VAR e: Entry; dir: BOOLEAN; f: Files.File; r: Files.Rider; buf: ARRAY 8192 OF CHAR; sub: Name; size, k, n, mtime: LONGINT;
 BEGIN
   IF ~ok THEN RETURN END;
-  IF ~Find(path, dir, mtime) THEN out.String("tar: no "); out.String(path); out.Ln; RETURN END;
+  IF ~Find(path, dir, mtime) THEN Out.String("tar: no "); Out.String(path); Out.Ln; RETURN END;
   IF dir THEN
     e := Sort(Entries(path));
     COPY(path, sub); IF sub[Len(sub) - 1] # "/" THEN Append(sub, "/") END;
     Header(sub, "5", 0, mtime); INC(dirsPacked);
     WHILE e # NIL DO  (* in the order of the names *)
       COPY(path, sub); IF sub[Len(sub) - 1] # "/" THEN Append(sub, "/") END; Append(sub, e.name);
-      IF Len(sub) >= NameLen - 1 THEN out.String("tar: skipped, too long: "); out.String(sub); out.Ln ELSE Pack1(sub) END;
+      IF Len(sub) >= NameLen - 1 THEN Out.String("tar: skipped, too long: "); Out.String(sub); Out.Ln ELSE Pack1(sub) END;
       e := e.next
     END
   ELSE
     f := Files.Old(path);
-    IF f = NIL THEN out.String("tar: cannot read "); out.String(path); out.Ln; RETURN END;
+    IF f = NIL THEN Out.String("tar: cannot read "); Out.String(path); Out.Ln; RETURN END;
     size := Files.Length(f); Header(path, "0", size, mtime); Files.Set(r, f, 0); k := size;
     WHILE k > 0 DO
       n := k; IF n > LEN(buf) THEN n := LEN(buf) END;
@@ -343,7 +343,7 @@ PROCEDURE Pack*;
 VAR A: Texts.Reader; archive, path: Name; g: Files.File; n, k: LONGINT; zero: ARRAY Block OF CHAR;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, archive) THEN out.String("usage: tar.Pack archive[.gz|.tgz] path ..."); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, archive) THEN Out.String("usage: tar.Pack archive[.gz|.tgz] path ..."); Out.Ln; RETURN END;
   n := Len(archive);
   gz := (n > 3) & (archive[n-3] = ".") & (archive[n-2] = "g") & (archive[n-1] = "z")
     OR (n > 4) & (archive[n-4] = ".") & (archive[n-3] = "t") & (archive[n-2] = "g") & (archive[n-1] = "z");
@@ -355,9 +355,9 @@ BEGIN
   Emit(zero, Block); Emit(zero, Block);
   IF gz THEN GZWriters.Close(zw); ok := zw.res = GZWriters.Ok END;
   IF ok THEN
-    Files.Register(g); out.String("tar: "); out.String(archive); out.String(", "); out.Int(packed, 0); out.String(" files, ");
-    out.Int(dirsPacked, 0); out.String(" directories"); out.Ln
-  ELSE out.String("tar: writing "); out.String(archive); out.String(" failed"); out.Ln
+    Files.Register(g); Out.String("tar: "); Out.String(archive); Out.String(", "); Out.Int(packed, 0); Out.String(" files, ");
+    Out.Int(dirsPacked, 0); Out.String(" directories"); Out.Ln
+  ELSE Out.String("tar: writing "); Out.String(archive); Out.String(" failed"); Out.Ln
   END
 END Pack;
 

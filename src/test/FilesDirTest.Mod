@@ -1,13 +1,13 @@
 MODULE FilesDirTest;  (** loksh FilesDirTest.Run: Files.CreateDirectory, RemoveDirectory, Exists; run it in a scratch directory *)
 
-IMPORT Files, out;
+IMPORT Files, Out;
 
 VAR fails, checks: LONGINT;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
 BEGIN
   INC(checks);
-  IF ~ok THEN INC(fails); out.String("FAIL "); out.String(what); out.Ln END
+  IF ~ok THEN INC(fails); Out.String("FAIL "); Out.String(what); Out.Ln END
 END Check;
 
 PROCEDURE Write(name, text: ARRAY OF CHAR);
@@ -36,7 +36,7 @@ BEGIN
   Files.CreateDirectory("zq_dir/empty", res); Files.RemoveDirectory("zq_dir/empty", FALSE, res);
   Check("RemoveDirectory of an empty one", (res = 0) & ~Files.Exists("zq_dir/empty", full, flags));
   Files.RemoveDirectory("zq_dir", TRUE, res); Check("RemoveDirectory force", (res = 0) & ~Files.Exists("zq_dir", full, flags));
-  out.String("FilesDirTest: "); out.Int(checks, 0); out.String(" checks, "); out.Int(fails, 0); out.String(" failed"); out.Ln
+  Out.String("FilesDirTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
 END FilesDirTest.
