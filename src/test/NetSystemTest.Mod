@@ -1,7 +1,7 @@
 MODULE NetSystemTest;  (** loksh NetSystemTest.Run: NetSystem (src/lib/native) over TCP and UDP on
   127.0.0.1 (ports 18490, 18491, 18492); NetSystemTest.Net: GetIP of example.com and an HTTP GET *)
 
-IMPORT NetSystem, Linux0, SYSTEM, Out := out;
+IMPORT NetSystem, Linux0, SYSTEM, Out;
 
 CONST Port = 18490; UPort1 = 18491; UPort2 = 18492;
 

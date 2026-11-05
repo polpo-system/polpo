@@ -10,7 +10,7 @@ MODULE shell;
     current directory and of the root) on every keypress: no startup cache, no
     rehash needed; it always reflects the latest compiled state. *)
 
-IMPORT nIn := stdin, nOut := out, nTermios := termios, Kernel, traps, Complete0,
+IMPORT nIn := stdin, nOut := Out, nTermios := termios, Kernel, traps, Complete0,
   Modules, Oberon0, oberon, nTexts := Texts, oocStrings;
 
 CONST

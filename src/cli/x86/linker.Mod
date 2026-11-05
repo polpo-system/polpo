@@ -55,7 +55,7 @@ MODULE linker;  (** non-portable *)  (** JdV / dVdW / pjm / prk *)
 *)
 
 IMPORT
-  Linux0, S := SYSTEM, Kernel, Files, Texts, (*Fonts,*) Oberon := Oberon0, Out := out;
+  Linux0, S := SYSTEM, Kernel, Files, Texts, (*Fonts,*) Oberon := Oberon0, Out;
 
 CONST
   Boundary = 32;  (* boundaries on which Oberon GC allocates blocks (=32) *)
@@ -2062,7 +2062,7 @@ BEGIN
       Out.String("Base address (int): "); Out.Int(imageBase, 0); Out.Ln;
       Texts.Scan (S)
     ELSIF (S.class = Texts.Name) & ParseHex(S.s, imageBase) THEN
-      Out.String("Base address (hex): "); Out.Hex(imageBase, 8); Out.String("H"); Out.Ln;
+      Out.String("Base address (hex):"); Out.Hex(imageBase); Out.String("H"); Out.Ln;
       Texts.Scan (S)
     ELSE
       Out.String("Error: Couldn't parse base address"); Out.Ln;
@@ -2076,7 +2076,7 @@ BEGIN
       Halt ("Image base must be a multiple of machine memory page size")
     END;
     base := imageBase+28+32;  (* for Oberon GC aligment & header *)
-    Out.String("Starting module load, base="); Out.Hex(base, 8); Out.String("H"); Out.Ln;
+    Out.String("Starting module load, base"); Out.Hex(base); Out.String("H"); Out.Ln;
     WHILE (S.class = Texts.Name) DO
       (* load Modules in Memory *)
       Out.String("Loading module: "); Out.String(S.s); Out.String(" ... ");
@@ -2086,7 +2086,7 @@ BEGIN
         Out.String("Error code: "); Out.Int(res, 0); Out.Ln;
         RETURN
       END;
-      Out.String("OK, new base="); Out.Hex(base, 8); Out.String("H"); Out.Ln;
+      Out.String("OK, new base"); Out.Hex(base); Out.String("H"); Out.Ln;
       Texts.Scan (S)
     END;
     Out.String("All modules loaded successfully"); Out.Ln;
