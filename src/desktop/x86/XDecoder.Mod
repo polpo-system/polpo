@@ -2179,7 +2179,7 @@ MODULE XDecoder;  (** non-portable *) (* NM 2.3.93 / 26.10.93 *)
                 Files.GetName(Files.Base(R), name);
                 Out.String(name);
                 Out.String(" - Duplicate FP");
-                Out.Hex(fp); Out.Ln;
+                Out.Char(" "); Out.Hex(fp, 8); Out.Ln;
                 i := len
               ELSE
                 INC(i)

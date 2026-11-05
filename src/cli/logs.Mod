@@ -5,22 +5,22 @@ MODULE logs;  (** the log of the console commands *)
 
     pos := Oberon0.Log.len; ... (the tool writes into the log) ...; logs.Show(pos)
 
-  In the desktop out writes into the log as well, where the messages are already: Show writes
+  In the desktop Out writes into the log as well, where the messages are already: Show writes
   nothing there. *)
 
-IMPORT Texts, Oberon := Oberon0, out;
+IMPORT Texts, Oberon := Oberon0, Out;
 
-(** Write what was appended to the log since pos with out, line ends as out.Ln; nothing in the
+(** Write what was appended to the log since pos with Out, line ends as Out.Ln; nothing in the
   desktop *)
 PROCEDURE Show*(pos: LONGINT);
 VAR R: Texts.Reader; ch: CHAR; end: LONGINT;
 BEGIN
   end := Oberon.Log.len;
-  IF (out.writer = NIL) & (end > pos) THEN
+  IF (Out.writer = NIL) & (end > pos) THEN
     Texts.OpenReader(R, Oberon.Log, pos);
     WHILE pos < end DO
       Texts.Read(R, ch); INC(pos);
-      IF ch = 0DX THEN out.Ln ELSE out.Char(ch) END
+      IF ch = 0DX THEN Out.Ln ELSE Out.Char(ch) END
     END
   END
 END Show;
@@ -42,8 +42,8 @@ BEGIN
       INC(col)
     END
   END;
-  out.String(name); out.Char(":"); out.Int(l, 0); out.Char(":"); out.Int(c, 0);
-  out.String(": pc "); out.Int(pc, 0); out.Ln
+  Out.String(name); Out.Char(":"); Out.Int(l, 0); Out.Char(":"); Out.Int(c, 0);
+  Out.String(": pc "); Out.Int(pc, 0); Out.Ln
 END ShowPC;
 
 END logs.

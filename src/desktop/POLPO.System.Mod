@@ -21,7 +21,7 @@ MODULE System; (** portable, except where noted *) (* pjm *)
 (* contributions: JG 3.10.90 / NW 26.11.91 / ARD 4. 2. 93 / nm / jm / ejz *)
 
 IMPORT SYSTEM, Linux0, Kernel, Files, FileDir, Modules, Objects, Display, Input, Fonts, 
-  Viewers, Reals, Texts, Oberon, Oberon0, TextFrames, out, Out;
+  Viewers, Reals, Texts, Oberon, Oberon0, TextFrames, Out;
 
 CONST
   CR = 0DX; LF = 0AX;
@@ -36,7 +36,7 @@ CONST
   
 VAR
   W: Texts.Writer;
-  OW: Texts.Writer;  (* polpo: the output of out, see LogOut *)
+  OW: Texts.Writer;  (* polpo: the output of Out, see LogOut *)
   outT: Texts.Text;  (* where it goes: Oberon.Log, or the viewer of Out.Open *)
   outTask: Oberon.Task;
   trapped: SHORTINT; 
@@ -1037,7 +1037,7 @@ END Reboot;
 
 PROCEDURE Cleanup;
 BEGIN
-  out.writer := NIL;
+  Out.writer := NIL;
     (* this message should really appear after shutting down all file systems, but writing it may need a file system! *)
   IF (*Kernel.shutdown*) 1 = 1 THEN
     Texts.SetColor(W, 1); Texts.WriteString(W, "System module unloaded. This makes Oberon instable. Please execute System.Quit !");
@@ -1103,7 +1103,7 @@ BEGIN
   END;
 END PasteClip;
 
-(* polpo: in the desktop the output of out (the console commands) goes into System.Log, a line at a
+(* polpo: in the desktop the output of Out (the console commands) goes into System.Log, a line at a
   time; FlushOut, a task, appends the rest of a line when the command has ended *)
 PROCEDURE LogOut(VAR s: ARRAY OF CHAR; len: LONGINT);
 VAR i: LONGINT; ln: BOOLEAN;
@@ -1123,7 +1123,7 @@ BEGIN
   IF OW.buf.len > 0 THEN Texts.Append(outT, OW.buf) END
 END FlushOut;
 
-(* polpo: Out.Open and Out.Close: the output of out (and Out) into a viewer of its own, and back *)
+(* polpo: Out.Open and Out.Close: the output of Out into a viewer of its own, and back *)
 PROCEDURE OpenOut;
 BEGIN
   IF OW.buf.len > 0 THEN Texts.Append(outT, OW.buf) END;
@@ -1145,7 +1145,7 @@ BEGIN
   IF ~init THEN
     init := TRUE;  (* avoid user call *)
     Display.ShowMain;  (* polpo: the screen of the desktop; programs in windows of their own do without *)
-    outT := Oberon.Log; out.writer := LogOut; Out.open := OpenOut; Out.close := CloseOut;
+    outT := Oberon.Log; Out.writer := LogOut; Out.open := OpenOut; Out.close := CloseOut;
     NEW(outTask); outTask.safe := TRUE; outTask.handle := FlushOut; Oberon.Install(outTask);
     Texts.OpenWriter(Wt);
     (* polpo: font scale from System.FontScale in Oberon.Text, unless OFONTSCALE is set *)

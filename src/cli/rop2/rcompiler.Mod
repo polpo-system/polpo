@@ -2,7 +2,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
 (* after RCompiler (ROP2), RC 6.3.89 / 17.6.93, p.m. 2017-06-12 *)
   IMPORT
     OPM := ROPM, OPT := ROPT, OPP := ROPP, Modules, Linux0, Root,
-    Texts, Oberon := Oberon0, Out := out, logs;
+    Texts, Oberon := Oberon0, Out, logs;
 
   CONST
     mipstag* = 0F9X; armv7tag* = 0FBX; riscvtag* = 0FDX; mipsbetag* = 0F8X; ppctag* = 0F7X;
@@ -82,7 +82,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
   END Module;
 
   (* polpo: the name of the file being compiled; in the desktop straight into the log, before what
-    the compiler writes there itself (out keeps a line until its end) *)
+    the compiler writes there itself (Out keeps a line until its end) *)
   PROCEDURE Head(s: ARRAY OF CHAR);
   BEGIN
     IF Out.writer = NIL THEN Out.String(s) ELSE Texts.WriteString(HW, s); Texts.Append(Oberon.Log, HW.buf) END

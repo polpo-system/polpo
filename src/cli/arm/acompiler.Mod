@@ -1,6 +1,6 @@
 MODULE acompiler;  (** command-line frontend of the ARM compiler *)
   IMPORT
-    OBS, OBP, OBC, OC := OBM, Texts, Oberon := Oberon0, Out := out, logs;
+    OBS, OBP, OBC, OC := OBM, Texts, Oberon := Oberon0, Out, logs;
 
   VAR HW: Texts.Writer;  (* see Head *)
     find: BOOLEAN; breakpc: LONGINT;  (* /f pc: find the source position of pc *)
@@ -12,7 +12,7 @@ MODULE acompiler;  (** command-line frontend of the ARM compiler *)
 
 
   (* polpo: the name of the file being compiled; in the desktop straight into the log, before what
-    the compiler writes there itself (out keeps a line until its end) *)
+    the compiler writes there itself (Out keeps a line until its end) *)
   PROCEDURE Head(s: ARRAY OF CHAR);
   BEGIN
     IF Out.writer = NIL THEN Out.String(s) ELSE Texts.WriteString(HW, s); Texts.Append(Oberon.Log, HW.buf) END
