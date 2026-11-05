@@ -536,7 +536,7 @@ matters: that is where compiler.Compile put Hello.Obj. (A program installed as a
 portia has its objects in polpo's obj/, and needs no cd.)
 
 Without the desktop, a few things of the desktop are missing: System.Log, where commands write
-their messages (output with out still goes to the terminal), the Trap viewer (a trap ends the
+their messages (output with Out still goes to the terminal), the Trap viewer (a trap ends the
 program and prints where it happened), and documents that the program opens with
 Desktops.OpenDoc land in the desktop that nobody sees: open them with DocWindows.OpenDoc instead.
 The fonts stay at their size; the desktop scales them (System.SetFontScale), so panels made for

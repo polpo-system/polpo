@@ -52,7 +52,7 @@ lookups are cheap, and an edited Oberon.Text is noticed without restarting anyth
 A console module (desktop modules import Texts and Oberon and call Oberon.OpenScanner instead):
 
     MODULE mytool;
-    IMPORT Texts, Oberon := Oberon0, out;
+    IMPORT Texts, Oberon := Oberon0, Out;
 
     PROCEDURE Show*;
       VAR S: Texts.Scanner; size: LONGINT;
@@ -60,16 +60,16 @@ A console module (desktop modules import Texts and Oberon and call Oberon.OpenSc
       size := 12;  (* the default *)
       Oberon.OpenScanner(S, "MyTool.Size");
       IF S.class = Texts.Int THEN size := S.i END;
-      out.String("size "); out.Int(size, 0); out.Ln;
+      Out.String("size "); Out.Int(size, 0); Out.Ln;
 
       Oberon.OpenScanner(S, "MyTool.Host");
-      IF S.class IN {Texts.Name, Texts.String} THEN out.String(S.s); out.Ln END;
+      IF S.class IN {Texts.Name, Texts.String} THEN Out.String(S.s); Out.Ln END;
 
       Oberon.OpenScanner(S, "MyTool.Colors");  (* a group: the scanner is on "red" *)
       WHILE (S.class = Texts.Name) & ~S.eot DO
-        out.String(S.s); out.Char(" "); Texts.Scan(S)
+        Out.String(S.s); Out.Char(" "); Texts.Scan(S)
       END;
-      out.Ln
+      Out.Ln
     END Show;
 
     END mytool.

@@ -110,29 +110,29 @@ commands of the module.)
 ## Modules and commands
 
 In the polpo directory there is a small module for you to play with, hello.Mod. Let us look at it
-without leaving the shell. Type Tex and press Tab: loksh completes it to Texts., and a second Tab
-shows the commands of the module texts:
+without leaving the shell. Type Texts. and press Tab: loksh shows the commands of the module Texts:
 
     > Texts.
-    DeleteLines Replace Show ShowPlain
+    DeleteLines New ReplaceIn Show ShowPlain
 
-The first two change files, as sed does on Unix; Show prints a file, as cat does. Type S and press
-Tab: there are two commands beginning with S, Show and ShowPlain, so loksh shows both and waits.
-Type how and a blank, then h and Tab, and loksh completes the file name:
+DeleteLines and ReplaceIn change files, as sed does on Unix; Show prints a file, as cat does (New
+is for the desktop: it makes the text of a new text gadget). Type S and press Tab: both commands
+beginning with S begin with Show, so loksh completes Show and lists the two. Type a blank, then h
+and Tab, and loksh completes the file name:
 
     > Texts.Show hello.Mod
     MODULE hello;
-    IMPORT out;
+    IMPORT Out;
 
     PROCEDURE world*;
     BEGIN
-      out.String("hey hey!"); out.Ln;
+      Out.String("hey hey!"); Out.Ln;
     END world;
 
     END hello.
 
 A module starts with MODULE and its name and ends with END, the name and a full stop. The IMPORT
-line says which other modules it uses: here only out, which writes to the terminal. Then come its
+line says which other modules it uses: here only Out, which writes to the terminal. Then come its
 declarations. world is a procedure, and the asterisk after its name exports it, so that it can be
 used from outside the module. An exported procedure without parameters is a command: you can call
 it as hello.world.
@@ -141,7 +141,7 @@ All keywords of Oberon are written in capital letters, and the language distingu
 lower case everywhere: hello, Hello and HELLO are three different names. Comments are written
 between (* and *), and they may be nested.
 
-(Remarks: console modules in polpo have lowercase names, as out, texts, fs and net; the modules of
+(Remarks: console modules in polpo have lowercase names, as fs, net and tar; the modules of
 the desktop have capitalised names, as Texts, Oberon and Display, the names ETH gave them. This is
 only a convention, but it tells you at once which world a module belongs to.)
 
@@ -151,16 +151,21 @@ First let us see what is in memory now:
 
     > system.ShowModules
     system  846     0
-    shell   31880   0
-    texts   7595    3
+    shell   24504   0
     ...
-    Kernel  18382   14
-    Linux0  1651    8
-    TOTAL   139937  21
+    Texts   7760    3
+    Fonts   9175    1
+    Display 33768   2
+    ...
+    Kernel  18826   18
+    Linux0  2535    10
+    TOTAL   227338  25
 
 These are the modules loaded so far, each with its size in bytes and the number of loaded modules
-that import it: the kernel, the files, the module loader, the shell and the few modules they need,
-and texts, which we just used. The compiler is a module too. Compile hello:
+that import it: the kernel, the files, the module loader, the shell and the modules they need.
+Texts is among them, the shell uses it, and it brings Display and Fonts along, although no window
+opens (building.md tells how to build a console without them). The compiler is a module too.
+Compile hello:
 
     > compiler.Compile hello.Mod
     hello.Mod compiling obj/x86/hello new symbol file   33
@@ -169,11 +174,11 @@ It wrote two files: obj/x86/hello.Obj, the code, and obj/x86/hello.Sym, the symb
 interface of the module, its exported names. Look into memory again:
 
     > system.ShowModules
-    compiler  6159  0
-    OPV     18942   1
-    OPC     51892   2
+    compiler  6497  0
+    OPV     18998   1
+    OPC     52616   2
     ...
-    TOTAL   494734  32
+    TOTAL   604915  39
 
 The compiler is there now, with the modules it is made of, OPM, OPS, OPT and the others, and it
 stays there: the next compilation starts at once. Now run the command:
@@ -212,7 +217,7 @@ something else:
 
     PROCEDURE there*;
     BEGIN
-      out.String("hello there!"); out.Ln;
+      Out.String("hello there!"); Out.Ln;
     END there;
 
 Ctrl+O writes the file (Enter confirms the name), Ctrl+X leaves the editor, and you are back at the prompt.
@@ -231,7 +236,7 @@ interface the symbol file holds now:
     DEFINITION hello;
 
         IMPORT
-            out, Linux0;
+            Out, Linux0, Texts0, Files, Kernel, Root, Objects0, Reals;
 
         PROCEDURE world*;
 
@@ -269,7 +274,7 @@ the first?
 ## Looking at an interface
 
 browser.ShowDef, which we used above, shows what any module offers, without its source:
-browser.ShowDef Texts, browser.ShowDef Files, browser.ShowDef out. This is how you learn your way
+browser.ShowDef Texts, browser.ShowDef Files, browser.ShowDef Out. This is how you learn your way
 around the system. Since everything is a module, everything can be looked at this way.
 
 ## Texts
@@ -307,11 +312,11 @@ them itself, from the text after the command name. A console command does it lik
       VAR A: Texts.Reader; name: ARRAY 64 OF CHAR;
     BEGIN
       Texts.OpenArgs(A);
-      IF Texts.Arg(A, name) THEN out.String("hello, "); out.String(name); out.Ln END
+      IF Texts.Arg(A, name) THEN Out.String("hello, "); Out.String(name); Out.Ln END
     END Hello;
 
 Texts.Arg gives the parameters one after the other and returns FALSE when there are no more.
-(hello would need IMPORT Texts, out; for this.) In the desktop, where the "rest of the line" is
+(hello would need IMPORT Texts, Out; for this.) In the desktop, where the "rest of the line" is
 the text after the command in a viewer, the same command works unchanged. programming.md tells the
 details.
 
@@ -378,10 +383,9 @@ the left button and type:
 
     END Hello2.
 
-This time we import Out, with a capital O. That is the module of the desktop, and it writes into
-the Log; out, the console module we used before, writes to the terminal. Click Edit.Store in the
-menu of the viewer, and the text is stored in the file Hello2.Mod. Now type in the Log, each
-command followed by Enter,
+It is the Out of hello: in the console it writes to the terminal, in the desktop into the Log.
+Click Edit.Store in the menu of the viewer, and the text is stored in the file Hello2.Mod. Now type
+in the Log, each command followed by Enter,
 
     Compiler.Compile Hello2.Mod
     Hello2.World
@@ -472,7 +476,7 @@ That is usually harmless, and System.Free unloads the module if you want it fres
 ## Where to go from here
 
 Read the sources. That is not a joke: Oberon was written to be read, and polpo has all of it, the
-compilers included. Open src/cli/out.Mod or src/cli/fs.Mod and see how small a useful module can be.
+compilers included. Open src/common/Out.Mod or src/cli/fs.Mod and see how small a useful module can be.
 Then read programming.md before you write commands of your own, and desktop.md for the desktop. For
 programs with panels, buttons and gadgets of your own, read gentle-gadgets.md.
 

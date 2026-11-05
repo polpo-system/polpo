@@ -69,6 +69,28 @@ The objects are the same as the cross compiled ones (on MIPS and PowerPC to the 
 binary too), except that the ARM, ARMv7 and RISC-V
 objects can differ in a few bytes of import keys.
 
+## A console without Display and Fonts
+
+The shell imports Texts, which brings Display and Fonts along, about a fifth of the modules a
+console session holds (programming.md, "Parameters and output", has the numbers for each port). A
+console that loads neither imports the older module texts instead:
+
+1. In src/cli/shell.Mod change `nTexts := Texts` to `nTexts := texts`; in src/cli/oberon.Mod and
+   in the system.Mod of the port (src/cli/x86, src/cli/arm or src/cli/rop2) change `Texts` in the
+   IMPORT clause to `Texts := texts`.
+2. Do the same in the console commands the system is to run: fs, tar, gzip, net, the compilers
+   and the others import Texts only for OpenArgs, Arg, readers, scanners and writers, which texts
+   has under the same names.
+3. Build the port as usual (make, make arm and so on). bin/<arch>/loksh does not change, since the
+   boot image holds neither module; the objects of the changed modules do.
+4. Check with system.ShowModules, after the commands you use, that Texts, Display and Fonts are
+   not among the loaded modules.
+
+The desktop needs Texts, and System.Init loads it whatever the console imports. To try this without
+changing the tree, copy the files into a directory with an obj/<arch>/ of its own, compile them
+there and start loksh from that directory: the loader takes the objects of the current directory
+first.
+
 ## After a rebuild
 
 - **Installed packages**: when the interface of a base module changed, packages compiled

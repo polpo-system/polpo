@@ -84,7 +84,8 @@ from the module's symbol file:
     DEFINITION fs;
 
         IMPORT
-            Linux0, Kernel, Files, Root, texts, objects, Objects0, Texts0, Reals, Oberon0, Modules, Modules0, out;
+            Linux0, Kernel, Files, Root, Texts, Objects, Modules, Modules0, Objects0, Display, Fonts, Reals, Texts0,
+            Oberon0, Out;
 
         PROCEDURE Cd*;
         PROCEDURE Cp*;
@@ -130,15 +131,16 @@ line or a ~ ends them. Arg returns FALSE when there are no more. In the desktop,
 args ~ written in a text calls the same command with the same parameters, so a console command
 works in both worlds.
 
-Write output with Out, the ETH interface: Out.String, Out.Int(x, width), Out.Hex(x) (a blank and 8
-digits), Out.Char, Out.Ln, and also Out.Real, Out.LongReal and their fixed-point forms Out.RealFix and
-Out.LongRealFix. It writes to the terminal, and in the desktop into System.Log a line at a time (the
-rest of a line comes when the command has ended); in the desktop Out.Open sends it to a viewer of its
-own instead, until Out.Close. Underneath, Out writes through out (lowercase): the desktop points
-out.writer, a procedure variable, at System.Log, and NIL (the default) means the terminal. A command
-imports Out, not out. out stays for the modules that read or set out.writer themselves (System,
-portia, logs, the ARM and ROP2 compilers) and for the files shared with voc, which import it as
-Out := out: voc's Out.Hex takes two arguments, as out.Hex does.
+Write output with Out: Out.String, Out.Int(x, width), Out.Char, Out.Ln, Out.Real, Out.LongReal and
+their fixed-point forms Out.RealFix and Out.LongRealFix, as in ETH Oberon, and Out.Hex(x, n), which
+writes at least n hexadecimal digits without a blank, as voc's Out does (Linux Oberon's Out.Hex(x)
+wrote a blank and 8 digits: write Out.Char(" "); Out.Hex(x, 8)). It writes to the terminal, and in
+the desktop into System.Log a line at a time (the rest of a line comes when the command has ended);
+in the desktop Out.Open sends it to a viewer of its own instead, until Out.Close. Out.writer, a
+procedure variable, is where the output goes: NIL, the default, is the terminal, and the desktop
+points it at System.Log; a command that must know whether it runs in the desktop can test it, as
+portia does. The same Out serves the modules polpo shares with voc. The older console module out
+writes through Out and is deprecated; it remains for packages that still import it.
 
 In reads the parameters of the command (In.Open, then In.Int, In.Name, In.String, In.Real, and
 In.Done to see whether they were there), in the console from the command line and in the desktop
@@ -149,15 +151,32 @@ in the console and in the desktop. Reading the terminal itself (stdin, as the sh
 writing to it directly work only in the console.
 
 Texts, imported above for OpenArgs and Arg, is also Show, ShowPlain, ReplaceIn, DeleteLines and the
-rest of the ETH text interface. It needs Display and Fonts, objects of about 55 KB on x86 and up to
-70 KB on ARM that console-base alone does not load. The package console contains Texts, so for
-a package that depends on console, and that is almost every package, Texts costs nothing further.
-A package that depends on console-base alone, to stay smaller, uses the older module texts in place
-of Texts, still with Out for output (Out is part of console-base): the same OpenArgs, Arg, Show,
-ShowPlain, Replace (texts' name for what Texts calls ReplaceIn, to leave the ETH Replace of a live
-text alone) and DeleteLines, without the parts tied to a live desktop viewer. Its recipe depends on
-console-base, not console. Nothing special is needed to build loksh: every port compiles both texts
-and Texts, the same way it compiles out and Out.
+rest of the ETH text interface, and it needs Display and Fonts, although nothing opens a window
+before the desktop starts. The older module texts has the same OpenArgs, Arg, Show, ShowPlain,
+Replace (its name for ReplaceIn: in Texts, Replace is the ETH procedure on a live text) and
+DeleteLines, and the same types, since both take them from Texts0; it lacks the parts tied to the
+viewers of the desktop, and needs neither Display nor Fonts.
+
+Every console session loads Texts, Display and Fonts, because the shell imports Texts, and so do
+most console commands. With the shell, oberon and system importing texts instead, a console
+session holds these bytes of modules after it has started (system.ShowModules, the line TOTAL;
+measured with polpo 1.5):
+
+    port            with Texts   with texts    less
+    x86                 227725       184138   43587
+    ARM                 287888       225124   62764
+    ARMv7               273528       219152   54376
+    RISC-V              251104       202464   48640
+    MIPS, MIPS BE       260624       209888   50736
+    PowerPC             270336       218280   52056
+
+That is a fifth less. The resident memory of the process changes little, because loksh takes its
+heap when it starts and loads the modules into it: 16692 kB against 16632 kB on x86. The saving
+lasts until a module that imports Texts is loaded, and fs, tar, net, the compilers and most other
+console commands import it; each of them uses only what texts has. building.md tells how to build
+a console that keeps to texts. A package meant for such a console imports texts and depends on
+console-base; for a package that depends on console, which is almost every package, Texts costs
+nothing further.
 
 When the parameters are missing or wrong, print a line usage: module.Command ... that says what the
 command does. Options are words that start with a slash, after the command or after its
@@ -235,7 +254,7 @@ comes back from a trap. Keep what is to be closed in global variables, because t
 command's local variables are gone by then.
 
     MODULE server;
-    IMPORT Sockets, Oberon := Oberon0, out;
+    IMPORT Sockets, Oberon := Oberon0, Out;
 
     VAR listener: Sockets.Socket;  (* global: still there when the command is stopped *)
 
