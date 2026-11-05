@@ -12,14 +12,14 @@ An Oberon module is one source file, from MODULE Name; to END Name.; what it exp
 with an asterisk. A command is an exported procedure without parameters. Here is a small one:
 
     MODULE greet;
-    IMPORT Texts, out;
+    IMPORT Texts, Out;
 
     PROCEDURE Hello*;
       VAR A: Texts.Reader; name: ARRAY 64 OF CHAR;
     BEGIN
       Texts.OpenArgs(A);
-      IF ~Texts.Arg(A, name) THEN out.String("usage: greet.Hello name"); out.Ln; RETURN END;
-      out.String("hello, "); out.String(name); out.Ln
+      IF ~Texts.Arg(A, name) THEN Out.String("usage: greet.Hello name"); Out.Ln; RETURN END;
+      Out.String("hello, "); Out.String(name); Out.Ln
     END Hello;
 
     END greet.
@@ -128,21 +128,36 @@ A command reads its parameters itself. Texts.OpenArgs(A) opens them, and Texts.A
 after the other: blanks separate them, quotes ("...") keep blanks inside one, and the end of the
 line or a ~ ends them. Arg returns FALSE when there are no more. In the desktop, Module.Command
 args ~ written in a text calls the same command with the same parameters, so a console command
-works in both worlds. out.String, out.Int(x, width), out.Hex, out.Char and out.Ln write to the
-terminal, and in the desktop into System.Log: the desktop sets out.writer, the procedure that gets
-the output (NIL is the terminal), and appends it to the log a line at a time; the rest of a line
-comes when the command has ended.
+works in both worlds.
 
-The modules of ETH Oberon for the same work behave the same way. Out (Out.String, Out.Int(x, n),
-Out.Real, Out.LongRealFix and the others) writes through out, so to the terminal or into System.Log;
-in the desktop Out.Open sends the output to a viewer of its own until Out.Close. In reads the
-parameters of the command (In.Open, then In.Int, In.Name, In.String, In.Real, and In.Done to see
-whether they were there), in the console from the command line and in the desktop from the text
-after the command; ^ instead of the parameters takes the latest selection, * the marked viewer,
-both only in the desktop. Strings (conversions between numbers, dates and strings) works in both
-too. A program that uses out or Out, Texts.Arg or In, and asks no questions runs unchanged in the
-console and in the desktop. Reading the terminal itself (stdin, as the shell does) and writing to
-it directly work only in the console.
+Write output with Out, the ETH interface: Out.String, Out.Int(x, width), Out.Hex, Out.Char, Out.Ln,
+and also Out.Real, Out.LongReal and the fixed-point and hexadecimal forms of both. It writes to the
+terminal, and in the desktop into System.Log a line at a time (the rest of a line comes when the
+command has ended); in the desktop Out.Open sends it to a viewer of its own instead, until
+Out.Close. Underneath, Out writes through out (lowercase): the desktop points out.writer, a
+procedure variable, at System.Log, and NIL (the default) means the terminal. A command imports Out,
+not out; out stays for the few modules that read or set out.writer themselves (System, portia,
+logs) or that must import nothing but Linux0 and SYSTEM (the compilers, the linkers, the shell).
+
+In reads the parameters of the command (In.Open, then In.Int, In.Name, In.String, In.Real, and
+In.Done to see whether they were there), in the console from the command line and in the desktop
+from the text after the command; ^ instead of the parameters takes the latest selection, * the
+marked viewer, both only in the desktop. Strings (conversions between numbers, dates and strings)
+works in both too. A program that uses Out, Texts.Arg or In, and asks no questions runs unchanged
+in the console and in the desktop. Reading the terminal itself (stdin, as the shell does) and
+writing to it directly work only in the console.
+
+Texts, imported above for OpenArgs and Arg, is also Show, ShowPlain, ReplaceIn, DeleteLines and the
+rest of the ETH text interface; it needs Display and Fonts, some 30 to 40 KB of loadable code more
+than console-base alone has. Every package that depends on console (not console-base) already has
+them for other reasons, so using Texts there costs nothing further, and that is almost every
+package. A package that depends on console-base alone, to stay smaller, uses the older module texts
+in place of Texts, still with Out for output (Out costs nothing extra either way): the same
+OpenArgs, Arg, Show, ShowPlain, Replace (texts' name for what Texts calls ReplaceIn, to leave the
+ETH Replace of a live text alone) and DeleteLines, without the parts tied to a live desktop viewer.
+Depend on console-base, not console, in the recipe;
+nothing special is needed to build loksh, since every port compiles both texts and Texts regardless
+of which packages use which, the same way it compiles out and Out.
 
 When the parameters are missing or wrong, print a line usage: module.Command ... that says what the
 command does. Options are words that start with a slash, after the command or after its
