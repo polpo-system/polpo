@@ -1,7 +1,7 @@
 MODULE TLSTestIP;  (* IP addresses as host names: TLSX509Names.ParseIP (IPv4, IPv6 with "::" and an
   IPv4 tail, malformed ones refused) and iPAddress entries of subjectAltName *)
 
-IMPORT TLSBytes, TLSX509Names, Out := out;
+IMPORT TLSBytes, TLSX509Names, Out;
 
 VAR
   fails, checks: LONGINT;

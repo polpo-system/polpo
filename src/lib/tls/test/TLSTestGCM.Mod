@@ -2,7 +2,7 @@ MODULE TLSTestGCM;  (* AES-128 (FIPS 197) and AES-128-GCM (the GCM specification
   generated cases compared by the SHA-256 of ciphertext and tag); decryption restores the plain
   text and rejects a changed tag. Values in short hex pieces for the ARM compiler of polpo. *)
 
-IMPORT TLSBytes, TLSSHA256, TLSAESGCM, Out := out;
+IMPORT TLSBytes, TLSSHA256, TLSAESGCM, Out;
 
 VAR
   fails, checks: LONGINT;

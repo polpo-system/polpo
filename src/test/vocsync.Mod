@@ -9,15 +9,14 @@ MODULE vocsync;  (** modules shared with voc: copies with the imports of voc or 
        src/lib/http/http.Mod, hexIntStr.Mod -> http
      src/lib/native/NetSystem.Mod -> Internet (src/native)
      Only the import lines differ (voc imports Linux0 := unixNet, the Linux0 calls of the voc
-     Internet library through the C library, and Out for Out := out); files without them are
-     copied unchanged.
+     Internet library through the C library); files without them are copied unchanged.
    vocsync.From voc-file ... polpo-dir
      modules kept in a voc repository (the tls modules of github.com/norayr/tls), copied into
-     polpo-dir with the polpo names in their IMPORT clause: Out := out, Strings := oocStrings,
-     Linux0 (for Linux0 := unixNet).
+     polpo-dir with the polpo names in their IMPORT clause: Strings := oocStrings, Linux0 (for
+     Linux0 := unixNet). Out is the same module in both.
      Everything else is the same file. *)
 
-IMPORT Files, Texts, out;
+IMPORT Files, Texts, Out;
 
 CONST NoSwaps = 4;
 
@@ -34,7 +33,7 @@ PROCEDURE Read(VAR name: ARRAY OF CHAR; VAR buf: Buf): BOOLEAN;
 VAR f: Files.File; R: Files.Rider; n, i: LONGINT;
 BEGIN
   f := Files.Old(name);
-  IF f = NIL THEN out.String("vocsync: no "); out.String(name); out.Ln; RETURN FALSE END;
+  IF f = NIL THEN Out.String("vocsync: no "); Out.String(name); Out.Ln; RETURN FALSE END;
   n := Files.Length(f); NEW(buf, n + 1); Files.Set(R, f, 0);
   i := 0; WHILE i < n DO Files.Read(R, buf[i]); INC(i) END; buf[n] := 0X;
   RETURN TRUE
@@ -78,8 +77,8 @@ BEGIN
   j := 0; WHILE path[k] # 0X DO name[j] := path[k]; INC(k); INC(j) END; name[j] := 0X
 END Base;
 
-(* the IMPORT clause of buf with the names of polpo (toPolpo: Out := out, Strings := oocStrings, Linux0
-   for Linux0 := unixNet) or of voc (Linux0 := unixNet for Linux0, Out for Out := out) *)
+(* the IMPORT clause of buf with the names of polpo (toPolpo: Strings := oocStrings, Linux0 for
+   Linux0 := unixNet) or of voc (Linux0 := unixNet for Linux0) *)
 PROCEDURE Convert(VAR buf: Buf; toPolpo: BOOLEAN): BOOLEAN;
 VAR imp: ARRAY 8 OF CHAR; beg, end, i, j, k: LONGINT; clause, item, res: ARRAY 2048 OF CHAR; changed: BOOLEAN;
 
@@ -90,9 +89,8 @@ VAR imp: ARRAY 8 OF CHAR; beg, end, i, j, k: LONGINT; clause, item, res: ARRAY 2
     b := Len(item); WHILE (b > a) & (item[b-1] <= " ") DO DEC(b) END;
     m := 0; WHILE (a + m < b) & (m < LEN(t) - 1) DO t[m] := item[a+m]; INC(m) END; t[m] := 0X;
     alias := "";
-    IF toPolpo & (t = "Out") THEN alias := "out" ELSIF toPolpo & (t = "Strings") THEN alias := "oocStrings"
+    IF toPolpo & (t = "Strings") THEN alias := "oocStrings"
     ELSIF ~toPolpo & (t = "Linux0") THEN alias := "unixNet"
-    ELSIF ~toPolpo & (t = "Out := out") THEN t := "Out"; alias := "-"
     ELSIF toPolpo & (t = "Linux0 := unixNet") THEN t := "Linux0"; alias := "-"
     END;
     IF alias = "-" THEN  (* the blanks before, the name alone, the blanks after *)
@@ -132,7 +130,7 @@ PROCEDURE To*;
 VAR A: Texts.Reader; src, dst, name: ARRAY 256 OF CHAR; buf: Buf; i, p, n: LONGINT;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, src) OR ~Texts.Arg(A, dst) THEN out.String("usage: vocsync.To polpo-file voc-file"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, src) OR ~Texts.Arg(A, dst) THEN Out.String("usage: vocsync.To polpo-file voc-file"); Out.Ln; RETURN END;
   IF ~Read(src, buf) THEN RETURN END;
   n := 0; i := 0;
   WHILE i < NoSwaps DO
@@ -142,7 +140,7 @@ BEGIN
   END;
   IF Convert(buf, FALSE) THEN INC(n) END;
   Write(dst, buf^); Base(src, name);
-  out.String(name); IF n > 0 THEN out.String(" imports changed") ELSE out.String(" unchanged") END; out.Ln
+  Out.String(name); IF n > 0 THEN Out.String(" imports changed") ELSE Out.String(" unchanged") END; Out.Ln
 END To;
 
 PROCEDURE From*;
@@ -150,12 +148,12 @@ VAR A: Texts.Reader; args: ARRAY 64 OF ARRAY 256 OF CHAR; n, i: INTEGER; dst, na
 BEGIN
   Texts.OpenArgs(A); n := 0;
   WHILE (n < LEN(args)) & Texts.Arg(A, args[n]) DO INC(n) END;
-  IF n < 2 THEN out.String("usage: vocsync.From voc-file ... polpo-dir"); out.Ln; RETURN END;
+  IF n < 2 THEN Out.String("usage: vocsync.From voc-file ... polpo-dir"); Out.Ln; RETURN END;
   DEC(n); i := 0;  (* args[n]: the directory *)
   WHILE i < n DO
     IF Read(args[i], buf) THEN
-      Base(args[i], name); out.String(name);
-      IF Convert(buf, TRUE) THEN out.String(" imports changed") ELSE out.String(" same") END; out.Ln;
+      Base(args[i], name); Out.String(name);
+      IF Convert(buf, TRUE) THEN Out.String(" imports changed") ELSE Out.String(" same") END; Out.Ln;
       COPY(args[n], dst); k := Len(dst); IF (k > 0) & (dst[k-1] # "/") THEN dst[k] := "/"; INC(k) END;
       m := 0; WHILE name[m] # 0X DO dst[k] := name[m]; INC(k); INC(m) END; dst[k] := 0X;
       Write(dst, buf^)
@@ -165,12 +163,12 @@ BEGIN
 END From;
 
 BEGIN
-  polpo[0] := "IMPORT S := strTypes, Strings := oocStrings, Out := out;  (* voc: Strings := oocStrings, Out *)";
-  voc[0] := "IMPORT S := strTypes, Strings := oocStrings, Out;  (* polpo: Strings := oocStrings, Out := out *)";
-  polpo[1] := "IMPORT Out := out, Strings := oocStrings;  (* voc: Out, Strings *)";
-  voc[1] := "IMPORT Out, Strings;  (* polpo: Out := out, Strings := oocStrings *)";
-  polpo[2] := "IMPORT IntStr, Strings := oocStrings, Files, Out := out,  (* voc: IntStr := oocIntStr, Strings, Out *)";
-  voc[2] := "IMPORT IntStr := oocIntStr, Strings, Files, Out,  (* polpo: IntStr, Strings := oocStrings, Out := out *)";
+  polpo[0] := "IMPORT S := strTypes, Strings := oocStrings, Out;  (* voc: Strings := oocStrings, Out *)";
+  voc[0] := "IMPORT S := strTypes, Strings := oocStrings, Out;  (* polpo: Strings := oocStrings, Out *)";
+  polpo[1] := "IMPORT Out, Strings := oocStrings;  (* voc: Out, Strings *)";
+  voc[1] := "IMPORT Out, Strings;  (* polpo: Out, Strings := oocStrings *)";
+  polpo[2] := "IMPORT IntStr, Strings := oocStrings, Files, Out,  (* voc: IntStr := oocIntStr, Strings, Out *)";
+  voc[2] := "IMPORT IntStr := oocIntStr, Strings, Files, Out,  (* polpo: IntStr, Strings := oocStrings, Out *)";
   polpo[3] := "IMPORT Conv := ConvTypes;  (* voc: Conv := oocConvTypes *)";
   voc[3] := "IMPORT Conv := oocConvTypes;  (* polpo: Conv := ConvTypes *)"
 END vocsync.

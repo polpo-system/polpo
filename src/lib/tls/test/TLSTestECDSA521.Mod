@@ -3,7 +3,7 @@ MODULE TLSTestECDSA521;  (* ECDSA on secp521r1 against the Python cryptography p
   signatures verify; a changed hash, r and s swapped, r = 0, r too big and a public key off the curve
   do not *)
 
-IMPORT TLSBytes, TLSECDSA, Out := out;
+IMPORT TLSBytes, TLSECDSA, Out;
 
 VAR
   fails, checks: LONGINT;

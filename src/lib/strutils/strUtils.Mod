@@ -1,5 +1,5 @@
 MODULE strUtils;
-IMPORT S := strTypes, Strings := oocStrings, Out := out;  (* voc: Strings := oocStrings, Out *)
+IMPORT S := strTypes, Strings := oocStrings, Out;  (* voc: Strings := oocStrings, Out *)
 
 CONST
   CR* = 0DX;

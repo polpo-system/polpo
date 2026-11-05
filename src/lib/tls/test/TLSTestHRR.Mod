@@ -1,7 +1,7 @@
 MODULE TLSTestHRR;  (* HelloRetryRequest (RFC 8446 4.1.4): a valid one with a group and a cookie,
   the second ClientHello echoing the cookie, and the requests we refuse *)
 
-IMPORT TLSBytes, TLS13Handshake, Out := out;
+IMPORT TLSBytes, TLS13Handshake, Out;
 
 CONST X25519 = TLS13Handshake.GroupX25519; P256 = TLS13Handshake.GroupP256;
 

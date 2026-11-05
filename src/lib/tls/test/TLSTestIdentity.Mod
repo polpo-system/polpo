@@ -3,7 +3,7 @@ MODULE TLSTestIdentity;  (* identities: certificates with an RSA key (PKCS #8 an
   a changed content does not, and a key with the certificate of another is refused. The files are
   in the directory of the environment variable TLS_TEST_CERTS (default test/certs). *)
 
-IMPORT Kernel, TLSBytes, TLSIdentity, TLSX509, TLSSig, Out := out;
+IMPORT Kernel, TLSBytes, TLSIdentity, TLSX509, TLSSig, Out;
 
 VAR
   fails, checks: LONGINT;

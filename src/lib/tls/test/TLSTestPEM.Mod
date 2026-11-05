@@ -1,5 +1,5 @@
 MODULE TLSTestPEM;
-IMPORT Out := out, TLSBytes, TLSPEM;
+IMPORT Out, TLSBytes, TLSPEM;
 
 VAR
   pem: ARRAY 512 OF CHAR;

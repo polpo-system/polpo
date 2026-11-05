@@ -1,5 +1,5 @@
 MODULE TLSTestTLS13Certs;
-IMPORT Out := out, TLSBytes, TLS13Certs;
+IMPORT Out, TLSBytes, TLS13Certs;
 
 VAR
   msg, der: TLSBytes.Buffer;

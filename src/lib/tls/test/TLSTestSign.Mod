@@ -1,7 +1,7 @@
 MODULE TLSTestSign;  (* ECDSA signatures on secp256r1: the vectors of RFC 6979 A.2.5 (SHA-256, messages
   "sample" and "test"), each signature verifies, survives DER and back, and a changed hash does not verify *)
 
-IMPORT TLSBytes, TLSECDSA, TLSSHA256, Out := out;
+IMPORT TLSBytes, TLSECDSA, TLSSHA256, Out;
 
 VAR
   fails, checks: LONGINT;

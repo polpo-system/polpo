@@ -1,7 +1,7 @@
 MODULE TLSTestSHA512;  (* SHA-512 and SHA-384 against Python (FIPS 180 examples, block boundaries);
   values in short hex pieces *)
 
-IMPORT TLSBytes, TLSSHA512, Out := out;
+IMPORT TLSBytes, TLSSHA512, Out;
 
 VAR
   fails, checks: LONGINT;

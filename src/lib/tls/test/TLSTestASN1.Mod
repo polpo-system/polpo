@@ -1,5 +1,5 @@
 MODULE TLSTestASN1;
-IMPORT Out := out, TLSBytes, TLSASN1;
+IMPORT Out, TLSBytes, TLSASN1;
 
 VAR
   der: TLSBytes.Buffer;

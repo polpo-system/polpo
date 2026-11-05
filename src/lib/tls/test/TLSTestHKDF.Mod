@@ -1,7 +1,7 @@
 MODULE TLSTestHKDF;  (* HKDF (RFC 5869) test vectors;
   the values come in short hex pieces (the ARM compiler of polpo takes only short strings, and not many) *)
 
-IMPORT TLSBytes, TLSSHA256, TLSHKDF, Out := out;
+IMPORT TLSBytes, TLSSHA256, TLSHKDF, Out;
 
 VAR
   fails, checks: LONGINT;

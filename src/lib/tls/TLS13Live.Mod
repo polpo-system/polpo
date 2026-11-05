@@ -1,5 +1,5 @@
 MODULE TLS13Live;
-IMPORT SYSTEM, Linux0, Out := out,
+IMPORT SYSTEM, Linux0, Out,
        Internet, TLSBytes, TLS13Random, TLSX25519,
        TLS13Handshake, TLS13Keys, TLS13Records,
        TLS13EncHandshake, TLS13ClientFinished, TLS13Application,

@@ -1,7 +1,7 @@
 MODULE TLSTestSHA256;  (* SHA-256 (FIPS 180) and HMAC (RFC 4231) test vectors;
   the values come in short hex pieces (the ARM compiler of polpo takes only short strings, and not many) *)
 
-IMPORT TLSBytes, TLSSHA256, Out := out;
+IMPORT TLSBytes, TLSSHA256, Out;
 
 VAR
   fails, checks: LONGINT;

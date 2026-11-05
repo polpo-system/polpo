@@ -1,7 +1,7 @@
 MODULE TLSTestECDSA384;  (* ECDSA on secp384r1 against OpenSSL: valid signatures verify; a changed hash,
   r and s swapped, r = 0, r = n and a public key off the curve do not *)
 
-IMPORT TLSBytes, TLSECDSA, Out := out;
+IMPORT TLSBytes, TLSECDSA, Out;
 
 VAR
   fails, checks: LONGINT;

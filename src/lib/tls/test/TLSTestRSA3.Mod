@@ -1,7 +1,7 @@
 MODULE TLSTestRSA3;  (* TLSRSA against OpenSSL, PKCS#1 v1.5 and PSS, 3072 bits: valid signatures verify; a changed hash, a
   changed signature, another hash algorithm, the other scheme, zero and n do not *)
 
-IMPORT TLSBytes, TLSRSA, Out := out;
+IMPORT TLSBytes, TLSRSA, Out;
 
 VAR
   fails, checks: LONGINT;

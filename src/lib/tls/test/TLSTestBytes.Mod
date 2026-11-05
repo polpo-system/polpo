@@ -1,6 +1,6 @@
 MODULE TLSTestBytes;  (* TLSBytes against values computed elsewhere (Python) *)
 
-IMPORT TLSBytes, Out := out;
+IMPORT TLSBytes, Out;
 
 VAR fails, checks: LONGINT;
 

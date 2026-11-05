@@ -1,5 +1,5 @@
 MODULE TLSTestRecords;
-IMPORT Out := out, TLSBytes, TLS13Records;
+IMPORT Out, TLSBytes, TLS13Records;
 
 PROCEDURE HexDigit(n: LONGINT): CHAR;
 BEGIN

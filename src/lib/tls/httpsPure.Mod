@@ -1,6 +1,6 @@
 MODULE httpsPure;
 
-IMPORT Out := out, http, strTypes, strUtils, TLS13Live;
+IMPORT Out, http, strTypes, strUtils, TLS13Live;
 
 TYPE
    PureTLSSocket = POINTER TO PureTLSSocketDesc;

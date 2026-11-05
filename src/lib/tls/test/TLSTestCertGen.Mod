@@ -3,7 +3,7 @@ MODULE TLSTestCertGen;  (* self-signed certificates: an identity and a server ce
   with the certificate; the subject has the name and the mail address; the server certificate is for
   its host name *)
 
-IMPORT TLSBytes, TLSCertGen, TLSPEM, TLSIdentity, TLSX509, TLSSig, TLSX509Names, Out := out;
+IMPORT TLSBytes, TLSCertGen, TLSPEM, TLSIdentity, TLSX509, TLSSig, TLSX509Names, Out;
 
 VAR
   fails, checks: LONGINT;

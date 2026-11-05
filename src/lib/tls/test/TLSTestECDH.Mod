@@ -2,7 +2,7 @@ MODULE TLSTestECDH;  (* ECDH on secp256r1 and secp384r1 against the Python crypt
   the public key and the shared secret; points off the curve, beyond p or compressed, and the
   scalars 0 and n are refused; the scalars 1 and n - 1 give G and -G *)
 
-IMPORT TLSBytes, TLSECDSA, Out := out;
+IMPORT TLSBytes, TLSECDSA, Out;
 
 VAR
   fails, checks: LONGINT;

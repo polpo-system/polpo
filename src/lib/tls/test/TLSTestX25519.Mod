@@ -2,7 +2,7 @@ MODULE TLSTestX25519;  (* X25519: RFC 7748 (5.2, the first iteration, 6.1), gene
   the top bit of u set and with u at or above p; values from the RFC 7748 algorithm in Python,
   checked against OpenSSL where it answers (it refuses all-zero results); in short hex pieces *)
 
-IMPORT TLSBytes, TLSX25519, Out := out;
+IMPORT TLSBytes, TLSX25519, Out;
 
 VAR
   fails, checks: LONGINT;

@@ -1,7 +1,7 @@
 MODULE TLSTestChain;  (* path validation with chains made by tools/gentestcerts.py: the directory
   is the environment variable TLS_TEST_CERTS (default test/certs); now is 2026-06-01 *)
 
-IMPORT Linux0, Kernel, SYSTEM, TLSBytes, TLSCABundle, TLSX509Validity, TLSX509Chain, TLSX509Names, Out := out;
+IMPORT Linux0, Kernel, SYSTEM, TLSBytes, TLSCABundle, TLSX509Validity, TLSX509Chain, TLSX509Names, Out;
 
 TYPE
   BundlePtr = POINTER TO TLSCABundle.Bundle;

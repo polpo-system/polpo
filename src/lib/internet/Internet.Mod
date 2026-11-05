@@ -1,9 +1,9 @@
 MODULE Internet; (*noch 14.4.2017 / 14.4.2017*)
 (** TCP connections by host name and port, on a file descriptor: the interface of the voc
    Internet module (github.com/norayr/Internet), over polpo's Sockets and DNS.
-   The same file serves voc and polpo; only the import of Out differs (polpo: Out := out). *)
+   The same file serves voc and polpo; only the import of Linux0 differs (voc: Linux0 := unixNet). *)
 
-IMPORT Sockets, DNS, Linux0, Out := out, SYSTEM;
+IMPORT Sockets, DNS, Linux0, Out, SYSTEM;
 
 CONST
   MSGNOSIGNAL = 4000H;  (* no SIGPIPE when the other side has closed *)

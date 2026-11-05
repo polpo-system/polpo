@@ -2,7 +2,7 @@ MODULE TLSTestNumBig;  (* moduli of 521, 1024 and 2048 bits: TLSNum against Pyth
   products, powers, inverses modulo primes, reduction of wider numbers; results of moduli over 64
   bytes compared by their SHA-256 *)
 
-IMPORT TLSBytes, TLSNum, TLSSHA256, Out := out;
+IMPORT TLSBytes, TLSNum, TLSSHA256, Out;
 
 VAR
   fails, checks: LONGINT;

@@ -1,5 +1,5 @@
 MODULE TLS13EncHandshake;
-IMPORT Out := out, TLSBytes, TLS13Records, TLS13Keys, TLS13Finished, TLS13Certs, TLSX509, TLSX509Names, TLSSig;
+IMPORT Out, TLSBytes, TLS13Records, TLS13Keys, TLS13Finished, TLS13Certs, TLSX509, TLSX509Names, TLSSig;
 
 CONST
   EncryptedExtensions* = 8;

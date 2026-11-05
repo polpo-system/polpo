@@ -1,5 +1,5 @@
 MODULE TLSTestApplication;
-IMPORT Out := out, TLSBytes, TLS13Keys, TLS13Finished, TLS13EncHandshake, TLS13ClientFinished, TLS13Certs, TLSX509, TLSASN1, TLSPEM, TLSBase64,
+IMPORT Out, TLSBytes, TLS13Keys, TLS13Finished, TLS13EncHandshake, TLS13ClientFinished, TLS13Certs, TLSX509, TLSASN1, TLSPEM, TLSBase64,
        TLS13Application;
 
 PROCEDURE HexDigit(n: LONGINT): CHAR;

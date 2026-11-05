@@ -1,5 +1,5 @@
 MODULE TLSTestX509Names;
-IMPORT Out := out, TLSBytes, TLSX509, TLSX509Names;
+IMPORT Out, TLSBytes, TLSX509, TLSX509Names;
 
 VAR cert, san: TLSBytes.Buffer;
     info: TLSX509.CertInfo;

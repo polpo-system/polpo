@@ -1,7 +1,7 @@
 MODULE TLSTestServer;  (* the private keys of a server: a P-256 key as SEC 1 and as PKCS #8 DER gives the
   same scalar, whose public point is the one in the key; a P-384 key and broken DER are refused *)
 
-IMPORT TLSBytes, TLSIdentity, Out := out;
+IMPORT TLSBytes, TLSIdentity, Out;
 
 VAR
   fails, checks: LONGINT;

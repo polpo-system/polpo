@@ -1,5 +1,5 @@
 MODULE TLSTestHandshake;
-IMPORT Out := out, TLSBytes, TLS13Handshake;
+IMPORT Out, TLSBytes, TLS13Handshake;
 
 PROCEDURE PrintHex(VAR b: TLSBytes.Buffer);
 VAR i: LONGINT;
