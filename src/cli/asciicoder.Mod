@@ -8,7 +8,7 @@ MODULE asciicoder;  (** AsciiCoder in the console: files as plain text, for mail
    The code is the one of AsciiCoder of ETH Oberon (AsciiCoder0): 64 characters from "0", lines
    of 76 characters. *)
 
-IMPORT Files, Texts0, Texts, AsciiCoder0, out;
+IMPORT Files, Texts0, Texts, AsciiCoder0, Out;
 
 CONST MaxFiles = 64;
 
@@ -42,7 +42,7 @@ BEGIN
     ELSIF n < MaxFiles THEN COPY(arg, names[n]); INC(n)
     END
   END;
-  IF (dest = "") OR (n = 0) THEN out.String("usage: asciicoder.Code [%] out.txt file ..."); out.Ln; RETURN END;
+  IF (dest = "") OR (n = 0) THEN Out.String("usage: asciicoder.Code [%] out.txt file ..."); Out.Ln; RETURN END;
   NEW(t); Texts0.Open(t, ""); Texts0.OpenWriter(W);
   Texts0.WriteString(W, "AsciiCoder.DecodeFiles "); IF compress THEN Texts0.WriteString(W, "% ") END;
   i := 0; WHILE i < n DO Texts0.WriteString(W, names[i]); Texts0.Write(W, " "); INC(i) END;
@@ -50,13 +50,13 @@ BEGIN
   i := 0;
   WHILE i < n DO
     f := Files.Old(names[i]);
-    IF f = NIL THEN out.String("asciicoder: no "); out.String(names[i]); out.String(", stopped"); out.Ln; RETURN END;
+    IF f = NIL THEN Out.String("asciicoder: no "); Out.String(names[i]); Out.String(", stopped"); Out.Ln; RETURN END;
     IF compress THEN f1 := Files.New(""); AsciiCoder0.Compress(f, f1); f := f1 END;
     AsciiCoder0.Code(f, t); INC(i)
   END;
   Store(t, dest);
-  out.String("asciicoder: "); out.Int(n, 0); out.String(" files in "); out.String(dest); out.String(", ");
-  out.Int(t.len, 0); out.String(" characters"); out.Ln
+  Out.String("asciicoder: "); Out.Int(n, 0); Out.String(" files in "); Out.String(dest); Out.String(", ");
+  Out.Int(t.len, 0); Out.String(" characters"); Out.Ln
 END Code;
 
 PROCEDURE Decode*;
@@ -64,16 +64,16 @@ VAR A: Texts.Reader; src, dir, path: Name; t: Texts0.Text; S: Texts0.Scanner; na
   n, i: INTEGER; compress, ok: BOOLEAN; pos: LONGINT; f, f1: Files.File;
 BEGIN
   Texts.OpenArgs(A);
-  IF ~Texts.Arg(A, src) THEN out.String("usage: asciicoder.Decode in.txt [dir]"); out.Ln; RETURN END;
+  IF ~Texts.Arg(A, src) THEN Out.String("usage: asciicoder.Decode in.txt [dir]"); Out.Ln; RETURN END;
   IF ~Texts.Arg(A, dir) THEN dir := "" ELSIF dir[0] # 0X THEN Append(dir, "/") END;
-  IF Files.Old(src) = NIL THEN out.String("asciicoder: no "); out.String(src); out.Ln; RETURN END;
+  IF Files.Old(src) = NIL THEN Out.String("asciicoder: no "); Out.String(src); Out.Ln; RETURN END;
   NEW(t); Texts0.Open(t, src); Texts0.OpenScanner(S, t, 0); Texts0.Scan(S);
   WHILE ~S.eot & ~((S.class = Texts0.Name) & (S.s = "AsciiCoder.DecodeFiles")) DO Texts0.Scan(S) END;
-  IF S.eot THEN out.String("asciicoder: no AsciiCoder.DecodeFiles in "); out.String(src); out.Ln; RETURN END;
+  IF S.eot THEN Out.String("asciicoder: no AsciiCoder.DecodeFiles in "); Out.String(src); Out.Ln; RETURN END;
   Texts0.Scan(S); compress := (S.class = Texts0.Char) & (S.c = "%"); IF compress THEN Texts0.Scan(S) END;
   n := 0;
   WHILE ((S.class = Texts0.Name) OR (S.class = Texts0.String)) & (n < MaxFiles) DO COPY(S.s, names[n]); INC(n); Texts0.Scan(S) END;
-  IF ~((S.class = Texts0.Char) & (S.c = "~")) THEN out.String("asciicoder: the list of files does not end with ~"); out.Ln; RETURN END;
+  IF ~((S.class = Texts0.Char) & (S.c = "~")) THEN Out.String("asciicoder: the list of files does not end with ~"); Out.Ln; RETURN END;
   pos := Texts0.Pos(S); ok := TRUE; i := 0;
   WHILE ok & (i < n) DO
     COPY(dir, path); Append(path, names[i]);
@@ -81,8 +81,8 @@ BEGIN
     AsciiCoder0.Decode(t, pos, f, ok);
     IF ok THEN
       IF compress THEN f1 := Files.New(path); AsciiCoder0.Expand(f, f1); f := f1 END;
-      Files.Register(f); out.String("asciicoder: "); out.String(path); out.String(", "); out.Int(Files.Length(f), 0); out.String(" bytes"); out.Ln
-    ELSE out.String("asciicoder: the code of "); out.String(names[i]); out.String(" is damaged"); out.Ln
+      Files.Register(f); Out.String("asciicoder: "); Out.String(path); Out.String(", "); Out.Int(Files.Length(f), 0); Out.String(" bytes"); Out.Ln
+    ELSE Out.String("asciicoder: the code of "); Out.String(names[i]); Out.String(" is damaged"); Out.Ln
     END;
     INC(i)
   END
