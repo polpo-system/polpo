@@ -24,7 +24,7 @@ BEGIN n := 0; WHILE dig[n] # 0X DO INC(n) END;
   r := DecReal.Long(dig, n, FALSE, e, x); Words(x, h, l); INC(checks);
   IF (h # hi) OR (l # lo) OR (r # res) THEN INC(fails);
     Out.String("FAIL Long "); Out.String(dig); Out.String("E"); Out.Int(e, 0); Out.String(": ");
-    Out.Hex(h, 8); Out.Hex(l, 8); Out.Int(r, 2); Out.String(", expected "); Out.Hex(hi, 8); Out.Hex(lo, 8); Out.Int(res, 2); Out.Ln
+    Out.HexDigits(h, 8); Out.HexDigits(l, 8); Out.Int(r, 2); Out.String(", expected "); Out.HexDigits(hi, 8); Out.HexDigits(lo, 8); Out.Int(res, 2); Out.Ln
   END
 END L;
 
@@ -34,7 +34,7 @@ BEGIN n := 0; WHILE dig[n] # 0X DO INC(n) END;
   r := DecReal.Short(dig, n, FALSE, e, x); SYSTEM.GET(SYSTEM.ADR(x), b); INC(checks);
   IF (b # bits) OR (r # res) THEN INC(fails);
     Out.String("FAIL Short "); Out.String(dig); Out.String("E"); Out.Int(e, 0); Out.String(": ");
-    Out.Hex(b, 8); Out.Int(r, 2); Out.String(", expected "); Out.Hex(bits, 8); Out.Int(res, 2); Out.Ln
+    Out.HexDigits(b, 8); Out.Int(r, 2); Out.String(", expected "); Out.HexDigits(bits, 8); Out.Int(res, 2); Out.Ln
   END
 END S;
 

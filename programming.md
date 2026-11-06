@@ -131,10 +131,11 @@ line or a ~ ends them. Arg returns FALSE when there are no more. In the desktop,
 args ~ written in a text calls the same command with the same parameters, so a console command
 works in both worlds.
 
-Write output with Out: Out.String, Out.Int(x, width), Out.Char, Out.Ln, Out.Real, Out.LongReal and
-their fixed-point forms Out.RealFix and Out.LongRealFix, as in ETH Oberon, and Out.Hex(x, n), which
-writes at least n hexadecimal digits without a blank, as voc's Out does (Linux Oberon's Out.Hex(x)
-wrote a blank and 8 digits: write Out.Char(" "); Out.Hex(x, 8)). It writes to the terminal, and in
+Write output with Out: Out.String, Out.Int(x, width), Out.Char, Out.Ln, Out.Hex(x) (a blank and 8
+hexadecimal digits), Out.Real, Out.LongReal and their fixed-point forms Out.RealFix and
+Out.LongRealFix, as in ETH Oberon. Out.HexDigits(x, n) writes x as an unsigned hexadecimal number of
+at least n digits, with leading zeros and without a blank, 8 digits for n <= 0, as Out.Hex(x, n)
+does in OO2C; the modules polpo shares with voc use it. It writes to the terminal, and in
 the desktop into System.Log a line at a time (the rest of a line comes when the command has ended);
 in the desktop Out.Open sends it to a viewer of its own instead, until Out.Close. Out.writer, a
 procedure variable, is where the output goes: NIL, the default, is the terminal, and the desktop

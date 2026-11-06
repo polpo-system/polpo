@@ -9,9 +9,8 @@ IMPORT SYSTEM, Linux0, Texts0;
 
 (* polpo: the output goes to the standard output in the console, and through writer in the desktop,
   where System points it at System.Log. Numbers are formatted as the desktop's Texts does it (Texts0).
-  Hex is the one of voc, with two arguments, which the modules shared with voc use; Linux Oberon's Out
-  had Hex(i), a blank and 8 digits. The older console module out writes through this one and is
-  deprecated. *)
+  Hex is ETH Oberon's; HexDigits is OO2C's Out.Hex under its own name, for the modules shared with voc.
+  The older console module out writes through this one and is deprecated. *)
 
 TYPE
   Writer* = PROCEDURE (VAR s: ARRAY OF CHAR; len: LONGINT);
@@ -60,21 +59,29 @@ BEGIN
   Texts0.WriteInt(W, i, n); Flush
 END Int;
 
-(** Write x in hexadecimal digits, at least n of them (1 to 8) and no blank, as voc's Out.Hex does;
-  a negative x as its n lowest digits. *)
-PROCEDURE Hex*(x, n: LONGINT);
-  VAR i, d: LONGINT; s: ARRAY 9 OF CHAR;
+(** Write the integer i in hexadecimal with a leading space. *)
+PROCEDURE Hex*(i: LONGINT);
 BEGIN
-  IF n < 1 THEN n := 1 ELSIF n > 8 THEN n := 8 END;
-  IF x >= 0 THEN WHILE (n < 8) & (SYSTEM.LSH(x, -4 * n) # 0) DO INC(n) END END;
-  i := 0;
-  WHILE i < n DO
-    d := SYSTEM.LSH(x, -4 * (n - 1 - i)) MOD 10H;
+  Texts0.WriteHex(W, i); Flush
+END Hex;
+
+(** Write x as an unsigned hexadecimal number with at least n digits, leading zeros where it needs fewer,
+  and 8 digits for n <= 0 (OO2C's Out.Hex). *)
+PROCEDURE HexDigits*(x, n: LONGINT);
+  VAR m, i, d: LONGINT; s: ARRAY 33 OF CHAR;
+BEGIN
+  IF n <= 0 THEN n := 8 END;
+  m := 1; WHILE (m < 8) & (SYSTEM.LSH(x, -4 * m) # 0) DO INC(m) END;  (* the digits x needs, unsigned *)
+  WHILE n > LEN(s) - 1 DO Char("0"); DEC(n) END;
+  IF n < m THEN n := m END;
+  i := 0; WHILE i < n - m DO s[i] := "0"; INC(i) END;
+  WHILE m > 0 DO
+    DEC(m); d := SYSTEM.LSH(x, -4 * m) MOD 10H;
     IF d < 10 THEN s[i] := CHR(d + 30H) ELSE s[i] := CHR(d - 10 + 41H) END;
     INC(i)
   END;
-  s[n] := 0X; String(s)
-END Hex;
+  s[i] := 0X; String(s)
+END HexDigits;
 
 (** Write the real x in n field positions. *)
 PROCEDURE Real*(x: REAL; n: INTEGER);

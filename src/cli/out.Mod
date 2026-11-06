@@ -1,6 +1,6 @@
 MODULE out;  (** deprecated: import Out. out stays for the packages that still import it and writes
   through Out. Its Hex(x, w) is the one of Kernel.WriteHex: 8 digits padded with blanks to w, or 2 digits
-  for a negative w; Out.Hex(x, n) is voc's, at least n digits. *)
+  for a negative w; Out.Hex(i) is ETH's, a blank and 8 digits, and Out.HexDigits(x, n) OO2C's. *)
 
 IMPORT Out;
 
