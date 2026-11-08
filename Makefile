@@ -42,6 +42,11 @@ PPC = bin/ppc/loksh
 else
 PPC = qemu-ppc bin/ppc/loksh
 endif
+ifneq ($(filter m68k,$(HOSTARCH)),)
+M68K = bin/m68k/loksh
+else
+M68K = qemu-m68k -cpu m68040 bin/m68k/loksh
+endif
 
 # ---- x86 ----
 
@@ -193,6 +198,26 @@ ppc-run:
 ppc-shell:
 		$(PPC)
 
+# ---- 68020 and later, with an FPU (m68k, big-endian) ----
+
+# cross compile the 68020 system on x86
+m68k:
+		$(X86) < tools/rop2-cross.Tool
+		$(X86) < tools/m68k.Tool
+		mv bin/m68k/loksh.new bin/m68k/loksh
+
+# build it with its own compiler: natively on m68k, under qemu-m68k elsewhere
+m68k-native:
+		$(M68K) < tools/m68k.Tool
+		mv bin/m68k/loksh.new bin/m68k/loksh
+
+# start the desktop / console (qemu-m68k unless this machine is a 68020 or later)
+m68k-run:
+		$(M68K) System.Init
+
+m68k-shell:
+		$(M68K)
+
 # ---- ARMv7 (OP2 compiler; make arm is for older ARM processors) ----
 
 # cross compile the ARMv7 system on x86
@@ -220,7 +245,7 @@ armv7-sixel:
 armv7-x11:
 		$(X86) portia.Build /armv7 /y display-x11
 
-.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 mipsbe mipsbe-native mipsbe-run mipsbe-shell ppc ppc-native ppc-run ppc-shell armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
+.PHONY: release fast sixel x11 arm arm-native arm-run arm-shell arm-sixel arm-x11 riscv riscv-native riscv-run riscv-shell riscv-sixel riscv-x11 mips mips-native mips-run mips-shell mips-sixel mips-x11 mipsbe mipsbe-native mipsbe-run mipsbe-shell ppc ppc-native ppc-run ppc-shell m68k m68k-native m68k-run m68k-shell armv7 armv7-native armv7-run armv7-shell armv7-sixel armv7-x11
 
 # make release V=0.2.0: VERSION gets the version and today's date (UTC), shown when the desktop
 # starts; it is committed and tagged v0.2.0. Push with: git push origin main v0.2.0 (and codeberg)

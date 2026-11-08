@@ -73,6 +73,7 @@ CONST
   MIPS="MIPS";
   MIPSBE="MIPSBE";  (* polpo: MIPS big-endian, treated as MIPS *)
   PPC="PPC";  (* polpo: PowerPC, 32-bit *)
+  M68K="M68K";  (* polpo: 68020 and later: frames of A6 (LINK), arguments on the stack *)
 
   NEWrecord= 0; NEWarray= 1; SYSTEMNEW= 2;
   deallocRECORD= 3; deallocARRAY= 4; deallocSYSBLK= 5;
@@ -489,9 +490,9 @@ END GetFrame;
   The pc of a caller is one byte before its return address, in its call. Linux0.Regs must
   hold the registers of the trap (as for the trap handlers). *)
 PROCEDURE Trace*(sp, pc: LONGINT; p: TraceProc);
-VAR mod: Module; refpos, ofs, n, k: LONGINT; name: ARRAY 64 OF CHAR;
+VAR mod: Module; refpos, ofs, n, k, fp: LONGINT; name: ARRAY 64 OF CHAR;
 BEGIN
-  n := 0;
+  n := 0; fp := Linux0.Regs[ Linux0.FP];
   LOOP
     mod := GetMod(pc); name[0] := 0X; ofs := pc;
     IF mod # NIL THEN
@@ -509,22 +510,27 @@ BEGIN
     END;
     p(mod, ofs, name); INC(n);
     IF (mod = NIL) OR (name[0] = 0X) OR (n = 32) THEN EXIT END;
-    GetFrame0(sp); GetFrame(sp, pc);
-    IF sp >= StackOrg THEN EXIT END
+    IF Linux0.ARCH = M68K THEN  (* polpo: the caller at 4(A6), its frame at (A6) *)
+      IF (fp = 0) OR (fp >= StackOrg) THEN EXIT END;
+      SYSTEM.GET( fp + 4, pc); SYSTEM.GET( fp, fp)
+    ELSE
+      GetFrame0(sp); GetFrame(sp, pc);
+      IF sp >= StackOrg THEN EXIT END
+    END
   END
 END Trace;
 
 (* DefaultTrapHandler - This handler is installed if nothing better is available... *)
 
 PROCEDURE DefaultTrapHandler ( trap, sp, pc, page: LONGINT);
-VAR mod: Module; refpos, n: LONGINT; c: CHAR; 
+VAR mod: Module; refpos, n, fp: LONGINT; c: CHAR; 
 BEGIN
   IF siglevel >1 THEN
     IF siglevel >2 THEN Linux0.Exit0(1); Halt("Recursive trap", siglevel) END;
     WriteString("Error: Signal while handling Signal"); WriteLn;
   END;
   WriteString("DefaultTH, Trap: "); WriteInt( trap, 1);  WriteLn;
-  n:=0;
+  n:=0; fp := Linux0.Regs[ Linux0.FP];
   WHILE (sp<StackOrg) & (n<10) DO
     WriteHex( sp, 8);
     mod:=GetMod(pc);
@@ -541,24 +547,31 @@ BEGIN
     END;
     WriteLn;
     INC(n);
-    GetFrame0( sp);
-    GetFrame( sp, pc);
+    IF Linux0.ARCH = M68K THEN
+      IF (fp = 0) OR (fp >= StackOrg) THEN RETURN END;
+      SYSTEM.GET( fp + 4, pc); SYSTEM.GET( fp, fp); sp := fp
+    ELSE
+      GetFrame0( sp);
+      GetFrame( sp, pc)
+    END
   END;
 END DefaultTrapHandler;
 
 PROCEDURE SignalHandler;
 CONST IMM12=1000H; IMM20=100000H;
-VAR trap, j, adr: LONGINT; sinfo: Linux0.SigInfo; SC: Linux0.SigContext;
+VAR trap, j, adr: LONGINT; sinfo: Linux0.SigInfo; SC: Linux0.SigContext;  (* ARMv7 finds SC by the size of this frame: no more variables *)
 BEGIN
   SYSTEM.GETREG( Linux0.ARI, trap);  (* trap is 1st parameter in REG 0; Attention: might be overwritten by SignalHandler!*)
   IF Linux0.ARCH=ARMv7 THEN
     SYSTEM.GETREG( Linux0.SP, j); SC:=SYSTEM.VAL(Linux0.SigContext, j+64);  (* sc is on stack, distance is stack directly before SignalHandler *)
+  ELSIF Linux0.ARCH=M68K THEN  (* polpo: signal, siginfo and ucontext on the stack, as for a C function *)
+    SYSTEM.GETREG( Linux0.FP, j); SYSTEM.GET( j + 8, trap); SYSTEM.GET( j + 12, sinfo); SYSTEM.GET( j + 16, SC)
   ELSE
     SYSTEM.GETREG( Linux0.ARI+1, sinfo);  (* siginfo is 2nd parameter *)
     SYSTEM.GETREG( Linux0.ARI+2, SC);  (* sigcontext is 3rd parameter of handler *)
   END;
   INC( siglevel);
-  IF (Linux0.ARCH=MIPS) OR (Linux0.ARCH=MIPSBE) THEN adr:=sinfo.adr ELSE adr:=0 END;
+  IF (Linux0.ARCH=MIPS) OR (Linux0.ARCH=MIPSBE) OR (Linux0.ARCH=M68K) THEN adr:=sinfo.adr ELSE adr:=0 END;
   WriteHex( trap, 6);    trap:=SigTab[ trap];  WriteHex( trap, 9);
   WriteHex( SYSTEM.VAL( LONGINT, SC), 9);  WriteHex( SC.pc, 9);
 
@@ -592,6 +605,11 @@ BEGIN
     END;
   ELSIF (Linux0.ARCH=PPC) & (trap=-Linux0.SIGTRAP) THEN SYSTEM.GET( SC.pc, j);  (* polpo: twi 31, r0, nr *)
     IF j DIV 10000H = Linux0.XTRAP DIV 10000H THEN trap:= j MOD 10000H END;
+  ELSIF Linux0.ARCH=M68K THEN  (* polpo: TRAPcc.W #nr; SC.pc after it, the instruction itself in the siginfo: SC.pc := that *)
+    IF (trap = 10) OR (trap = 28) THEN SC.pc := sinfo.adr END;
+    IF trap = 10 THEN SYSTEM.GET( SC.pc, j);  (* the TRAPcc word, then the number (big-endian) *)
+      IF (SYSTEM.LSH(j, -16) MOD 100H = Linux0.XTRAP MOD 100H) & (SYSTEM.LSH(j, -28) = Linux0.XTRAP DIV 1000H) THEN trap := j MOD 10000H END
+    END;
   ELSIF trap= 28 THEN SYSTEM.GET(SC.pc, j);  (* Invalid instruction used as TRAP *)
     WriteHex( j, 9); WriteLn;
     IF Linux0.ARCH=ARMv7 THEN
@@ -608,9 +626,10 @@ BEGIN
   Linux0.CopyRegs(SC); 
   IF (traphandler # NIL) & (traphandler#defaulttraphandler) THEN traphandler( trap, Linux0.Regs[Linux0.SP], SC.pc, adr ) END;  (* was: handler |trap 16: Disk full *)
 
-  IF trap=MAX(INTEGER) THEN INC(SC.pc, 4);  (* ! *)
+  IF trap=MAX(INTEGER) THEN INC(SC.pc, 4);  (* ! *)  (* polpo: on the 68020 too, SC.pc is the TRAPcc.W (4 bytes) *)
   ELSE
     SC.regs[Linux0.SP*Linux0.RegDist + Linux0.RegOff]:= StackOrg;  (* polpo: RegOff, RISC-V saves no x0 *)
+    IF Linux0.ARCH = M68K THEN SC.regs[Linux0.FP] := 0 END;  (* the end of the chain of frames *)
 (*    SC.regs[Linux0.FP*Linux0.RegDist]:= StackOrg;*)
     SC.pc:=SYSTEM.VAL( LONGINT, loop);
     IF loop=NIL THEN Terminate; Linux0.Exit0( 2) END;  (* polpo: the terminal restored, as on x86 and ARM; exit status 2 after a trap *)
@@ -636,9 +655,10 @@ BEGIN
 END SysHalt;
 *)
 PROCEDURE SignalQuitHandler;
-VAR sig: LONGINT;
+VAR sig, j: LONGINT;
 BEGIN
   SYSTEM.GETREG( Linux0.ARI, sig);  (* sig is parameter of handler *)
+  IF Linux0.ARCH = M68K THEN SYSTEM.GETREG( Linux0.FP, j); SYSTEM.GET( j + 8, sig) END;
   INC( siglevel);
   WriteString("Recived signal nr. "); WriteInt( sig, 3); WriteLn;
   WriteString("Terminating Oberon! "); WriteLn;
@@ -1609,7 +1629,9 @@ END InitTrap;
 
 BEGIN
   SYSTEM.GETREG( Linux0.SP, StackOrg);  (* SP *)
-  INC(StackOrg, 18H);  (* diff between SP and FP *)
+  IF Linux0.ARCH = M68K THEN INC(StackOrg, 4)  (* polpo: LINK A6, #0 of this body *)
+  ELSE INC(StackOrg, 18H)  (* diff between SP and FP *)
+  END;
   Linux0.StackOrg := StackOrg;  (* polpo: also in Linux0, as on x86 and ARM *)
   tracefd:= Linux0.Openat0( Linux0.ATFDCWD, SYSTEM.ADR(TRACE), Linux0.ORDWR+Linux0.OCREAT+Linux0.OTRUNC, SYSTEM.VAL(LONGINT,{2, 5, 7, 8}));
   WriteString( version); WriteString( Linux0.ARCH); WriteString( DATE); WriteLn;
