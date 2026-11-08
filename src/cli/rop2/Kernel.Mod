@@ -474,12 +474,18 @@ BEGIN
     REPEAT IF ODD(ASH(savef, -i)) THEN INC(adr, 8) END; INC(i) UNTIL i=32;
     i:=0;
     REPEAT IF ODD(ASH(saver, -i)) THEN SYSTEM.GET( adr, Linux0.Regs[ i]); INC(adr, 4) END; INC(i) UNTIL i=32;
-  ELSE i:=31;  (* MIPS, only MOPL.CalleeSavedR *)
-    adr:=fp-fsize+carea;
-    REPEAT
-      IF ODD(ASH(saver, -i)) THEN SYSTEM.GET( adr, Linux0.Regs[ i]); INC(adr, 4); END;
-      DEC(i);
-    UNTIL i=0;
+  ELSE  (* polpo: MIPS and RISC-V (MOPL/VOPL.SaveRegs): the floating point registers first, 8 bytes each,
+      then the integer registers, on MIPS from 31 down, on RISC-V from 1 up *)
+    i:=0;
+    REPEAT IF ODD(ASH(savef, -i)) THEN INC(adr, 8) END; INC(i) UNTIL i=32;
+    IF Linux0.ARCH=RISCV THEN i:=1;
+      REPEAT IF ODD(ASH(saver, -i)) THEN SYSTEM.GET( adr, Linux0.Regs[ i]); INC(adr, 4) END; INC(i) UNTIL i=32
+    ELSE i:=31;
+      REPEAT
+        IF ODD(ASH(saver, -i)) THEN SYSTEM.GET( adr, Linux0.Regs[ i]); INC(adr, 4); END;
+        DEC(i);
+      UNTIL i=0
+    END
   END;
   pc:=Linux0.Regs[ Linux0.LR];
 END GetFrame;
