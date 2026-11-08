@@ -24,7 +24,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts, Con := Out, logs;
 
   CONST
-    MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6; PPC=7;
+    MIPS=1; RISCV=2; ARMv7=3; ARMv8=4; TEST=5; MIPSBE=6; PPC=7; M68K=8;
 (*    mipstag=0F9X; mipsttag= 0FAX; armv7tag=0FBX; armv8tag=0FCX; riscvtag=0FDX;   not same as in ROP2 *)
 
     BootHeapSize = 20000H;
@@ -57,8 +57,8 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     dir: ARRAY 256 OF CHAR;  (* object file directory *)
     ptrFixx: LONGINT;
     arch: LONGINT;
-    archs: ARRAY PPC+1 OF ARRAY 7 OF CHAR;
-    tags: ARRAY PPC+1 OF INTEGER;
+    archs: ARRAY M68K+1 OF ARRAY 7 OF CHAR;
+    tags: ARRAY M68K+1 OF INTEGER;
     big: BOOLEAN;  (* polpo: the target is big-endian *)
     (* polpo: the image is built in the byte order of the host; for a target of the other order the
        words are swapped when it is written, except the byte regions (names, refs, constants), and
@@ -509,10 +509,42 @@ BEGIN
   END
 END FixupP;
 
+(* polpo: Linux0.Fixup of the 68020, see KOPL: the 32-bit fields of a chain at 2*L, made of a 16-bit distance
+  in words to the previous one (0 ends it) and a 16-bit offset to entry; the image holds the code as 32-bit
+  words in the byte order of the host, the first 16-bit word of the code in the high half *)
+PROCEDURE KHalf(m: Module; L: LONGINT): LONGINT;
+VAR w: LONGINT;
+BEGIN
+  S.GET( m.cb + L DIV 2 * 4, w);
+  IF ODD(L) THEN RETURN w MOD 10000H ELSE RETURN S.LSH(w, -16) MOD 10000H END
+END KHalf;
+
+PROCEDURE KPutHalf(m: Module; L, h: LONGINT);
+VAR w: LONGINT;
+BEGIN
+  S.GET( m.cb + L DIV 2 * 4, w); h := h MOD 10000H;
+  IF ODD(L) THEN w := w - w MOD 10000H + h ELSE w := S.LSH(S.LSH(w, 16), -16) + S.LSH(h, 16) END;
+  S.PUT( m.cb + L DIV 2 * 4, w)
+END KPutHalf;
+
+PROCEDURE FixupK(m: Module; entry, L: LONGINT);
+VAR d, off, a: LONGINT;
+BEGIN
+  IF (entry#0) & (L # 0) THEN
+    INC( entry, shift0);
+    REPEAT
+      d := KHalf(m, L); off := KHalf(m, L + 1); IF off >= 8000H THEN DEC(off, 10000H) END;
+      a := entry + off; KPutHalf(m, L, S.LSH(a, -16)); KPutHalf(m, L + 1, a);
+      DEC(L, d)
+    UNTIL d = 0
+  END
+END FixupK;
+
 PROCEDURE Fixup(m: Module; entry, L: LONGINT; data: BOOLEAN);
 BEGIN
   IF tag=36FDH THEN FixupV(m, entry, L)
   ELSIF tag=36F7H THEN FixupP(m, entry, L)
+  ELSIF tag=36F6H THEN FixupK(m, entry, L)
   ELSIF tag=36FBH THEN FixupA(m, entry, L)
   ELSIF (tag=36F9H) OR (tag=36F8H) THEN FixupM(m, entry, L, data)
   ELSE HALT(255);
@@ -1113,7 +1145,7 @@ END MkELF64hdr;
     Texts.WriteLn(W);
   (* output heap *)
     RelocatePtr;
-    big := (arch = MIPSBE) OR (arch = PPC);
+    big := (arch = MIPSBE) OR (arch = PPC) OR (arch = M68K);
     IF big # hostBig THEN SwapImage(end) END;
 
   (* create bootfile with correct permissions and copy data *)
@@ -1138,6 +1170,9 @@ END MkELF64hdr;
       ELSIF arch=PPC THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 0, 20);  (* EM_PPC *)
         eh3.eIdent[ 5]:= 2X;  (* EI_DATA= ELFDATA2MSB *)
         IF ~hostBig THEN SwapELF32 END;
+      ELSIF arch=M68K THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 0, 4);  (* EM_68K *)
+        eh3.eIdent[ 5]:= 2X;  (* EI_DATA= ELFDATA2MSB *)
+        IF ~hostBig THEN SwapELF32 END;
       ELSIF arch=ARMv7 THEN MkELF32hdr( bootEntryAdr+shift0,  end - heapAdr+SIZE(ELF32HDR), 5000402H, 40);
       ELSE Texts.WriteString(W, "32 bit target not supported ");
       END;
@@ -1152,7 +1187,7 @@ END MkELF64hdr;
   PROCEDURE Help*;
   BEGIN
     Con.String("USAGE:"); Con.Ln;
-    Con.String("  rlinker.Link [/e] [/v | /m | /b | /a | /w] [/Pdir/] image Module0 Module1 ..."); Con.Ln;
+    Con.String("  rlinker.Link [/e] [/v | /m | /b | /a | /w | /k] [/Pdir/] image Module0 Module1 ..."); Con.Ln;
     Con.Ln;
     Con.String("Links the modules, listed in import order, from dir (default obj/<arch>/)"); Con.Ln;
     Con.String("into the static executable image; module bodies run in that order."); Con.Ln;
@@ -1162,6 +1197,7 @@ END MkELF64hdr;
     Con.String("  /b       MIPS big-endian (obj/mipsbe/)"); Con.Ln;
     Con.String("  /a       ARMv7 (obj/armv7/)"); Con.Ln;
     Con.String("  /w       PowerPC, 32-bit (obj/ppc/)"); Con.Ln;
+    Con.String("  /k       68020 and later (obj/m68k/)"); Con.Ln;
     Con.String("Without one of them the target is the host architecture."); Con.Ln;
     Con.String("  /Pdir/   object file directory"); Con.Ln
   END Help;
@@ -1170,7 +1206,7 @@ END MkELF64hdr;
     VAR bootName: Name; s: Texts.Scanner; m: Module; pos: LONGINT; i: INTEGER; dirSet: BOOLEAN;
   BEGIN
     pos := Oberon.Log.len; b64 := FALSE; showEntries := FALSE;
-    IF Linux0.ARCH = "PPC" THEN arch := PPC ELSIF Linux0.ARCH = "MIPSBE" THEN arch := MIPSBE ELSIF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
+    IF Linux0.ARCH = "M68K" THEN arch := M68K ELSIF Linux0.ARCH = "PPC" THEN arch := PPC ELSIF Linux0.ARCH = "MIPSBE" THEN arch := MIPSBE ELSIF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
     dirSet := FALSE; bootName[0] := 0X;
     Texts.OpenScanner(s, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(s);
     WHILE (s.class = Texts.Name) & ((s.s[0] = "/") OR (s.s[0] = "\")) DO
@@ -1180,6 +1216,7 @@ END MkELF64hdr;
       ELSIF s.s[1] = "b" THEN arch := MIPSBE
       ELSIF s.s[1] = "a" THEN arch := ARMv7
       ELSIF s.s[1] = "w" THEN arch := PPC
+      ELSIF s.s[1] = "k" THEN arch := M68K
       ELSIF s.s[1] = "P" THEN
         i := 2; WHILE (s.s[i] # 0X) & (i-2 < LEN(dir)-1) DO dir[i-2] := s.s[i]; INC(i) END;
         dir[i-2] := 0X; dirSet := TRUE
@@ -1191,6 +1228,7 @@ END MkELF64hdr;
       IF arch = MIPS THEN Root.Obj("mips", dir)
       ELSIF arch = MIPSBE THEN Root.Obj("mipsbe", dir)
       ELSIF arch = PPC THEN Root.Obj("ppc", dir)
+      ELSIF arch = M68K THEN Root.Obj("m68k", dir)
       ELSIF arch = ARMv7 THEN Root.Obj("armv7", dir)
       ELSE Root.Obj("riscv", dir)
       END
@@ -1230,6 +1268,7 @@ BEGIN
   archs[ TEST]:= "mipst"; tags[TEST]:= 36FAH;
   archs[ MIPSBE]:= "mipsbe"; tags[MIPSBE]:= 36F8H;
   archs[ PPC]:= "ppc"; tags[PPC]:= 36F7H;
+  archs[ M68K]:= "m68k"; tags[M68K]:= 36F6H;
   rawx := 0; halfx := 0;
   tags[0] := 1; S.GET(S.ADR(tags[0]), modeStr[0][0]); hostBig := modeStr[0][0] = 0X; tags[0] := 0;
 END rlinker.
