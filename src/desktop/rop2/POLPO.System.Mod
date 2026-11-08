@@ -731,7 +731,7 @@ VAR
   sval: SHORTINT;  ival: INTEGER;  tmp: Kernel.Bytes;  set: SET;
   rval: REAL;  lrval: LONGREAL;
 BEGIN
-  mode := refs[i];  INC(i);
+  IF i < LEN(refs^) THEN mode := refs[i] ELSE mode := 0X END;  INC(i);  (* polpo: the last procedure may have no variables *)
   WHILE (i < LEN(refs^)) & (mode >= 1X) & (mode <= 3X) DO  (* var *)
     type := ORD(refs[i]);  INC(i);  etc := FALSE;
     IF type > 80H THEN
