@@ -38,9 +38,10 @@ Nowadays every port writes a separate .Sym.) Choose names that polpo does not us
 says "module not found" for a free one.
 
 The other ports have their own compilers: acompiler for ARM, a7compiler for ARMv7, rvcompiler for
-RISC-V and mcompiler for MIPS. All of them also run on x86 as cross compilers. A module is loaded
-the first time one of its commands is called, or when a module that imports it is loaded; its body
-(the statements between BEGIN and END Name.) runs then, once.
+RISC-V, mcompiler for MIPS, pcompiler for PowerPC and kcompiler for the 68020. All of them also run
+on x86 as cross compilers. A module is loaded the first time one of its commands is called, or when
+a module that imports it is loaded; its body (the statements between BEGIN and END Name.) runs then,
+once.
 
 Where do the objects go? A compiler writes into obj/<arch>/ of the current directory if there is
 one, and otherwise into the polpo directory. The loader looks for obj/<arch>/Name.Obj in the
@@ -114,7 +115,8 @@ browser.ShowDef module /e also writes out the fields a record inherits from its 
 addresses of variables and the offsets of parameters. The module can be given as a path too,
 browser.ShowDef src/cli/net.Mod, and browser.Help lists the commands and options. In the desktop,
 the browser of the port shows the definition of a selected module name in a viewer:
-XBrowser.ShowDef ^ on x86, ABrowser.ShowDef ^ on ARM, RBrowser.ShowDef ^ on ARMv7, RISC-V and MIPS.
+XBrowser.ShowDef ^ on x86, ABrowser.ShowDef ^ on ARM, RBrowser.ShowDef ^ on ARMv7, RISC-V, MIPS,
+PowerPC and the 68020.
 They write the same text as the console browser.
 
 Every port has its own console browser, with the same commands, reading the symbol files of its
@@ -122,6 +124,13 @@ port: qemu-riscv32 bin/riscv/loksh browser.ShowDef fs shows the RISC-V interface
 are the same on all ports except for the IMPORT line (on x86 it lists every module in the symbol
 file's module table, elsewhere only the modules the interface refers to), and except for the few
 modules that differ between ports, as Linux0 and Kernel.
+
+The code a compiler made can be read as instructions with the decoder of the port, a desktop
+command that opens a viewer: VDecoder.Obj fs on RISC-V, M2Decoder.Obm on MIPS, A32Decoder.Obj on
+ARMv7, KDecoder.Obj on the 68020. KDecoder.File fs fs.dec writes the same text into a file and
+also works in the console. The decoders show the blocks of the object file (imports, exports,
+commands, constants, the objects used from other modules), then the code procedure by procedure;
+with \r they add the variables of each procedure from the reference block.
 
 ## Parameters and output
 
@@ -310,9 +319,9 @@ them, while Files accepts letters, digits, ., /, _ and -, and a name must not be
 
 ## Code that compiles on all ports
 
-polpo has five compilers, and they do not all accept the same language. The ARM compiler is an
-Oberon-1 compiler, the x86 one knows some Oberon-2, the ROP2 compilers (ARMv7, RISC-V, MIPS)
-something in between. A module that keeps to the following compiles with all of them:
+polpo has seven compilers, and they do not all accept the same language. The ARM compiler is an
+Oberon-1 compiler, the x86 one knows some Oberon-2, the ROP2 compilers (ARMv7, RISC-V, MIPS, PowerPC,
+68020) something in between. A module that keeps to the following compiles with all of them:
 
     declarations (CONST, TYPE, VAR) come before the procedures, in modules and in procedures;
 

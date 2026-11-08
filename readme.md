@@ -11,7 +11,7 @@ This is an attempt to contunie development of ETH Linux Oberon in some way.
 * Create a minimal Oberon OS that runs over Linux - only minimal set of modules. - done.
 * Add package manager to add packages over the network - done (portia).
 * Create a ports tree of package recipies - done (arden).
-* Also integrate ARM and other existing compilers - done (ARM, ARMv7, RISC-V, MIPS, PowerPC).
+* Also integrate ARM and other existing compilers - done (ARM, ARMv7, RISC-V, MIPS, PowerPC, 68020).
 * Add TLS, so that polpo gets online - done (TLS 1.3 in Oberon, client and server).
 * Implement a Gemini browser - done (dcs, DCS, Pishmish).
 * Add support for aarch64 and x86_64.
@@ -27,8 +27,8 @@ This is an attempt to contunie development of ETH Linux Oberon in some way.
 A recipe like `tools/build.Tool` is an Oberon text of commands, one per line, mostly
 `compiler.Compile /s src/...` in the order of the imports, ending with the link; `make` only
 runs `bin/x86/loksh < tools/build.Tool`, and you can do the same, or click the commands in the
-desktop. `make arm`, `make armv7`, `make riscv`, `make mips`, `make mipsbe` and `make ppc` do it
-for the other ports (see
+desktop. `make arm`, `make armv7`, `make riscv`, `make mips`, `make mipsbe`, `make ppc` and `make m68k` do
+it for the other ports (see
 below). The recipes build the base system, the modules in this repository. Other software is
 in packages with repositories of their own (the servers agena and cobweb, games, image
 formats, ...), which portia downloads, checks and compiles: `bin/x86/loksh portia.Install
@@ -164,7 +164,7 @@ the package tree with portia.Sync; then portia upgrades the other packages:
 git pull                                   # polpo
 bin/x86/loksh portia.Sync                  # the package tree
 bin/x86/loksh portia.Upgrade               # every installed package with a newer version
-bin/x86/loksh portia.Upgrade /arm          # the same for the ARM port (/armv7, /riscv, /mips, /mipsbe, /ppc)
+bin/x86/loksh portia.Upgrade /arm          # the same for the ARM port (/armv7, /riscv, /mips, /mipsbe, /ppc, /m68k)
 ```
 
 `portia.Upgrade` also recompiles the packages you built (the remote ones) when the pull
@@ -545,6 +545,29 @@ make ppc-shell      # console
 `rlinker.Link /w` links the executable. As on big-endian MIPS, files keep their little-endian
 numbers, so object files, texts, fonts and pictures are the same as on the other ports.
 
+### 68020 (m68k)
+
+polpo runs on Linux for the Motorola 68020 and its successors (68030, 68040, 68060) with a floating
+point unit: Amigas and Ataris with such a processor, and other machines that run Linux/m68k. The
+compiler is the ROP2 front end with the 68020 back end `KOPL`..`KOPV`, made from the code generator of
+ST-Oberon V4, Simon Egli's port of Oberon V4 to the Atari ST (Michael Franz's MacOberon back end, with
+a 68000 mode added for the ST). Object files are in `obj/m68k/`, the static executable is
+`bin/m68k/loksh`.
+
+```
+make m68k           # on x86: cross compile the 68020 system
+make m68k-native    # rebuild it with its own compiler (on x86: under qemu-m68k)
+make m68k-run       # start the desktop (System.Init); on x86 through qemu-m68k
+make m68k-shell     # console
+```
+
+`kcompiler.Compile` is the cross compiler on x86, `compiler.Compile` the native one, and
+`rlinker.Link /k` links the executable. The back end avoids the instructions that the 68040 and 68060
+leave to the kernel to emulate (the 64-bit multiplications and divisions, FINT and the transcendental
+FPU instructions). The make targets run qemu as a 68040; the system has been tested under qemu with
+the 68020, 68030, 68040 and 68060 models. As on the other big-endian ports, files keep their
+little-endian numbers.
+
 ### ARMv7
 
 Besides the Oberon-1 ARM compiler for older ARM processors (`make arm`, `obj/arm/`),
@@ -562,7 +585,7 @@ make armv7-shell    # ARMv7 console
 The ARMv7 compiler uses software division by default, so the code also runs on
 Cortex-A8 and A9, which have no divide instruction; `/d` selects the hardware `sdiv`.
 
-Note: the ROP2 compilers (MIPS, RISC-V, ARMv7, PowerPC) trap on `DIV` and `MOD` by a divisor
+Note: the ROP2 compilers (MIPS, RISC-V, ARMv7, PowerPC, 68020) trap on `DIV` and `MOD` by a divisor
 that is not positive, while the x86 compiler computes the floored result.
 
 ### Layout
@@ -572,11 +595,11 @@ that is not positive, while the x86 compiler computes the floored result.
 * `src/cli` - console modules shared by all architectures; `src/cli/<arch>` - runtime
   (Linux0, Kernel, Modules0), compiler and linker of that architecture; `src/cli/rop2` -
   the ROP2 compiler front end, runtime (Kernel, Modules0) and boot linker shared by MIPS,
-  RISC-V, ARMv7 and PowerPC
+  RISC-V, ARMv7, PowerPC and the 68020
 * `src/common` - modules shared by console and desktop (Files, Texts0, Oberon0, ...)
 * `src/desktop` - desktop modules shared by all architectures; `src/desktop/<arch>` -
   architecture dependent desktop modules (XCompiler, ACompiler, RCompiler, decoders, browsers, System on RISC-V)
-* `tools/` - `.Tool` texts, including the build recipes `build.Tool`, `arm-cross.Tool`, `arm.Tool`, `rop2-cross.Tool`, `riscv.Tool`, `mips.Tool`, `mipsbe.Tool`, `ppc.Tool` and `armv7.Tool`
+* `tools/` - `.Tool` texts, including the build recipes `build.Tool`, `arm-cross.Tool`, `arm.Tool`, `rop2-cross.Tool`, `riscv.Tool`, `mips.Tool`, `mipsbe.Tool`, `ppc.Tool`, `m68k.Tool` and `armv7.Tool`
 * `share/` - data files (`Default.Pal`, `OPA.Data`, `System.Text`, ...)
 * `fonts/`, `texts/` - fonts and documentation texts; `Oberon.Text` is the configuration
 
