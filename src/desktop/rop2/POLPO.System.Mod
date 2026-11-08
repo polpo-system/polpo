@@ -980,6 +980,17 @@ BEGIN
   Texts.WriteString(W, " ("); Texts.WriteString(W, Kernel.version); Texts.Write(W, ")")
 END WriteTrap;
 
+PROCEDURE TraceFrame(m: Kernel.Module; pc: LONGINT; VAR name: ARRAY OF CHAR);  (* polpo: a frame of Kernel.Trace *)
+BEGIN
+  IF m = NIL THEN
+    IF pc # 0 THEN Texts.WriteString(W, "Unknown PC =");  Texts.WriteHex(W, pc);  Texts.Write(W, "H");  Texts.WriteLn(W) END
+  ELSE
+    Texts.WriteString(W, m.name);
+    IF name # "" THEN Texts.Write(W, ".");  Texts.WriteString(W, name) END;
+    Texts.WriteString(W, "  PC = ");  Texts.WriteInt(W, pc, 1);  Texts.WriteLn(W)
+  END
+END TraceFrame;
+
 PROCEDURE Trap*(error, fp, pc, page: LONGINT);  (** non-portable *)  (* exported for Debug debugger *)
 VAR
   T: Texts.Text;  refpos: LONGINT;
@@ -1003,15 +1014,8 @@ BEGIN
         SYSTEM.GET(fp + 4, pc); SYSTEM.GET(fp, fp); DEC(pc);  (* the caller at 4(A6), its frame at (A6); its pc in the call *)
         IF (fp < lastfp) OR (fp >= Linux0.StackOrg) THEN EXIT END
       END
-    ELSE
-      LOOP
-        mod := Kernel.GetMod(pc);
-        WriteProc(mod, pc, fp, refs, refpos, base);  Texts.WriteLn(W);
-        IF refpos # -1 THEN Variables(refs, refpos, base) END;
-        lastfp := fp;
-        Kernel.GetFrame(fp, pc);
-        IF (fp < lastfp) OR (fp >= Linux0.StackOrg) THEN EXIT END; (* not called from stack *)
-      END
+    ELSE  (* polpo: Kernel.GetFrame left fp as it was (the loop never ended); the frames as the console shows them *)
+      Kernel.Trace(fp, pc, TraceFrame)
     END;
     Texts.Append(T, W.buf);
     OpenText("Trap", T, TRUE)
