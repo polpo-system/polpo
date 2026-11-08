@@ -140,7 +140,7 @@ END SetOpt;
   BEGIN
     error := FALSE;  globopt:= defopt;
     IF OPM.OFtag = armv7tag THEN INCL(globopt, softdiv) END;  (* polpo: ARMv7 software division by default, as rcompiler *)
-    IF (OPM.OFtag = mipsbetag) OR (OPM.OFtag = ppctag) THEN INCL(globopt, bigend) END;
+    IF (OPM.OFtag = mipsbetag) OR (OPM.OFtag = ppctag) OR (OPM.OFtag = 0F6X) THEN INCL(globopt, bigend) END;
     Texts.OpenScanner(S, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(S);
     IF (S.class = Texts.Char) & (S.c # OptionChar) THEN
       IF S.c = "*" THEN
@@ -217,7 +217,8 @@ END CompileV;
 
 PROCEDURE Compile*;
 BEGIN
-  IF Linux0.ARCH="PPC" THEN Compile1("POPV", "ppc", ppctag);
+  IF Linux0.ARCH="M68K" THEN Compile1("KOPV", "m68k", 0F6X);
+  ELSIF Linux0.ARCH="PPC" THEN Compile1("POPV", "ppc", ppctag);
   ELSIF Linux0.ARCH="MIPSBE" THEN Compile1("MOPV", "mipsbe", mipsbetag);
   ELSIF Linux0.ARCH="MIPS" THEN Compile1("MOPV", "mips", mipstag);
   ELSIF  Linux0.ARCH="RISC-V" THEN Compile1("VOPV", "riscv", riscvtag);

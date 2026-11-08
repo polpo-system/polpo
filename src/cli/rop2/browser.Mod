@@ -301,7 +301,7 @@ MODULE browser;
 
   PROCEDURE Arch(VAR a: ARRAY OF CHAR);  (* the directory name of this port *)
   BEGIN
-    IF Linux0.ARCH = "MIPS" THEN COPY("mips", a) ELSIF Linux0.ARCH = "MIPSBE" THEN COPY("mipsbe", a) ELSIF Linux0.ARCH = "PPC" THEN COPY("ppc", a) ELSIF Linux0.ARCH = "ARMv7" THEN COPY("armv7", a) ELSE COPY("riscv", a) END
+    IF Linux0.ARCH = "MIPS" THEN COPY("mips", a) ELSIF Linux0.ARCH = "MIPSBE" THEN COPY("mipsbe", a) ELSIF Linux0.ARCH = "PPC" THEN COPY("ppc", a) ELSIF Linux0.ARCH = "M68K" THEN COPY("m68k", a) ELSIF Linux0.ARCH = "ARMv7" THEN COPY("armv7", a) ELSE COPY("riscv", a) END
   END Arch;
 
   (** the definition of the module name into T (the desktop's RBrowser uses it too); detail: with
@@ -372,6 +372,7 @@ BEGIN
   ELSIF Linux0.ARCH="RISC-V" THEN m:=Modules.ThisMod("VOPV");
   ELSIF Linux0.ARCH="ARMv7" THEN m:=Modules.ThisMod("AOPV");
   ELSIF Linux0.ARCH="PPC" THEN m:=Modules.ThisMod("POPV");
+  ELSIF Linux0.ARCH="M68K" THEN m:=Modules.ThisMod("KOPV");
   END;  (* the back end of this port: it sets OPT.typSize *)
   Texts.OpenWriter(W)
 END browser.

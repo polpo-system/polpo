@@ -992,13 +992,26 @@ BEGIN
     IF error # MAX(INTEGER) THEN Viewers.Close(NIL) END;  (* close offending viewer, if any *)
     T := TextFrames.Text("");
     WriteTrap(W, error, page); Texts.WriteLn(W);
-    LOOP
-      mod := Kernel.GetMod(pc);
-      WriteProc(mod, pc, fp, refs, refpos, base);  Texts.WriteLn(W);
-      IF refpos # -1 THEN Variables(refs, refpos, base) END;
-      lastfp := fp;
-      Kernel.GetFrame(fp, pc);
-      IF (fp < lastfp) OR (fp >= Linux0.StackOrg) THEN EXIT END; (* not called from stack *)
+    IF Linux0.ARCH = "M68K" THEN  (* polpo: the frames of A6, the variables relative to it *)
+      fp := Linux0.Regs[Linux0.FP];
+      LOOP
+        mod := Kernel.GetMod(pc);
+        WriteProc(mod, pc, fp, refs, refpos, base);  Texts.WriteLn(W);
+        IF refpos # -1 THEN Variables(refs, refpos, base) END;
+        IF (fp = 0) OR (fp >= Linux0.StackOrg) OR (mod = NIL) OR (refpos = -1) THEN EXIT END;
+        lastfp := fp;
+        SYSTEM.GET(fp + 4, pc); SYSTEM.GET(fp, fp); DEC(pc);  (* the caller at 4(A6), its frame at (A6); its pc in the call *)
+        IF (fp < lastfp) OR (fp >= Linux0.StackOrg) THEN EXIT END
+      END
+    ELSE
+      LOOP
+        mod := Kernel.GetMod(pc);
+        WriteProc(mod, pc, fp, refs, refpos, base);  Texts.WriteLn(W);
+        IF refpos # -1 THEN Variables(refs, refpos, base) END;
+        lastfp := fp;
+        Kernel.GetFrame(fp, pc);
+        IF (fp < lastfp) OR (fp >= Linux0.StackOrg) THEN EXIT END; (* not called from stack *)
+      END
     END;
     Texts.Append(T, W.buf);
     OpenText("Trap", T, TRUE)

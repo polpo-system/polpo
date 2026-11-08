@@ -876,7 +876,7 @@ PROCEDURE Compiler(VAR cmd: ARRAY OF CHAR);  (* for arch *)
 BEGIN
   IF arch = "x86" THEN COPY("compiler.Compile", cmd) ELSIF arch = "arm" THEN COPY("acompiler.Compile", cmd)
   ELSIF arch = "riscv" THEN COPY("rvcompiler.Compile", cmd) ELSIF arch = "mips" THEN COPY("mcompiler.Compile", cmd)
-  ELSIF arch = "mipsbe" THEN COPY("mbcompiler.Compile", cmd) ELSIF arch = "ppc" THEN COPY("pcompiler.Compile", cmd)
+  ELSIF arch = "mipsbe" THEN COPY("mbcompiler.Compile", cmd) ELSIF arch = "ppc" THEN COPY("pcompiler.Compile", cmd) ELSIF arch = "m68k" THEN COPY("kcompiler.Compile", cmd)
   ELSE COPY("a7compiler.Compile", cmd)
   END
 END Compiler;
@@ -1964,7 +1964,7 @@ BEGIN
   L("  portia.Test name            run the tests of an installed package");
   L("  portia.Sync                 the newest package tree from github.com/polpo-system/arden");
   L("");
-  L("Other ports: /arm /armv7 /riscv /mips /mipsbe /ppc after the command (portia.Build /arm none) builds");
+  L("Other ports: /arm /armv7 /riscv /mips /mipsbe /ppc /m68k after the command (portia.Build /arm none) builds");
   L("for that port, cross compiled on x86. The record: portia.base.<arch> (comes with polpo) and");
   L("portia.world.<arch> (what you added); portia.Record rebuilds it from the files present,");
   L("portia.Mark name and portia.Unmark name set one package. For package authors:");
@@ -2034,6 +2034,7 @@ BEGIN
   IF Linux0.ARCH = "X86" THEN hostArch := "x86" ELSIF Linux0.ARCH = "ARM" THEN hostArch := "arm"
   ELSIF Linux0.ARCH = "RISC-V" THEN hostArch := "riscv" ELSIF Linux0.ARCH = "MIPS" THEN hostArch := "mips" ELSIF Linux0.ARCH = "MIPSBE" THEN hostArch := "mipsbe"
   ELSIF Linux0.ARCH = "PPC" THEN hostArch := "ppc"
+  ELSIF Linux0.ARCH = "M68K" THEN hostArch := "m68k"
   ELSE hostArch := "armv7"
   END;
   COPY(hostArch, arch);
