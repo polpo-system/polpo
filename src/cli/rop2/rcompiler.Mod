@@ -1,4 +1,4 @@
-MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V, ARMv7, PowerPC *)
+MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V, ARMv7, PowerPC, 68020 *)
 (* after RCompiler (ROP2), RC 6.3.89 / 17.6.93, p.m. 2017-06-12 *)
   IMPORT
     OPM := ROPM, OPT := ROPT, OPP := ROPP, Modules, Linux0, Root,
@@ -110,14 +110,16 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
   PROCEDURE Help*;
   BEGIN
     Out.String("USAGE:"); Out.Ln;
-    Out.String("  rcompiler.Compile [/v | /m | /a] [options] file1.Mod [file2.Mod ...]"); Out.Ln;
-    Out.String("  (mcompiler.Compile, rvcompiler.Compile, pcompiler.Compile: MIPS, RISC-V, PowerPC)"); Out.Ln;
+    Out.String("  rcompiler.Compile [/v | /m | /a | /w | /k] [options] file1.Mod [file2.Mod ...]"); Out.Ln;
+    Out.String("  (mcompiler.Compile, rvcompiler.Compile, pcompiler.Compile, kcompiler.Compile: MIPS, RISC-V,"); Out.Ln;
+    Out.String("  PowerPC, 68020)"); Out.Ln;
     Out.Ln;
     Out.String("Target (default: the host architecture):"); Out.Ln;
     Out.String("  /v       RISC-V, obj/riscv/"); Out.Ln;
     Out.String("  /m       MIPS, obj/mips/"); Out.Ln;
     Out.String("  /a       ARMv7, obj/armv7/"); Out.Ln;
     Out.String("  /w       PowerPC (32-bit), obj/ppc/"); Out.Ln;
+    Out.String("  /k       68020 and later, with an FPU, obj/m68k/"); Out.Ln;
     Out.Ln;
     Out.String("Options (prefix with / or \, each toggles its default):"); Out.Ln;
     Out.String("  /x       index checks (on)"); Out.Ln;
@@ -142,14 +144,15 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     COPY(name, target); COPY(backendMod, backend); Root.Obj(arch, dir); tag := objTag;
     (* ARMv7: software division by default, Cortex-A8 and A9 have no divide instruction *)
     IF name = "ARMv7" THEN targetopt := {softdiv}
-    ELSIF (name = "MIPSBE") OR (name = "PPC") THEN targetopt := {bigend}  (* polpo: big-endian *)
+    ELSIF (name = "MIPSBE") OR (name = "PPC") OR (name = "M68K") THEN targetopt := {bigend}  (* polpo: big-endian *)
     ELSE targetopt := {}
     END
   END SetTarget;
 
   PROCEDURE SetHostTarget;
   BEGIN
-    IF Linux0.ARCH = "PPC" THEN SetTarget("PPC", "POPV", "ppc", ppctag)
+    IF Linux0.ARCH = "M68K" THEN SetTarget("M68K", "KOPV", "m68k", 0F6X)
+    ELSIF Linux0.ARCH = "PPC" THEN SetTarget("PPC", "POPV", "ppc", ppctag)
     ELSIF Linux0.ARCH = "MIPSBE" THEN SetTarget("MIPSBE", "MOPV", "mipsbe", mipsbetag)
     ELSIF Linux0.ARCH = "MIPS" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)
     ELSIF Linux0.ARCH = "ARMv7" THEN SetTarget("ARMv7", "AOPV", "armv7", armv7tag)
@@ -157,7 +160,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     END
   END SetHostTarget;
 
-  (** Compile with the target selected by SetTarget (or options /v, /m, /a, /w). *)
+  (** Compile with the target selected by SetTarget (or options /v, /m, /a, /w, /k). *)
   PROCEDURE CompileTarget*;
     VAR
       S: Texts.Scanner;
@@ -180,6 +183,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       ELSIF name = "/m" THEN SetTarget("MIPS", "MOPV", "mips", mipstag)
       ELSIF name = "/a" THEN SetTarget("ARMv7", "AOPV", "armv7", armv7tag)
       ELSIF name = "/w" THEN SetTarget("PPC", "POPV", "ppc", ppctag)
+      ELSIF name = "/k" THEN SetTarget("M68K", "KOPV", "m68k", 0F6X)
       ELSIF ((name[0] = "/") OR (name[0] = "\")) & (name[1] = "P") THEN
         i := 2; WHILE (name[i] # 0X) & (i-2 < LEN(dir)-1) DO dir[i-2] := name[i]; INC(i) END;
         dir[i-2] := 0X
@@ -196,7 +200,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
     END
   END CompileTarget;
 
-  (** Compile for the host architecture unless /v, /m, /a or /w is given. *)
+  (** Compile for the host architecture unless /v, /m, /a, /w or /k is given. *)
   PROCEDURE Compile*;
   BEGIN
     SetHostTarget; CompileTarget
