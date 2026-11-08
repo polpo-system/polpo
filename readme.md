@@ -260,6 +260,16 @@ SHA-256 of its key is kept in `$HOME/.gemini_hosts`, and a different key later i
 tests are in `src/lib/tls/test` (`TLS_TEST_CERTS=src/lib/tls/test/certs loksh TLSTestChain.Run`
 and so on).
 
+A client can also run without blocking: `TLS13Live.Begin` takes a connected socket and makes it
+nonblocking, and each call of `PollHandshake` goes as far as the bytes that have come allow (0 while
+the handshake goes on, 1 when the server is verified, -1 when it failed). `ReadSome` and `WriteSome`
+then return -2 when they would have to wait, and keep partial records and writes for the next call;
+`UseNonblocking` turns an established connection, of a client or a server, into one of these.
+The checks are those of the blocking `Start`. `TLSTestAsync` tests it, with a `TLS13Server` behind a
+relay that passes the server's records on in pieces of 7 bytes (run it in a scratch directory as
+`SSL_CERT_FILE=zq_tls_async.crt loksh TLSTestAsync.Run`; it writes that certificate). The tls
+library is under the LGPL version 3 (`src/lib/tls/LICENSE`).
+
 The same TLS has a server side, `TLS13Server`: a certificate chain with an ECDSA P-256 or RSA
 key (`TLSIdentity`), X25519 or P-256, the certificate chosen by the host name the client asks for,
 no session tickets. As a client it presents an identity when a server asks for a certificate.
