@@ -71,6 +71,10 @@ the line at the mouse the first one shown, a right click goes back a page (with 
 to the start), and a middle click goes to the place at the mouse, in proportion to the length of
 the text (with the left button, to the end).
 
+The arrow points up and to the left. With LeftHanded = Yes in the System section of Oberon.Text it
+points up and to the right, for the left hand; its tip stays where the mouse is. The setting is read
+when the desktop starts.
+
 ## Commands and their parameters
 
 A command runs where it stands. Clicking System.Directory fonts/*.Scn.Fnt lists the fonts, clicking
