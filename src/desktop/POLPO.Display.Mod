@@ -1938,6 +1938,8 @@ BEGIN
   END;
   Kernel.InstallTermHandler( CloseFB);
   res:=Linux0.IOCtl0( xfd, FBIOGETFSCREENINFO, SYSTEM.ADR( f));
+  (* polpo: the 68020 aligns 32-bit fields to 2 bytes: line_length follows ywrapstep at 42, not at 44 *)
+  IF Linux0.ARCH = "M68K" THEN SYSTEM.GET(SYSTEM.ADR(f) + 42, f.linelength) END;
   res:=Linux0.IOCtl0( xfd, FBIOGETVSCREENINFO, SYSTEM.ADR( v));
   rmr:=v.red.offset; rmw:=v.red.length;
   gmr:=v.green.offset; gmw:=v.green.length;
