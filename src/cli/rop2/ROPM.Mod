@@ -271,7 +271,8 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
   BEGIN Files.ReadLReal(oldSF, lr)
   END SymRLReal;
   
-  PROCEDURE CloseOldSym*;
+  PROCEDURE CloseOldSym*;  (* polpo: its descriptor back: a loksh compiles hundreds of modules (portia.Upgrade) *)
+  BEGIN Files.ReleaseRead(oldSFile); oldSFile := NIL
   END CloseOldSym;
 
   PROCEDURE OldSym*(VAR modName: ARRAY OF CHAR; VAR done: BOOLEAN);
@@ -313,7 +314,7 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
   END SymWLReal;
   
   PROCEDURE RegisterNewSym*;
-  BEGIN Files.Register(newSFile)
+  BEGIN Files.Register(newSFile); Files.ReleaseRead(newSFile)  (* polpo: the descriptor back, as in CloseOldSym *)
   END RegisterNewSym;
   
   PROCEDURE DeleteNewSym*;
@@ -388,7 +389,7 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
     WHILE ~ref.eof DO INC(refsize); ObjW(ch); Files.Read(ref, ch) END ;
     Files.Set(ObjF, ObjFile, 2); ObjWLInt(refsize);
     ObjWInt(nofexp); ObjWInt(nofdesc); ObjWInt(nofcom); ObjWInt(nofptr);
-    Files.Register(ObjFile)
+    Files.Register(ObjFile); Files.ReleaseRead(ObjFile)  (* polpo: the descriptor back *)
   END RegisterRefObj;
 
   PROCEDURE InitHost;
