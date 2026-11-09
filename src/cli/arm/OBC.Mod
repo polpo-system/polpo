@@ -1192,7 +1192,7 @@ END PopF;
       Files.Write(out,08BX);
       OutRefBlk(OBT.topScope.next, moduleBody, "$$");
       Files.Set(out, ObjFile, 2); Files.WriteLInt(out, refpos);
-        IF ~OBS.scanerr THEN Files.Register(ObjFile) END
+        IF ~OBS.scanerr THEN Files.Register(ObjFile); Files.ReleaseRead(ObjFile) END  (* polpo: the descriptor back *)
     ELSE OBS.Mark(153)
     END
   END OutCode;

@@ -387,7 +387,8 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
           obj.a0  := LocMod[0].a0; obj.a1 := LocMod[0].a1; obj.typ := notyp;
           IF OC.IsSoftFloatName(ModName) THEN softfloatImport:=obj END;
         ELSE OBS.Mark(151)
-        END
+        END;
+        Files.ReleaseRead(SymFile)  (* polpo: its descriptor back: a loksh compiles hundreds of modules (portia.Upgrade) *)
       ELSE OBS.Mark(152)   (*sym file not found*)
       END
     END
@@ -568,11 +569,12 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
           Files.Set(R, oldFile, 2); Files.ReadLInt(R, oldkey); Files.Set(W, newFile, 6);
           REPEAT Files.Read(R, ch0); Files.Read(W, ch1)
           UNTIL (ch0 # ch1) OR W.eof;
+          Files.ReleaseRead(oldFile);
           IF R.eof & W.eof THEN (*equal*) newSF := FALSE;  key := oldkey
-          ELSIF newSF THEN Files.Register(newFile)
+          ELSIF newSF THEN Files.Register(newFile); Files.ReleaseRead(newFile)  (* polpo: the descriptor back *)
           ELSE OBS.Mark(155)
           END
-        ELSE Files.Register(newFile); newSF := TRUE
+        ELSE Files.Register(newFile); Files.ReleaseRead(newFile); newSF := TRUE
         END
       ELSE newSF := FALSE
       END
