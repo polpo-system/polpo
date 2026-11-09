@@ -664,14 +664,9 @@ BEGIN
   END
 END List;
 
-(** portia.Info name -- a package *)
-PROCEDURE Info*;
-VAR name: Name; p: Package; n: LONGINT; it: Item;
+PROCEDURE InfoOf(p: Package);
+VAR n: LONGINT; it: Item;
 BEGIN
-  IF ~Arg(name) THEN Usage("Info name"); RETURN END;
-  IF ~LoadTree() THEN RETURN END;
-  p := Find(name);
-  IF p = NIL THEN NoPackage(name); RETURN END;
   Out.String(p.category); Out.Char("/"); Out.String(p.name); Out.Char(" "); Out.String(p.version); Out.String(": "); Out.String(p.desc); Out.Ln;
   ListItems("depends on:", p.deps); ListItems("provides:", p.provides); ListItems("conflicts with:", p.conflicts);
   ListItems("modules:", p.modules);
@@ -682,6 +677,16 @@ BEGIN
   n := 0; it := p.files; WHILE it # NIL DO INC(n); it := it.next END;
   Out.String("files: "); Out.Int(n, 0); Out.String(", installed: ");
   IF IsInstalled(p) THEN Out.String("yes") ELSE Out.String("no") END; Out.Ln
+END InfoOf;
+
+(** portia.Info name -- a package *)
+PROCEDURE Info*;
+VAR name: Name; p: Package;
+BEGIN
+  IF ~Arg(name) THEN Usage("Info name"); RETURN END;
+  IF ~LoadTree() THEN RETURN END;
+  p := Find(name);
+  IF p = NIL THEN NoPackage(name) ELSE InfoOf(p) END
 END Info;
 
 (** portia.Files name -- the files of a package on this architecture; "- " before the ones that
@@ -1930,6 +1935,34 @@ BEGIN
   END;
   SetArch(hostArch)
 END Fetch;
+
+(* ----- for programs (nersissa, the gadgets frontend): the tree as it is read, without the commands' output ----- *)
+
+(** the tree read anew (after portia.Sync) and the record of this architecture; FALSE without a tree *)
+PROCEDURE Reload*(): BOOLEAN;
+BEGIN packages := NIL; SetArch(hostArch); RETURN LoadTree()
+END Reload;
+
+(** the package at n of the tree (0, 1, ...; FALSE after the last): its name, category, version in the tree
+  and description; inst: the version installed here, "" if it is not installed; inBase: part of the base
+  system of this architecture; remote: from a repository of its own *)
+PROCEDURE GetPackage*(n: LONGINT; VAR name, category, version, inst, desc: ARRAY OF CHAR; VAR inBase, remote: BOOLEAN): BOOLEAN;
+VAR p: Package;
+BEGIN
+  p := packages; WHILE (p # NIL) & (n > 0) DO p := p.next; DEC(n) END;
+  IF (p = NIL) OR (n < 0) THEN RETURN FALSE END;
+  COPY(p.name, name); COPY(p.category, category); COPY(p.version, version); COPY(p.desc, desc);
+  IF ~IsInstalled(p) THEN inst[0] := 0X ELSIF ~InstVer(p, inst) THEN COPY(p.version, inst) END;
+  inBase := Has(base, p.name); remote := p.remote # "";
+  RETURN TRUE
+END GetPackage;
+
+(** what portia.Info name writes, with Out (a program sets Out.writer to catch it) *)
+PROCEDURE Describe*(name: ARRAY OF CHAR);
+VAR p: Package;
+BEGIN
+  IF LoadTree() THEN p := Find(name); IF p = NIL THEN NoPackage(name) ELSE InfoOf(p) END END
+END Describe;
 
 (** portia.Help -- what the commands do, with examples *)
 PROCEDURE Help*;
