@@ -515,8 +515,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
   PROCEDURE EndSlim*;
   BEGIN
     Files.Write(ModF, 0X); Commit(ModFile); Files.Write(newSymF, 0X); Commit(newSymFile);
-    Files.Register(ObjFile);
-    IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END
+    Files.Register(ObjFile); Files.ReleaseRead(ObjFile);  (* polpo: the descriptors back *)
+    IF SymFile # NIL THEN Files.Register(SymFile); Files.ReleaseRead(SymFile); SymFile := NIL END
   END EndSlim;
 
   PROCEDURE EndObj*;
@@ -526,8 +526,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
     Files.Set(ObjF, ObjFile, refpatch); ObjWBytes(refsize, 4);
     IF toMemory THEN memFile := ObjFile; SymFile := NIL
     ELSE
-      Files.Register(ObjFile);
-      IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
+      Files.Register(ObjFile); Files.ReleaseRead(ObjFile);  (* polpo: the descriptors back *)
+      IF SymFile # NIL THEN Files.Register(SymFile); Files.ReleaseRead(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
     END
   END EndObj;
 
@@ -539,8 +539,8 @@ MODULE OPM;  (** shared x86 compiler manager *)
     Files.Set(ObjF, ObjFile, refpatch); ObjWBytes(refsize, 4);
     IF toMemory THEN memFile := ObjFile; SymFile := NIL
     ELSE
-      Files.Register(ObjFile);
-      IF SymFile # NIL THEN Files.Register(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
+      Files.Register(ObjFile); Files.ReleaseRead(ObjFile);  (* polpo: the descriptors back *)
+      IF SymFile # NIL THEN Files.Register(SymFile); Files.ReleaseRead(SymFile); SymFile := NIL END  (* polpo: the .Sym with its .Obj *)
     END
   END CloseObj;
 
