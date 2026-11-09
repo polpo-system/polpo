@@ -78,6 +78,7 @@ TYPE
     sums: Item;  (* of a remote package: repository path, sum in r *)
     tcopy, tcmds, tok, tbad: Item;  (* [TESTS]: files to copy, commands, lines expected, texts refused *)
     tdisplay: BOOLEAN;  (* the tests need the desktop (X11) *)
+    here: BOOLEAN;  (* something for this architecture: modules listed for it or for all in [MODULES], or no [MODULES] *)
     next: Package
   END;
 
@@ -347,6 +348,7 @@ END Localize;
 (* load the package at entry, "category/name" (or "name") of the INDEX, in version *)
 PROCEDURE Load(VAR entry, version: ARRAY OF CHAR): Package;
 VAR path, name, cat: Name; buf: Buf; doc: TOML.Doc; p: Package; v: ARRAY 4096 OF CHAR; it: Item; mod: Name; i, j, k: LONGINT;
+  ms: TOML.Section;
 BEGIN
   i := 0; k := -1; WHILE entry[i] # 0X DO IF entry[i] = "/" THEN k := i END; INC(i) END;
   i := 0; WHILE i < k DO cat[i] := entry[i]; INC(i) END; cat[i] := 0X;
@@ -371,6 +373,8 @@ BEGIN
   COPY("DEPS.", mod); Append(mod, arch); Keys(doc, mod, p.deps);  (* [DEPS.x86]: only on that architecture *)
   IF Field(doc, "MODULES", "all", v) THEN AddSources(p.sources, v) END;
   IF Field(doc, "MODULES", arch, v) THEN AddSources(p.sources, v) END;
+  mod := "MODULES"; ms := TOML.GetSection(doc, mod);  (* the module lists name other architectures only: nothing here *)
+  p.here := (ms = NIL) OR (ms.first = NIL) OR Field(doc, "MODULES", "all", v) OR Field(doc, "MODULES", arch, v);
   Commands(doc, "BUILD", arch, p.build);
   IF Field(doc, "FILES", "all", v) THEN AddWords(p.files, v) END;
   IF Field(doc, "FILES", arch, v) THEN AddWords(p.files, v) END;
@@ -637,7 +641,8 @@ END ListItems;
 
 (** portia.List [category] -- the packages of the tree (of one category: linux, system,
   devel, apps, games, lib); i: installed here, u: a newer version in the tree, s: the sources of a
-  remote package downloaded, not installed; r: a remote package *)
+  remote package downloaded, not installed; r: a remote package; -: nothing for this architecture (its
+  module lists name other ones) *)
 PROCEDURE List*;
 VAR p: Package; n: LONGINT; v: ARRAY 32 OF CHAR; cat: Name; all: BOOLEAN;
 BEGIN
@@ -647,7 +652,9 @@ BEGIN
   WHILE p # NIL DO
    IF all OR (p.category = cat) THEN
     IF ~IsInstalled(p) THEN
-      IF (p.remote # "") & HasSources(p) THEN Out.String("s ") ELSE Out.String("  ") END  (* downloaded, not built *)
+      IF ~p.here THEN Out.String("- ")  (* nothing for this architecture *)
+      ELSIF (p.remote # "") & HasSources(p) THEN Out.String("s ") ELSE Out.String("  ")  (* downloaded, not built *)
+      END
     ELSIF haveDb & InstVer(p, v) & ~Versions.AtLeast(v, p.version) THEN Out.String("u ")  (* upgradable *)
     ELSE Out.String("i ")
     END;
@@ -676,7 +683,8 @@ BEGIN
   END;
   n := 0; it := p.files; WHILE it # NIL DO INC(n); it := it.next END;
   Out.String("files: "); Out.Int(n, 0); Out.String(", installed: ");
-  IF IsInstalled(p) THEN Out.String("yes") ELSE Out.String("no") END; Out.Ln
+  IF IsInstalled(p) THEN Out.String("yes") ELSE Out.String("no") END; Out.Ln;
+  IF ~p.here THEN Out.String("nothing for "); Out.String(arch); Out.String(": its modules are for other architectures"); Out.Ln END
 END InfoOf;
 
 (** portia.Info name -- a package *)
@@ -812,6 +820,7 @@ BEGIN
     WHILE it # NIL DO
       q := Resolve(it.s);
       IF q = NIL THEN Out.String(p.name); Out.String(": needs "); Out.String(it.s); Out.String(", not in the tree"); Out.Ln; INC(problems)
+      ELSIF ~IsInstalled(q) & ~q.here THEN  (* nothing of it for this architecture *)
       ELSIF ~IsInstalled(q) THEN Out.String(p.name); Out.String(": needs "); Out.String(it.s); Out.String(", not installed"); Out.Ln; INC(problems)
       ELSIF haveDb & InstVer(q, v) & (it.v # "") & ~Versions.AtLeast(v, it.v) THEN
         Out.String(p.name); Out.String(": needs "); Out.String(q.name); Out.String(" "); Out.String(it.v);
@@ -1552,7 +1561,7 @@ BEGIN
       Pre; Out.String(p.name); Out.String(" needs "); Out.String(q.name); Out.String(" "); Out.String(it.v);
       Out.String(", the tree has "); Out.String(q.version); Out.Ln; RETURN FALSE
     END;
-    IF ~Has(set, q.name) & (~IsInstalled(q) OR haveDb & InstVer(q, v) & (it.v # "") & ~Versions.AtLeast(v, it.v)) THEN
+    IF ~Has(set, q.name) & q.here & (~IsInstalled(q) OR haveDb & InstVer(q, v) & (it.v # "") & ~Versions.AtLeast(v, it.v)) THEN
       Add(set, q.name);
       IF ~AddNeeded(q, set) THEN RETURN FALSE END
     END;
@@ -1673,6 +1682,7 @@ BEGIN
     IF p = NIL THEN NoPackage(it.s); ok := FALSE
     ELSIF IsInstalled(p) & haveDb & InstVer(p, v) & Versions.AtLeast(v, p.version) THEN
       Pre; Out.String(p.name); Out.Char(" "); Out.String(v); Out.String(" is installed"); Out.Ln
+    ELSIF ~p.here THEN Pre; Out.String(p.name); Out.String(" has nothing for "); Out.String(arch); Out.Ln; ok := FALSE
     ELSE Add(set, p.name); ok := AddNeeded(p, set)
     END;
     it := it.next
@@ -1956,6 +1966,14 @@ BEGIN
   inBase := Has(base, p.name); remote := p.remote # "";
   RETURN TRUE
 END GetPackage;
+
+(** TRUE if the package name has something for this architecture: modules for it or for all, or no modules *)
+PROCEDURE ForArch*(name: ARRAY OF CHAR): BOOLEAN;
+VAR p: Package;
+BEGIN
+  IF ~LoadTree() THEN RETURN FALSE END;
+  p := Find(name); RETURN (p # NIL) & p.here
+END ForArch;
 
 (** what portia.Info name writes, with Out (a program sets Out.writer to catch it) *)
 PROCEDURE Describe*(name: ARRAY OF CHAR);
