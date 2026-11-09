@@ -1756,10 +1756,27 @@ PROCEDURE DrmIoctl(fd, nr, size, adr: LONGINT): LONGINT;
 BEGIN RETURN Linux0.IOCtl0(fd, -40000000H + size*10000H + 6400H + nr, adr)
 END DrmIoctl;
 
-PROCEDURE U16(adr: LONGINT): LONGINT;  (* an unsigned 16-bit field *)
-VAR lo, hi: CHAR;
-BEGIN SYSTEM.GET(adr, lo); SYSTEM.GET(adr+1, hi); RETURN LONG(ORD(lo)) + 256*LONG(ORD(hi))
+PROCEDURE U16(adr: LONGINT): LONGINT;  (* an unsigned 16-bit field, in the byte order of the machine *)
+VAR v: INTEGER;
+BEGIN SYSTEM.GET(adr, v); RETURN LONG(v) MOD 10000H
 END U16;
+
+(* polpo: the 64-bit fields of the DRM structures, as two LONGINTs at a[i]: the low word first on a little-endian
+  machine, second on a big-endian one (PowerPC, big-endian MIPS, 68020); pointers and sizes fit the low word *)
+PROCEDURE Put64(VAR a: ARRAY OF LONGINT; i, v: LONGINT);
+BEGIN
+  IF bigEndian THEN a[i]:=0; a[i+1]:=v ELSE a[i]:=v; a[i+1]:=0 END
+END Put64;
+
+PROCEDURE Low64(VAR a: ARRAY OF LONGINT; i: LONGINT): LONGINT;
+BEGIN
+  IF bigEndian THEN RETURN a[i+1] ELSE RETURN a[i] END
+END Low64;
+
+PROCEDURE High64(VAR a: ARRAY OF LONGINT; i: LONGINT): LONGINT;
+BEGIN
+  IF bigEndian THEN RETURN a[i] ELSE RETURN a[i+1] END
+END High64;
 
 PROCEDURE PutImageKMS(x, y, w, h: LONGINT);  (* drivers that copy the buffer to the screen want to know what changed *)
 VAR cmd: ARRAY 6 OF LONGINT; clip: ARRAY 2 OF LONGINT; res: LONGINT;
@@ -1768,7 +1785,7 @@ BEGIN
   IF (w>0) & (h>0) THEN
     y:=Height-y-h;  (* from the top *)
     clip[0]:=Pair(x, y); clip[1]:=Pair(x+w, y+h);  (* drm_clip_rect: x1, y1, x2, y2 *)
-    cmd[0]:=kmsFb; cmd[1]:=0; cmd[2]:=0; cmd[3]:=1; cmd[4]:=SYSTEM.ADR(clip); cmd[5]:=0;
+    cmd[0]:=kmsFb; cmd[1]:=0; cmd[2]:=0; cmd[3]:=1; Put64(cmd, 4, SYSTEM.ADR(clip));
     res:=DrmIoctl(xfd, 0B1H, 24, SYSTEM.ADR(cmd))  (* DIRTYFB *)
   END
 END PutImageKMS;
@@ -1791,8 +1808,8 @@ BEGIN
   res:=DrmIoctl(fd, 0A0H, 64, SYSTEM.ADR(r));  (* GETRESOURCES: the counts *)
   IF res#0 THEN WriteSH("KMS: GETRESOURCES failed ", res); RETURN -1 END;
   NEW(fbs, r[8]+1); NEW(crtcs, r[9]+1); NEW(conns, r[10]+1); NEW(encs, r[11]+1);
-  r[0]:=SYSTEM.ADR(fbs[0]); r[1]:=0; r[2]:=SYSTEM.ADR(crtcs[0]); r[3]:=0;
-  r[4]:=SYSTEM.ADR(conns[0]); r[5]:=0; r[6]:=SYSTEM.ADR(encs[0]); r[7]:=0;
+  Put64(r, 0, SYSTEM.ADR(fbs[0])); Put64(r, 2, SYSTEM.ADR(crtcs[0]));
+  Put64(r, 4, SYSTEM.ADR(conns[0])); Put64(r, 6, SYSTEM.ADR(encs[0]));
   res:=DrmIoctl(fd, 0A0H, 64, SYSTEM.ADR(r));  (* the ids *)
   (* the first connected connector with modes *)
   conn:=-1; n:=0;
@@ -1802,8 +1819,8 @@ BEGIN
     res:=DrmIoctl(fd, 0A7H, 80, SYSTEM.ADR(c));  (* GETCONNECTOR: the counts, probes the modes *)
     IF (res=0) & (c[15]=1) & (c[8]>0) THEN
       nmodes:=c[8]; NEW(modes, 17*nmodes); NEW(props, c[9]+1); NEW(vals, 2*c[9]+2); NEW(cencs, c[10]+1);
-      c[0]:=SYSTEM.ADR(cencs[0]); c[1]:=0; c[2]:=SYSTEM.ADR(modes[0]); c[3]:=0;
-      c[4]:=SYSTEM.ADR(props[0]); c[5]:=0; c[6]:=SYSTEM.ADR(vals[0]); c[7]:=0;
+      Put64(c, 0, SYSTEM.ADR(cencs[0])); Put64(c, 2, SYSTEM.ADR(modes[0]));
+      Put64(c, 4, SYSTEM.ADR(props[0])); Put64(c, 6, SYSTEM.ADR(vals[0]));
       res:=DrmIoctl(fd, 0A7H, 80, SYSTEM.ADR(c));
       IF (res=0) & (c[8]>0) & (c[8]<=nmodes) THEN conn:=conns[n] END
     END;
@@ -1827,7 +1844,7 @@ BEGIN
   d[0]:=h; d[1]:=w; d[2]:=32; d[3]:=0; d[4]:=0; d[5]:=0; d[6]:=0; d[7]:=0;
   res:=DrmIoctl(fd, 0B2H, 32, SYSTEM.ADR(d));  (* CREATE_DUMB *)
   IF res#0 THEN WriteSH("KMS: CREATE_DUMB failed ", res); RETURN -1 END;
-  handle:=d[4]; pitch:=d[5]; size:=d[6];
+  handle:=d[4]; pitch:=d[5]; size:=Low64(d, 6);
   a[0]:=0; a[1]:=w; a[2]:=h; a[3]:=pitch; a[4]:=32; a[5]:=24; a[6]:=handle;
   res:=DrmIoctl(fd, 0AEH, 28, SYSTEM.ADR(a));  (* ADDFB *)
   IF res#0 THEN WriteSH("KMS: ADDFB failed ", res); RETURN -1 END;
@@ -1835,11 +1852,11 @@ BEGIN
   m[0]:=handle; m[1]:=0; m[2]:=0; m[3]:=0;
   res:=DrmIoctl(fd, 0B3H, 16, SYSTEM.ADR(m));  (* MAP_DUMB: the offset for mmap *)
   IF res#0 THEN WriteSH("KMS: MAP_DUMB failed ", res); RETURN -1 END;
-  lo:=m[2]; hi:=m[3];
+  lo:=Low64(m, 2); hi:=High64(m, 2);
   fbadr:=Linux0.Mmap20(0, size, 3, Linux0.MAPSHARED, fd, SYSTEM.LSH(lo, -12) + hi*100000H);  (* mmap2: pages *)
   IF (fbadr>-4096) & (fbadr<0) THEN WriteSH("KMS: can't mmap the buffer ", -fbadr); RETURN -1 END;
   kmsConn[0]:=conn;
-  sc[0]:=SYSTEM.ADR(kmsConn[0]); sc[1]:=0; sc[2]:=1; sc[3]:=crtc; sc[4]:=fb; sc[5]:=0; sc[6]:=0; sc[7]:=0; sc[8]:=1;
+  Put64(sc, 0, SYSTEM.ADR(kmsConn[0])); sc[2]:=1; sc[3]:=crtc; sc[4]:=fb; sc[5]:=0; sc[6]:=0; sc[7]:=0; sc[8]:=1;
   i:=0; WHILE i<17 DO sc[9+i]:=modes[17*best+i]; INC(i) END;
   res:=DrmIoctl(fd, 0A2H, 104, SYSTEM.ADR(sc));  (* SETCRTC *)
   IF res#0 THEN WriteSH("KMS: SETCRTC failed (another program shows the screen?) ", res); RETURN -1 END;
