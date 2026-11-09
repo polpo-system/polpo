@@ -292,6 +292,9 @@ VAR
   kmsFb: LONGINT;  (* polpo: the KMS framebuffer id, for DIRTYFB *)
   kmsSc: ARRAY 26 OF LONGINT;  (* polpo: drm_mode_crtc of SETCRTC, again after a VT switch; 0 without KMS *)
   kmsConn: ARRAY 1 OF LONGINT;  (* the connector it names *)
+  kmsMap: LONGINT;  (* polpo, big-endian KMS: the DRM buffer; polpo draws in kmsShadow and PutImageKMSSwap copies *)
+  kmsShadow: POINTER TO ARRAY OF LONGINT;
+  kmsDirty: BOOLEAN;  (* the driver wants DIRTYFB *)
   bigEndian: BOOLEAN;  (* polpo: the machine keeps the most significant byte first *)
   swapPix: BOOLEAN;  (* polpo: the X server reads pixels in the other byte order: SendX11 swaps them *)
   swbuf: POINTER TO ARRAY OF CHAR;  (* the swapped rows *)
@@ -1790,6 +1793,31 @@ BEGIN
   END
 END PutImageKMS;
 
+(* polpo, big-endian KMS: the DRM buffer is little-endian XRGB8888; the rectangle (x, y from the bottom) goes
+  from the buffer polpo draws in to it, the bytes of each pixel reversed *)
+PROCEDURE PutImageKMSSwap(x, y, w, h: LONGINT);
+VAR row, i, src, dst, v: LONGINT;
+BEGIN
+  IF x<0 THEN INC(w, x); x:=0 END;
+  IF y<0 THEN INC(h, y); y:=0 END;
+  IF x+w>Width THEN w:=Width-x END;
+  IF y+h>Height THEN h:=Height-y END;
+  IF (w>0) & (h>0) THEN
+    row:=Height-y-h;
+    WHILE row<Height-y DO
+      src:=fbadr+(row*linelength+x)*4; dst:=kmsMap+(row*linelength+x)*4; i:=w;
+      WHILE i>0 DO
+        SYSTEM.GET(src, v);
+        SYSTEM.PUT(dst, SYSTEM.VAL(LONGINT, SYSTEM.VAL(SET, SYSTEM.LSH(v, 24)) + SYSTEM.VAL(SET, SYSTEM.LSH(v, 8))*{16..23}
+          + SYSTEM.VAL(SET, SYSTEM.LSH(v, -8))*{8..15} + SYSTEM.VAL(SET, SYSTEM.LSH(v, -24))));
+        INC(src, 4); INC(dst, 4); DEC(i)
+      END;
+      INC(row)
+    END;
+    IF kmsDirty THEN PutImageKMS(x, y, w, h) END
+  END
+END PutImageKMSSwap;
+
 PROCEDURE InitKMS(): LONGINT;
 TYPE Words = POINTER TO ARRAY OF LONGINT;
 VAR fd, res, i, n, conn, nmodes, best, enc, crtc, w, h, pitch, size, handle, fb, lo, hi: LONGINT;
@@ -1799,6 +1827,7 @@ VAR fd, res, i, n, conn, nmodes, best, enc, crtc, w, h, pitch, size, handle, fb,
   d: ARRAY 8 OF LONGINT;  (* drm_mode_create_dumb *)
   a: ARRAY 7 OF LONGINT;  (* drm_mode_fb_cmd *)
   m: ARRAY 4 OF LONGINT;  (* drm_mode_map_dumb *)
+  f2: ARRAY 26 OF LONGINT;  (* drm_mode_fb_cmd2 *)
   sc: ARRAY 26 OF LONGINT;  (* drm_mode_crtc *)
   fbs, crtcs, conns, encs, modes, props, vals, cencs: Words;
 BEGIN
@@ -1845,16 +1874,30 @@ BEGIN
   res:=DrmIoctl(fd, 0B2H, 32, SYSTEM.ADR(d));  (* CREATE_DUMB *)
   IF res#0 THEN WriteSH("KMS: CREATE_DUMB failed ", res); RETURN -1 END;
   handle:=d[4]; pitch:=d[5]; size:=Low64(d, 6);
-  a[0]:=0; a[1]:=w; a[2]:=h; a[3]:=pitch; a[4]:=32; a[5]:=24; a[6]:=handle;
-  res:=DrmIoctl(fd, 0AEH, 28, SYSTEM.ADR(a));  (* ADDFB *)
-  IF res#0 THEN WriteSH("KMS: ADDFB failed ", res); RETURN -1 END;
-  fb:=a[0];
+  fb:=0;
+  IF bigEndian THEN  (* polpo: little-endian XRGB8888 by name; PutImageKMSSwap fills it *)
+    i:=0; WHILE i<26 DO f2[i]:=0; INC(i) END;
+    f2[1]:=w; f2[2]:=h; f2[3]:=34325258H; f2[5]:=handle; f2[9]:=pitch;  (* XR24; handles[0], pitches[0] *)
+    res:=DrmIoctl(fd, 0B8H, 104, SYSTEM.ADR(f2));  (* ADDFB2 *)
+    IF res=0 THEN fb:=f2[0]
+    ELSIF res#-95 THEN WriteSH("KMS: ADDFB2 failed ", res); RETURN -1
+    END
+    (* -95 (EOPNOTSUPP): a big-endian kernel refuses ADDFB2 for drivers without quirk_addfb_prefer_host_byte_order
+      (radeon); ADDFB then, which such a driver also scans out as little-endian XRGB8888 (the radeon of an iBook G4) *)
+  END;
+  IF fb=0 THEN
+    a[0]:=0; a[1]:=w; a[2]:=h; a[3]:=pitch; a[4]:=32; a[5]:=24; a[6]:=handle;
+    res:=DrmIoctl(fd, 0AEH, 28, SYSTEM.ADR(a));  (* ADDFB *)
+    IF res#0 THEN WriteSH("KMS: ADDFB failed ", res); RETURN -1 END;
+    fb:=a[0]
+  END;
   m[0]:=handle; m[1]:=0; m[2]:=0; m[3]:=0;
   res:=DrmIoctl(fd, 0B3H, 16, SYSTEM.ADR(m));  (* MAP_DUMB: the offset for mmap *)
   IF res#0 THEN WriteSH("KMS: MAP_DUMB failed ", res); RETURN -1 END;
   lo:=Low64(m, 2); hi:=High64(m, 2);
   fbadr:=Linux0.Mmap20(0, size, 3, Linux0.MAPSHARED, fd, SYSTEM.LSH(lo, -12) + hi*100000H);  (* mmap2: pages *)
   IF (fbadr>-4096) & (fbadr<0) THEN WriteSH("KMS: can't mmap the buffer ", -fbadr); RETURN -1 END;
+  IF bigEndian THEN kmsMap:=fbadr; NEW(kmsShadow, size DIV 4); fbadr:=SYSTEM.ADR(kmsShadow[0]) END;
   kmsConn[0]:=conn;
   Put64(sc, 0, SYSTEM.ADR(kmsConn[0])); sc[2]:=1; sc[3]:=crtc; sc[4]:=fb; sc[5]:=0; sc[6]:=0; sc[7]:=0; sc[8]:=1;
   i:=0; WHILE i<17 DO sc[9+i]:=modes[17*best+i]; INC(i) END;
@@ -1868,7 +1911,8 @@ BEGIN
   kmsFb:=fb; xfd:=fd;
   i:=0; WHILE i<6 DO r[i]:=0; INC(i) END;  (* drivers without DIRTYFB (most) show the buffer itself *)
   r[0]:=fb; r[3]:=0;
-  IF DrmIoctl(fd, 0B1H, 24, SYSTEM.ADR(r))=0 THEN PutImage:=PutImageKMS END;
+  kmsDirty:=DrmIoctl(fd, 0B1H, 24, SYSTEM.ADR(r))=0;
+  IF bigEndian THEN PutImage:=PutImageKMSSwap ELSIF kmsDirty THEN PutImage:=PutImageKMS END;
   IF trace THEN WriteSH("KMS width ", w); WriteSH("KMS height ", h); WriteSH("KMS pitch ", pitch) END;
   RETURN fd
 END InitKMS;
