@@ -98,6 +98,8 @@ scheduling of tasks, cursor handling and command execution.
   resume: BOOLEAN;  (* polpo: the innermost Pause is to end *)
   Arrow*, Star*: Marker;  (** Normal Oberon arrow, and the star marker. *)
   Mouse*, Pointer*: Cursor;  (** Normal Oberon mouse, and the star pointer. *)
+  leftArrow: Display.Pattern;  (* polpo: the arrow mirrored, for System.LeftHanded = Yes *)
+  leftHanded: BOOLEAN;
 
     Log*: Texts.Text;  (** The Oberon log. *)
     Par*: ParList;  (** Actual parameters of executed command. *)
@@ -146,7 +148,9 @@ scheduling of tasks, cursor handling and command execution.
     BEGIN
     Display.GetClip(cx, cy, cw, ch);
     Display.SetClip(0, 0, Display.Width, Display.Height);
-    Display.CopyPattern(Display.FG, Display.arrow, X, Y - 14, 2);
+    IF leftHanded THEN Display.CopyPattern(Display.FG, leftArrow, X - 14, Y - 14, 2)  (* polpo: its tip at the right *)
+    ELSE Display.CopyPattern(Display.FG, Display.arrow, X, Y - 14, 2)
+    END;
     Display.SetClip(cx, cy, cw, ch)
     END FlipArrow;
 
@@ -637,6 +641,28 @@ the garbage collector, if no mouse or keyboard events are arriving. *)
     END
   END Pause;
 
+  (* polpo: System.LeftHanded = Yes in Oberon.Text: the arrow of Display (CreatePatterns) mirrored, pointing up
+    and to the right; its tip stays at the mouse position *)
+  PROCEDURE InitArrow;
+  VAR S: Texts.Scanner; image: ARRAY 16 OF SET; m: SET; i, b: INTEGER;
+  BEGIN
+    leftHanded := FALSE;
+    OpenScanner(S, "System.LeftHanded");
+    IF (S.class = Texts.Name) & (S.s = "Yes") THEN
+      image[0] := {13}; image[1] := {12..14}; image[2] := {11..13}; image[3] := {10..12}; image[4] := {9..11};
+      image[5] := {8..10}; image[6] := {7..9}; image[7] := {0, 6..8}; image[8] := {0, 1, 5..7}; image[9] := {0..2, 4..6};
+      image[10] := {0..5}; image[11] := {0..4}; image[12] := {0..5}; image[13] := {0..6}; image[14] := {0..7};
+      image[15] := {};
+      i := 0;
+      WHILE i < 15 DO
+        m := {}; b := 0;
+        WHILE b < 15 DO IF b IN image[i] THEN INCL(m, 14 - b) END; INC(b) END;
+        image[i] := m; INC(i)
+      END;
+      leftArrow := Display.NewPattern(15, 15, image); leftHanded := TRUE
+    END
+  END InitArrow;
+
   PROCEDURE Init;
   VAR s: ARRAY 8 OF CHAR;
   BEGIN
@@ -653,6 +679,7 @@ BEGIN
   Log := Oberon0.Log; OpenText := NIL; CurTask := NIL;
   In.selection := GetSelection; In.marked := MarkedText;  (* polpo: ^ and * for In *)
   idle := FALSE; paused := 0; resume := FALSE; Input.Pause := Pause;  (* polpo: Ctrl+Alt+P; commands run before Loop (System.InitCommands) are not idle *)
+  InitArrow;
   Arrow.Fade := FlipArrow; Arrow.Draw := FlipArrow;
   Star.Fade := FlipStar; Star.Draw := FlipStar;
   OpenCursor(Mouse); OpenCursor(Pointer);

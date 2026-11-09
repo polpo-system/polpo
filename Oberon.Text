@@ -12,6 +12,7 @@ System = {
   }
   FontScale = 150  {* screen font scale in percent, see System.SetFontScale *}
   LineSpacing = 100  {* line spacing of text viewers in percent of each line's height *}
+  LeftHanded = No  {* Yes: the mouse arrow points up and to the right, for the left hand *}
   TimeDiff = "+0000"  {* time difference of PC clock to GMT *}
 }
 
