@@ -207,7 +207,7 @@ VAR
 
 PROCEDURE WriteChar*(c: CHAR);
 BEGIN
-  IF Linux0.Write0( tracefd, SYSTEM.ADR(c),  1)#1 THEN HALT(99H) END;;
+  IF (tracefd >= 0) & (Linux0.Write0( tracefd, SYSTEM.ADR(c),  1)#1) THEN HALT(99H) END;
 END WriteChar;
 
 (** WriteString - Write a string *)
@@ -217,7 +217,7 @@ VAR l: LONGINT;
 BEGIN
   l:=0;
   WHILE (l< LEN(s)) & (s[l]# 0X ) DO INC( l) END;
-  IF Linux0.Write0(tracefd, SYSTEM.ADR(s),  l)# l THEN HALT(93H) END;
+  IF (tracefd >= 0) & (Linux0.Write0(tracefd, SYSTEM.ADR(s),  l)# l) THEN HALT(93H) END;
 END WriteString;
 
 (** WriteLn - Skip to the next line on trace output *)
@@ -1548,12 +1548,23 @@ BEGIN
   END;
 END InitTrapHandling;
 
+(* polpo: the system (an image with the module loksh) keeps its trace in Kernel.Log of the current
+  directory; a program linked without loksh writes none *)
+PROCEDURE OpenTrace;
+VAR m: Module;
+BEGIN
+  m := modules; WHILE (m # NIL) & (m.name # "loksh") DO m := m.next END;
+  IF m # NIL THEN tracefd:= Linux0.Creat0(SYSTEM.ADR(TRACE), SYSTEM.VAL(LONGINT, {2, 5, 7, 8}))
+  ELSE tracefd := -1
+  END
+END OpenTrace;
+
 PROCEDURE Init;
 VAR  val: ARRAY 8 OF CHAR; i: LONGINT;
 BEGIN
   i:=Linux0.GetTimeOfDay(SYSTEM.ADR(startTime), 0);
   siglevel:=0;
-  tracefd:= Linux0.Creat0(SYSTEM.ADR(TRACE), SYSTEM.VAL(LONGINT, {2, 5, 7, 8}));
+  OpenTrace;
   WriteString( version); WriteString( Linux0.ARCH); WriteString( DATE);WriteLn;
   IF traceheap # {} THEN
     WriteString("StackOrg"); WriteHex(Linux0.StackOrg, 10);  WriteLn;
