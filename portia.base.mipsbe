@@ -6,6 +6,7 @@ toml 0.1.0
 versions 0.1.0
 portia 0.1.0
 polpo-tools 0.1.0
+program 0.1.0
 zlib 0.1.0
 gzip 0.1.0
 tar 0.1.0

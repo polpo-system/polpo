@@ -209,6 +209,45 @@ same process. Loaded modules and their global variables stay from one command to
 does the current directory: after fs.Cd, plain file names are looked up there first and then on
 the search path of polpo.
 
+## Linux programs of their own
+
+program.Make makes a static Linux program of modules: one file that runs without loksh and without
+the polpo directory.
+
+    loksh program.Make hello.Mod
+    ./hello
+
+Each name after the options is a source, which is compiled first (with /s, into obj/<arch>/ of the
+current directory, which Make creates when it is missing), or the name of a module compiled
+before. The last one is the program. Its body runs when the program starts, after the bodies of
+the modules it imports, and the program ends after it. With /main Module.Command the program calls
+the command instead, and the command gets the program's arguments as its parameters, the way
+loksh Module.Command args gives them. So the console commands become programs:
+
+    loksh program.Make /main fs.Ls /out ls
+    ./ls obj/x86
+
+/out names the file; without it the program has the name of its module. /arch makes the program
+for another port with that port's compiler and linker; the cross compilers run on x86:
+
+    loksh program.Make /arch riscv /out hello.rv hello.Mod
+    qemu-riscv32 ./hello.rv
+
+The program holds the modules it imports, directly or through others, and no more. A hello on Out
+is about 135 KB, fs.Ls as a program about 250 KB on x86. Modules that are not linked in can still
+be loaded if the program imports Modules (Oberon0 does, and so do Texts and most console
+commands); they come from obj/<arch>/ of the polpo directory, found as loksh finds it. A trap is
+shown on the standard error with the procedures on the stack, as in loksh, and the program then
+ends with exit status 2. Kernel.Shutdown(1) ends it at once with status 0. loksh writes its trace
+into Kernel.Log of the current directory; a program writes none.
+
+Make writes a start module, ProgMain, compiles it and links the program with it, and deletes it
+again. ProgMain imports progstart, whose body installs the trap handler before the other modules
+start, the program's module and Kernel, and its body ends with Kernel.Shutdown(1). The linkers
+(linker for x86, alinker for ARM, rlinker for the ROP2 ports) load the imports of the modules
+they are given themselves, imports first, from obj/<arch>/ of the current directory and then from
+polpo's.
+
 ## When a command is stopped
 
 A command can stop early in two ways. Someone stops it: Ctrl+C in the terminal where loksh runs,

@@ -47,8 +47,9 @@ gadgets](gentle-gadgets.md).
 
 To use the desktop (the mouse, commands in texts, editing, fonts, stopping and pausing commands),
 read [desktop.md](desktop.md). To write your own modules and commands, read
-[programming.md](programming.md): arguments, how loksh runs commands, Ctrl+C and traps, closing resources with `Oberon0.OnStop`, and code
-that compiles on all ports.
+[programming.md](programming.md): arguments, how loksh runs commands, static Linux programs made with
+`program.Make`, Ctrl+C and traps, closing resources with `Oberon0.OnStop`, and code that compiles on
+all ports.
 
 Look at [compiler options](compiler_options.md) or do
 
