@@ -55,7 +55,7 @@ MODULE linker;  (** non-portable *)  (** JdV / dVdW / pjm / prk *)
 *)
 
 IMPORT
-  Linux0, S := SYSTEM, Kernel, Files, Texts, (*Fonts,*) Oberon := Oberon0, Out;
+  Linux0, S := SYSTEM, Kernel, Files, Texts, (*Fonts,*) Oberon := Oberon0, Out, Root;
 
 CONST
   Boundary = 32;  (* boundaries on which Oberon GC allocates blocks (=32) *)
@@ -279,6 +279,7 @@ VAR
   logWriter: Texts.Writer;
 
   res: INTEGER;  (* last loader error *)
+  depth: INTEGER;  (* polpo: of imports being loaded *)
 
   W: Texts.Writer;
 
@@ -536,6 +537,15 @@ END ReadUnsigned;
 
 (*---- module loading ---- *)
 
+(* polpo: the object file of an imported module that was not named, without ".Obj": in obj/x86/ of the
+  current directory, else in the root's *)
+PROCEDURE ImportPath (name: ARRAY OF CHAR; VAR path: ARRAY OF CHAR);
+VAR obj: ARRAY 256 OF CHAR;
+BEGIN
+  Root.Obj ("x86", path); Concat (path, name, path); Concat (path, ".Obj", obj);
+  IF Files.Old (obj) = NIL THEN Root.RootObj ("x86", path); Concat (path, name, path) END
+END ImportPath;
+
 PROCEDURE^ Load (VAR m: Module; name: ARRAY OF CHAR; VAR base: LONGINT);
 
 PROCEDURE LoadModule (VAR R: Files.Rider; m: Module; VAR base: LONGINT);
@@ -544,7 +554,7 @@ PROCEDURE LoadModule (VAR R: Files.Rider; m: Module; VAR base: LONGINT);
     ch: CHAR;
     tmp, nofDataLinks, nofLinks: INTEGER;
     i, mno, j, symSize, e, k, t: LONGINT;
-    imp: Module; mname: ModuleName;
+    imp: Module; mname: ModuleName; path: ARRAY 256 OF CHAR;
     body: Command; linkTab: LinkTab; dataLinks: DataLinkTab;
     (*
     types: ARRAY 128 OF RECORD
@@ -956,6 +966,11 @@ PROCEDURE LoadModule (VAR R: Files.Rider; m: Module; VAR base: LONGINT);
     WHILE (mno < m.nofImps) & (res = done) DO
       ReadString (R, mname);
       imp := FindModule (mname);
+      IF imp = NIL THEN  (* polpo: loaded here, before the module, as the module loader does *)
+        IF depth >= DefMaxImport THEN Halt ("Imports too deep or cyclic") END;
+        ImportPath (mname, path); INC (depth); Load (imp, path, base); DEC (depth);
+        IF res # done THEN RETURN END
+      END;
       IF imp = NIL THEN Halt("Imported module not loaded") END;
       IF res = done THEN
         INC (imp.refcnt);
@@ -1999,7 +2014,7 @@ BEGIN
   Out.String("X86 Static BootLinker"); Out.Ln;
   Texts.WriteString(W, " linking ");
   Texts.Append(Oberon.Log, W.buf);
-  Initialise;
+  Initialise; depth := 0;
   imageSize := 0; imageBase :=-1;
   Texts.OpenScanner (S, Oberon.Par.text, Oberon.Par.pos);
   Texts.Scan (S);

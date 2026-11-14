@@ -19,7 +19,9 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   Warning: softDiv hard coded! 
   polpo: console frontend (was RBootLinker); target and object directory from options,
     by default the host architecture (Linux0.ARCH) and obj/<arch>/.
-    
+  polpo: the pseudo-heap starts at BootHeapSize and a link that does not fit is done again with
+    twice the size; the tables of fixes and byte regions grow, so images of any size can be linked.
+
 *)
   IMPORT S := SYSTEM, Linux0, Files, Root, Oberon := Oberon0, Texts, Con := Out, logs;
 
@@ -32,8 +34,9 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
 
     OptionChar = "\";
 
-    NofPtrFix = 2000;  (* < 400 used for normal OLR static core *)
+    NofPtrFix = 2000;  (* < 400 used for normal OLR static core; polpo: the first size, it grows *)
     NofRaw = 4000;  (* polpo: byte regions and 16-bit fields of the image, for big-endian targets *)
+    MaxMods = 64;  (* polpo: modules named in one Link *)
     
   ELF32hdrsz= 52;
   PHT32size= 32;  (* +12 byte padding *)
@@ -46,6 +49,9 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   ELFsize=ELFhdrsz+PHTsize+PadSize;  (* 96 *)
 *)
 
+  TYPE
+    Longs = POINTER TO ARRAY OF LONGINT;
+
   VAR
     W: Texts.Writer;
     heapAdr, bootEntryAdr, shift0, modulesVal: LONGINT;
@@ -53,8 +59,12 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     softDiv: LONGINT;
     showEntries : BOOLEAN;
     heap: S.PTR;
-    ptrFix: ARRAY NofPtrFix OF LONGINT;
+    heapSize: LONGINT;  (* polpo: of the pseudo-heap, BootHeapSize or larger *)
+    ptrFix: Longs;
     dir: ARRAY 256 OF CHAR;  (* object file directory *)
+    rootDir: ARRAY 256 OF CHAR;  (* polpo: obj/<arch>/ of the root, searched after dir unless /P was given *)
+    dirSet: BOOLEAN;
+    depth: INTEGER;  (* polpo: of imports being loaded *)
     ptrFixx: LONGINT;
     arch: LONGINT;
     archs: ARRAY M68K+1 OF ARRAY 7 OF CHAR;
@@ -63,8 +73,8 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     (* polpo: the image is built in the byte order of the host; for a target of the other order the
        words are swapped when it is written, except the byte regions (names, refs, constants), and
        the 16-bit fields have their two bytes swapped *)
-    rawAdr, rawLen: ARRAY NofRaw OF LONGINT; rawx: LONGINT;
-    halfAdr: ARRAY NofRaw OF LONGINT; halfx: LONGINT;
+    rawAdr, rawLen: Longs; rawx: LONGINT;
+    halfAdr: Longs; halfx: LONGINT;
     hostBig: BOOLEAN;
     b64: BOOLEAN;
 
@@ -225,10 +235,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
       S.GET(adr, ptr);
       IF adr = AN THEN
         LOOP
-          IF ptr = NIL THEN res := notEnoughSpace;
-            Texts.WriteString(W, "Pseudo-heap too small");
-            Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf); RETURN NIL
-          END ;
+          IF ptr = NIL THEN res := notEnoughSpace; RETURN NIL END ;  (* polpo: Link tries a larger one *)
           IF ptr^.z0 + 4 >= size THEN EXIT END ;
           adr := S.ADR(ptr^.z1); S.GET(adr, ptr)
         END ;
@@ -256,6 +263,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   BEGIN (* tag^.size = rectyp^.size *)
     size := S.VAL(LONGINT, S.VAL(SET, size + (4 (*tag*) + B-1))-S.VAL(SET, B-1));
     ptr := NewBlock(size);
+    IF ptr = NIL THEN RETURN 0 END;
     init := S.VAL(InitPtr, S.VAL(ADDRESS, ptr) + size - 32);
     init^.z0 := 0; init^.z1 := 0; init^.z2 := 0; init^.z3 := 0; init^.z4 := 0; init^.z5 := 0; init^.z6 := 0;
     WHILE init # ptr DO
@@ -271,6 +279,7 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
   BEGIN
     size := S.VAL(LONGINT, S.VAL(SET, size + (28 + B-1))-S.VAL(SET, B-1));
     ptr := NewBlock(size);
+    IF ptr = NIL THEN RETURN 0 END;
     init := S.VAL(InitPtr, S.VAL(ADDRESS, ptr) + size - 32);
     WHILE init # ptr DO
       init^.tag := NIL; init^.z0 := 0; init^.z1 := 0; init^.z2 := 0; init^.z3 := 0; init^.z4 := 0; init^.z5 := 0; init^.z6 := 0;
@@ -357,29 +366,30 @@ MODULE rlinker;  (* RC 2.12.93 *)  (* object model *)  (** command-line MIPS/RIS
     END
   END InitKernel;
 
+  PROCEDURE Grow(VAR a: Longs);  (* polpo: twice as long, the entries kept *)
+    VAR b: Longs; i: LONGINT;
+  BEGIN
+    NEW(b, 2*LEN(a^)); i := 0;
+    WHILE i < LEN(a^) DO b[i] := a[i]; INC(i) END;
+    a := b
+  END Grow;
+
   PROCEDURE Raw(adr, len: LONGINT);  (* polpo: bytes, not swapped *)
   BEGIN
-    IF rawx < NofRaw THEN rawAdr[rawx] := adr; rawLen[rawx] := len; INC(rawx)
-    ELSE res := notEnoughSpace; Texts.WriteString(W, "Too many byte regions"); Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf)
-    END
+    IF rawx = LEN(rawAdr^) THEN Grow(rawAdr); Grow(rawLen) END;
+    rawAdr[rawx] := adr; rawLen[rawx] := len; INC(rawx)
   END Raw;
 
   PROCEDURE Half(adr: LONGINT);  (* polpo: a word holding a 16-bit field and its padding *)
   BEGIN
-    IF halfx < NofRaw THEN halfAdr[halfx] := adr; INC(halfx)
-    ELSE res := notEnoughSpace; Texts.WriteString(W, "Too many 16-bit fields"); Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf)
-    END
+    IF halfx = LEN(halfAdr^) THEN Grow(halfAdr) END;
+    halfAdr[halfx] := adr; INC(halfx)
   END Half;
 
   PROCEDURE PTRFix( adr: LONGINT);
   BEGIN
-    IF ptrFixx # -1 THEN
-      IF ptrFixx < NofPtrFix THEN ptrFix[ptrFixx] := adr; INC(ptrFixx)
-      ELSE ptrFixx := -1; res := notEnoughSpace;
-        Texts.WriteString(W, "Too many ptr fixes");
-        Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf)
-      END
-    END
+    IF ptrFixx = LEN(ptrFix^) THEN Grow(ptrFix) END;
+    ptrFix[ptrFixx] := adr; INC(ptrFixx)
   END PTRFix;
 
   PROCEDURE FixupM(m: Module; entry, L: LONGINT; data: BOOLEAN);
@@ -773,12 +783,16 @@ END Fixup;
     Block(81X); i := 0;
     WHILE i < nofimp DO
       Files.ReadString(R, impname);
-      (*Load(impname, imps[i]); not recursive in BootLinker, all modules are listed in topological order *)
+      (* polpo: an import not loaded yet is loaded here, before the module, as the module loader does *)
       m1 := S.VAL(Module, modules);
       WHILE (m1 # NIL) & (impname # m1.name) DO m1 := m1.next END ;
-      IF m1 = NIL THEN res := modNotFound;
-        Texts.WriteString(W, impname); Texts.WriteString(W, " must be loaded before ");
-        Texts.WriteString(W, modname); Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf); RETURN
+      IF m1 = NIL THEN
+        IF depth >= MaxMods THEN res := cyclicImport;
+          Texts.WriteString(W, "imports of "); Texts.WriteString(W, modname); Texts.WriteString(W, " too deep or cyclic");
+          Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf); RETURN
+        END;
+        INC(depth); Load(impname, m1); DEC(depth);
+        IF res # done THEN RETURN END
       END ;
       imps[i] := m1; INC(i)
     END ;
@@ -795,8 +809,9 @@ END Fixup;
       (LONG(nofcom)*SIZE(Cmd) + 35) DIV 16 + (LONG(nofptr)*4 + 35) DIV 16 + ((nofimp+1)*4 + 35) DIV 16 +
       (datasize + (-datasize) MOD 8 + consize + codesize*4 + 35) DIV 16 + (refsize + 35) DIV 16)*16;
     (*IF Kernel.LargestAvailable() < k + 24 THEN importing := modname; m := NIL; res := notEnoughSpace; RETURN END ; *)
-    m := S.VAL(Module, NewRec(S.VAL(Tag, modTag), ModSize)); PTRFix( S.ADR(m^) - 4);
+    m := S.VAL(Module, NewRec(S.VAL(Tag, modTag), ModSize));
     IF m = NIL THEN RETURN END;
+    PTRFix( S.ADR(m^) - 4);
     IF modulesVal=0 THEN modulesVal:=S.VAL( LONGINT, m) END; 
     lm := S.VAL(Module, lastMod);
     IF lm # NIL THEN lm.next := m; PTRFix( S.ADR(lm.next)) END ;
@@ -804,8 +819,9 @@ END Fixup;
     IF modules = 0 THEN modules := lastMod END ;
     m.name := modname; (*m.init := FALSE;*) m.refcnt := -1; Raw(S.ADR(m.name), LEN(m.name));
     (* S.NEW(arrPtr, k0); *)
-    arrPtr := S.VAL(ArrPtr, NewSys(k0)); PTRFix( S.ADR(arrPtr^) - 28); PTRFix( S.ADR(arrPtr^) - 4);
+    arrPtr := S.VAL(ArrPtr, NewSys(k0));
     IF arrPtr = NIL THEN RETURN END ;
+    PTRFix( S.ADR(arrPtr^) - 28); PTRFix( S.ADR(arrPtr^) - 4);
     BuildModBlock;
     m.imports[0] := S.ADR(m^); PTRFix( S.ADR(m.imports[0])); i := 0;
     WHILE i < nofimp DO
@@ -933,6 +949,12 @@ END Fixup;
       fname[j] := "."; fname[j+1] := "O"; fname[j+2] := "b"; fname[j+3] := "j";fname[j+4] := 0X;
 
       f := Files.Old(fname);
+      IF (f = NIL) & ~dirSet & (rootDir # dir) THEN  (* polpo: then the root's *)
+        COPY(rootDir, fname); j := 0; WHILE fname[j] # 0X DO INC(j) END;
+        i := 0; WHILE name[i] # 0X DO fname[j] := name[i]; INC(i); INC(j) END;
+        fname[j] := "."; fname[j+1] := "O"; fname[j+2] := "b"; fname[j+3] := "j"; fname[j+4] := 0X;
+        f := Files.Old(fname)
+      END;
       IF f = NIL THEN res := fileNotFound;
         Texts.WriteString(W, fname); Texts.WriteString(W, " not found");
         Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf); RETURN
@@ -963,10 +985,10 @@ END Fixup;
     heapAdr := S.VAL(LONGINT, heap);
     (* polpo: clear the pseudo-heap, so the image does not depend on what the host heap held *)
     a := heapAdr;
-    WHILE a < heapAdr + BootHeapSize DO S.PUT(a, LONG(LONG(0))); INC(a, 4) END;
+    WHILE a < heapAdr + heapSize DO S.PUT(a, LONG(LONG(0))); INC(a, 4) END;
     INC( heapAdr, (-heapAdr) MOD B);
     a := heapAdr + B - 4;
-    size := S.VAL(LONGINT, heap) + BootHeapSize - a;
+    size := S.VAL(LONGINT, heap) + heapSize - a;
     DEC( size, size MOD B);
     rest := S.VAL(FreePtr, a);
     rest^.tag := S.VAL(Tag, S.ADR(rest^.size));
@@ -1017,7 +1039,7 @@ BEGIN
   eh3.pt[ 2]:= targetHeapAdr;  (* p_vadr = virtual adr of the first byte in memory *)
   eh3.pt[ 3]:= 0;  (* p_padr = physical adr ignored *)
   eh3.pt[ 4]:= len;  (* p_filesz = number of bytes in the file image of the segment *)
-  eh3.pt[ 5]:= BootHeapSize;  (* p_memsz = number of bytes in memory of the segment *)
+  eh3.pt[ 5]:= heapSize;  (* p_memsz = number of bytes in memory of the segment *)
   eh3.pt[ 6]:= 7;  (* p_flags = PF_R+ PF_W+ PF_X, allow read, write, execution *)
   eh3.pt[ 7]:= 10000H;  (* p_align = page size; MIPS Creator Ci20 might need 10000H*)
   IF arch=ARMv7 THEN eh3.pt[ 7]:= 8000H END;
@@ -1064,7 +1086,7 @@ BEGIN
   eh6.pt[ 7]:= 0;  (*  p_padr_h *)
   eh6.pt[ 8]:= len;  (* p_filesz_l *)
   eh6.pt[ 9]:= 0;  (* p_filesz_h *)
-  eh6.pt[ 10]:= BootHeapSize;  (* p_memsz_l *)
+  eh6.pt[ 10]:= heapSize;  (* p_memsz_l *)
   eh6.pt[ 11]:= 0;    (* p_memsz_h *)
   eh6.pt[ 12]:= 10000H;  (* p-align_l *)
   eh6.pt[ 13]:= 0;  (* p-align_h *)
@@ -1133,6 +1155,7 @@ END MkELF64hdr;
     END ;
   (* cut heap *)
     end := S.VAL(LONGINT, NewBlock(B*N));
+    IF end = 0 THEN RETURN END;  (* polpo: res = notEnoughSpace, Link tries a larger pseudo-heap *)
   (* find data blocks to be skipped p.m.: not skipped any more *)
     m := S.VAL(Module, modules);
     WHILE m # NIL DO
@@ -1189,8 +1212,9 @@ END MkELF64hdr;
     Con.String("USAGE:"); Con.Ln;
     Con.String("  rlinker.Link [/e] [/v | /m | /b | /a | /w | /k] [/Pdir/] image Module0 Module1 ..."); Con.Ln;
     Con.Ln;
-    Con.String("Links the modules, listed in import order, from dir (default obj/<arch>/)"); Con.Ln;
-    Con.String("into the static executable image; module bodies run in that order."); Con.Ln;
+    Con.String("Links the modules and the modules they import into the static executable"); Con.Ln;
+    Con.String("image; imports come first, and module bodies run in that order. Object"); Con.Ln;
+    Con.String("files are taken from obj/<arch>/ of the current directory, then of the root."); Con.Ln;
     Con.String("  /e       show module body addresses"); Con.Ln;
     Con.String("  /v       RISC-V (obj/riscv/)"); Con.Ln;
     Con.String("  /m       MIPS (obj/mips/)"); Con.Ln;
@@ -1199,11 +1223,12 @@ END MkELF64hdr;
     Con.String("  /w       PowerPC, 32-bit (obj/ppc/)"); Con.Ln;
     Con.String("  /k       68020 and later (obj/m68k/)"); Con.Ln;
     Con.String("Without one of them the target is the host architecture."); Con.Ln;
-    Con.String("  /Pdir/   object file directory"); Con.Ln
+    Con.String("  /Pdir/   the only object file directory"); Con.Ln
   END Help;
 
   PROCEDURE Link*;
-    VAR bootName: Name; s: Texts.Scanner; m: Module; pos: LONGINT; i: INTEGER; dirSet: BOOLEAN;
+    VAR bootName: ARRAY 256 OF CHAR; s: Texts.Scanner; m: Module; pos: LONGINT; i, n, k: INTEGER;
+      names: ARRAY MaxMods OF Name;
   BEGIN
     pos := Oberon.Log.len; b64 := FALSE; showEntries := FALSE;
     IF Linux0.ARCH = "M68K" THEN arch := M68K ELSIF Linux0.ARCH = "PPC" THEN arch := PPC ELSIF Linux0.ARCH = "MIPSBE" THEN arch := MIPSBE ELSIF Linux0.ARCH = "MIPS" THEN arch := MIPS ELSIF Linux0.ARCH = "ARMv7" THEN arch := ARMv7 ELSE arch := RISCV END;
@@ -1224,35 +1249,37 @@ END MkELF64hdr;
       END;
       Texts.Scan(s)
     END;
-    IF ~dirSet THEN
-      IF arch = MIPS THEN Root.Obj("mips", dir)
-      ELSIF arch = MIPSBE THEN Root.Obj("mipsbe", dir)
-      ELSIF arch = PPC THEN Root.Obj("ppc", dir)
-      ELSIF arch = M68K THEN Root.Obj("m68k", dir)
-      ELSIF arch = ARMv7 THEN Root.Obj("armv7", dir)
-      ELSE Root.Obj("riscv", dir)
-      END
-    END;
+    IF ~dirSet THEN Root.Obj(archs[arch], dir); Root.RootObj(archs[arch], rootDir) END;
     IF s.class = Texts.Name THEN COPY(s.s, bootName); Texts.Scan(s) END;
     IF (s.class = Texts.Char) & (s.c = ":") THEN Texts.Scan(s);
       IF (s.class = Texts.Char) & (s.c = "=") THEN Texts.Scan(s) END
     END;
     IF (bootName[0] = 0X) OR (s.class # Texts.Name) THEN Help; RETURN END;
-    Init;
+    n := 0;
+    WHILE (s.class = Texts.Name) & (n < MaxMods) DO COPY(s.s, names[n]); INC(n); Texts.Scan(s) END;
+    IF s.class = Texts.Name THEN Con.String("rlinker: more than 64 modules named"); Con.Ln; RETURN END;
     Texts.WriteString(W, "linking "); Texts.WriteString(W, bootName);
     Texts.WriteString(W, " ("); Texts.WriteString(W, archs[arch]);
     IF b64 THEN Texts.WriteString(W, ", 64Bit)") ELSE Texts.WriteString(W, ", 32Bit)") END;
     Texts.Append(Oberon.Log, W.buf);
-    res := done;
-    REPEAT Load(s.s, m); Texts.Scan(s) UNTIL (s.class # Texts.Name) OR (res # done);
-    IF res = done THEN Out(bootName) ELSE Texts.WriteString(W, "failed") END;
+    IF heapSize # BootHeapSize THEN heapSize := BootHeapSize; S.NEW(heap, heapSize) END;
+    LOOP
+      Init; res := done; k := 0; depth := 0;
+      REPEAT Load(names[k], m); INC(k) UNTIL (k = n) OR (res # done);
+      IF res = done THEN Out(bootName) END;
+      IF (res # notEnoughSpace) OR (heapSize >= 10000000H) THEN EXIT END;
+      heapSize := heapSize * 2; S.NEW(heap, heapSize)  (* polpo: the image did not fit *)
+    END;
+    IF res = notEnoughSpace THEN Texts.WriteString(W, " the image is larger than 256 MB") END;
+    IF res # done THEN Texts.WriteString(W, " failed") END;
     Texts.WriteLn(W); Texts.Append(Oberon.Log, W.buf);
     logs.Show(pos);
     Oberon.Collect
   END Link;
 
 BEGIN
-  Texts.OpenWriter(W); S.NEW(heap, BootHeapSize);
+  Texts.OpenWriter(W); heapSize := BootHeapSize; S.NEW(heap, heapSize);
+  NEW(ptrFix, NofPtrFix); NEW(rawAdr, NofRaw); NEW(rawLen, NofRaw); NEW(halfAdr, NofRaw);
   modeStr[1] := "constant";
   modeStr[2] := "type";
   modeStr[3] := "variable";

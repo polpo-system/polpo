@@ -28,7 +28,7 @@ MODULE alinker;   (* as 5.12.98 *)  (** command-line ARM boot linker *)
   (*  CodeSize= 2000000H;  (* ignored 32MB size reserved by ELF header for code *)*)
 
     MaxExts = 15;
-    MaxModules = 25; (* Max. No. of statically linked modules *)
+    MaxModules = 128; (* Max. No. of statically linked modules; polpo: was 25 *)
 
 TYPE
   ELF32EHDR= RECORD
@@ -108,6 +108,7 @@ VAR
     initCalls : ARRAY MaxModules OF Object;
     initCnt : INTEGER;
     quiet: BOOLEAN;
+    rootToo: BOOLEAN;  (* polpo: no /P given: obj/arm/ of the root after the one of the current directory *)
 
 
   PROCEDURE Hex(x : LONGINT);
@@ -416,7 +417,7 @@ VAR
   PROCEDURE LoadObject(modname : ARRAY OF CHAR; VAR o : Object);
   VAR
     f : Files.File; r : Files.Rider; tag, tag2 : SHORTINT;
-    name : ARRAY 320 OF CHAR;
+    name, str2 : ARRAY 320 OF CHAR;
     str : ARRAY 32 OF CHAR;
     i, key : LONGINT;
     p : Object;
@@ -499,6 +500,10 @@ VAR
       Out.String("linking "); Out.String(modname); Out.Ln;
       OBM.MakeFileName(modname,name, OBM.OFext);
       f := Files.Old(name);
+      IF (f = NIL) & rootToo THEN  (* polpo: then in obj/arm/ of the root *)
+        COPY(OBM.prefix, str2); Root.RootObj("arm", OBM.prefix); OBM.MakeFileName(modname, name, OBM.OFext);
+        COPY(str2, OBM.prefix); f := Files.Old(name)
+      END;
       IF f # NIL THEN 
         NEW(o); o.refcnt:=1;
         Files.Set(r, f, 0); 
@@ -723,7 +728,9 @@ BEGIN
   code[pc]:=0EA000000H+((-2) MOD 1000000H); (* "loop: B loop" We should not get here, but who knows... *)
   
   (* Patch "modLoadAddr" *)
-  code[modLoadAddrAddr]:=LoadBase4+(pc+1023) DIV 1024 * 1*4096;
+  IF modLoadAddrAddr >= 0 THEN  (* polpo: a program without the module loader has none *)
+    code[modLoadAddrAddr]:=LoadBase4+(pc+1023) DIV 1024 * 1*4096
+  END;
   
   (* Now the funny part. Generate the a.out file! *)
 
@@ -773,10 +780,11 @@ END BuildImage;
     Out.String("USAGE:"); Out.Ln;
     Out.String("  alinker.Link [/q] [/Pdir/] image module"); Out.Ln;
     Out.Ln;
-    Out.String("Links module and its imports from dir (default obj/arm/) into the"); Out.Ln;
-    Out.String("static ARM ELF executable image; module bodies run in import order."); Out.Ln;
+    Out.String("Links module and its imports into the static ARM ELF executable image;"); Out.Ln;
+    Out.String("module bodies run in import order. Object files are taken from obj/arm/"); Out.Ln;
+    Out.String("of the current directory, then of the root."); Out.Ln;
     Out.String("  /q       quiet, no address listing"); Out.Ln;
-    Out.String("  /Pdir/   object file prefix"); Out.Ln
+    Out.String("  /Pdir/   the only object file prefix"); Out.Ln
   END Help;
 
   PROCEDURE Link*;
@@ -792,14 +800,14 @@ END BuildImage;
     modules:=0; initCnt:=0;
     modulesAddr := -1; modLoadAddrAddr := -1;
     FOR i := 0 TO MaxModules-1 DO initCalls[i] := NIL END;
-    IF code = NIL THEN NEW(code, 30000H) END;
+    IF code = NIL THEN NEW(code, 100000H) END;  (* polpo: 4 MB, was 768 KB *)
     FOR i := 0 TO LEN(code^)-1 DO code[i] := 0 END;
-    quiet := FALSE; Root.Obj("arm", OBM.prefix); out[0] := 0X;
+    quiet := FALSE; rootToo := TRUE; Root.Obj("arm", OBM.prefix); out[0] := 0X;
     Texts.OpenScanner(s, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(s);
     WHILE s.class = Texts.Name DO
       IF (s.s[0] = "/") OR (s.s[0] = "\") THEN
         IF s.s[1] = "q" THEN quiet := TRUE
-        ELSIF s.s[1] = "P" THEN
+        ELSIF s.s[1] = "P" THEN rootToo := FALSE;
           i := 2; WHILE s.s[i] # 0X DO OBM.prefix[i-2] := s.s[i]; INC(i) END;
           OBM.prefix[i-2] := 0X
         ELSIF s.s[1] = "h" THEN Help; RETURN
