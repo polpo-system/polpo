@@ -356,6 +356,12 @@ it under its name; Files.Close(f) writes the changes of a file opened with Old. 
 (fs.Cd, fs.Ls, fs.Cp and so on) works on directories and files with their names as Linux takes
 them, while Files accepts letters, digits, ., /, _ and -, and a name must not begin with a digit.
 
+Files.Old maps the file into memory, shared and writable, and the mapping stays until the garbage
+collector frees the File; Files.ReleaseRead closes the descriptor and keeps the mapping. While a
+file is mapped that way, Linux does not run it: execve fails with "text file busy" (ETXTBSY). A
+command that makes a program and starts it, or looks into it first, reads it with Linux0 instead
+(Openat0 with ORDonly, Read0, Close0), as program.Make and ProgramTest do.
+
 ## Code that compiles on all ports
 
 polpo has seven compilers, and they do not all accept the same language. The ARM compiler is an
