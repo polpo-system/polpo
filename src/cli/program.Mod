@@ -267,7 +267,7 @@ END Size;
 
 PROCEDURE Make*;
 VAR A: Texts.Reader; s, out, main, cmd, m, dir, stubMod, stubObj, stubSym: Name;
-  names: ARRAY MaxNames OF Name; n, i, res: INTEGER; ok, madeObj, madeDir: BOOLEAN; len: LONGINT;
+  names: ARRAY MaxNames OF Name; n, i, res: INTEGER; ok, madeObj, madeDir, sources: BOOLEAN; len: LONGINT;
 BEGIN
   HostArch(arch); out := ""; cmd := ""; n := 0; ok := TRUE;
   Texts.OpenArgs(A);
@@ -294,9 +294,9 @@ BEGIN
 
   Texts.OpenWriter(cap);
   IF Oberon0.Log # NIL THEN capLog := Oberon0.Log.len ELSE capLog := 0 END;
-  main := ""; i := 0;
+  main := ""; i := 0; sources := FALSE;
   WHILE ok & (i < n) DO
-    IF Ends(names[i], ".Mod") THEN ok := Compile(names[i], m) ELSE COPY(names[i], m) END;
+    IF Ends(names[i], ".Mod") THEN ok := Compile(names[i], m); sources := TRUE ELSE COPY(names[i], m) END;
     COPY(m, main); INC(i)
   END;
   IF ok THEN
@@ -311,8 +311,9 @@ BEGIN
     ok := Compile(stubMod, m) & Link(out);
     Delete(stubMod); Delete(stubObj); Delete(stubSym)
   END;
-  IF madeDir & ~ok THEN Files.RemoveDirectory(dir, FALSE, res) END;
-  IF madeObj & ~ok THEN Files.RemoveDirectory("obj", FALSE, res) END;
+  (* the directories made here stay when they hold the objects of the sources *)
+  IF madeDir & (~ok OR ~sources) THEN Files.RemoveDirectory(dir, FALSE, res) END;
+  IF madeObj & (~ok OR ~sources) THEN Files.RemoveDirectory("obj", FALSE, res) END;
   IF ok THEN
     len := Size(out);
     Out.String("program: "); Out.String(out); Out.String(" ("); Out.String(arch);
