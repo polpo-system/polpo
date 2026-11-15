@@ -405,6 +405,15 @@ Test on the other ports with qemu: compile with the port's compiler, then run, f
 qemu-arm bin/arm/loksh Module.Command, qemu-riscv32 bin/riscv/loksh ... or
 qemu-mipsel bin/mips/loksh ....
 
+Modules written for voc, the Oberon compiler that translates to C, reach the operating system
+through voc's modules Platform and Args. polpo has both, with the same names and parameters, for
+the procedures such modules use: Platform.Time, Delay, GetClock, GetTimeOfDay, GetEnv, getEnv,
+SetInterruptHandler and Exit, and Args.argc, Get, GetInt, Pos, GetEnv and getEnv. The header of
+src/cli/Platform.Mod lists where they differ from voc: polpo's clock is UTC, and a program whose
+interrupt handler returns ends as after a trap. In voc, HALT(n) ends the program with the exit
+status n; on polpo HALT is a trap, so such code calls Platform.Exit(n). Your own modules use
+Kernel, Linux0 and Files instead.
+
 ## Packages
 
 To make a module installable with portia, it needs a recipe in the package tree arden
