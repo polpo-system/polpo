@@ -28,7 +28,7 @@ MODULE alinker;   (* as 5.12.98 *)  (** command-line ARM boot linker *)
   (*  CodeSize= 2000000H;  (* ignored 32MB size reserved by ELF header for code *)*)
 
     MaxExts = 15;
-    MaxModules = 128; (* Max. No. of statically linked modules; polpo: was 25 *)
+    MaxModules = 128; (* Max. No. of statically linked modules *)
 
 TYPE
   ELF32EHDR= RECORD
@@ -97,7 +97,7 @@ VAR
     Init = POINTER TO RECORD word : ARRAY 512 OF LONGINT END;
         
   VAR
-    code : POINTER TO ARRAY OF LONGINT; (* 192K for Kernel code, string consts, data, module descs and type descs *)
+    code : POINTER TO ARRAY OF LONGINT; (* the image, 1M words: code, string consts, data, module descs and type descs *)
     objs : Object;
     modules : LONGINT; (* "Address" of first ModuleDesc *)
     modulesAddr : LONGINT; (* Offset into code of Kernel.modules (in words!) *)
@@ -800,7 +800,7 @@ END BuildImage;
     modules:=0; initCnt:=0;
     modulesAddr := -1; modLoadAddrAddr := -1;
     FOR i := 0 TO MaxModules-1 DO initCalls[i] := NIL END;
-    IF code = NIL THEN NEW(code, 100000H) END;  (* polpo: 4 MB, was 768 KB *)
+    IF code = NIL THEN NEW(code, 100000H) END;
     FOR i := 0 TO LEN(code^)-1 DO code[i] := 0 END;
     quiet := FALSE; rootToo := TRUE; Root.Obj("arm", OBM.prefix); out[0] := 0X;
     Texts.OpenScanner(s, Oberon.Par.text, Oberon.Par.pos); Texts.Scan(s);
