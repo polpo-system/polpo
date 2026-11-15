@@ -39,6 +39,10 @@ CONST
   KEsc = 1012;    (* Esc alone *)
   Shift = 1; Alt = 2; Ctrl = 4;  (* mods *)
   ListRows = 8;  (* the names shown at a time by completion *)
+  (* the colours of completion, of the 256 of xterm: light grey on dark grey, the chosen name dark on light
+     grey, the parameter at the caret in bold white *)
+  BoxColour = "0;38;5;252;48;5;238m"; ChosenColour = "0;1;38;5;234;48;5;250m";
+  ParamOn = "1;38;5;231m"; ParamOff = "22;38;5;252m";
   MaxMatch = 512;
 
 TYPE
@@ -1175,13 +1179,13 @@ BEGIN
   IF w > cols THEN w := cols END;
   row := LineNo(cur) - LineNo(top) + 2; IF row > 2 THEN DEC(row) ELSE INC(row) END;
   col := Col(pos) - hcol; IF col + w > cols + 1 THEN col := cols - w + 1 END; IF col < 1 THEN col := 1 END;
-  Goto(row, col); CSI("0;7m"); Ch(" "); Str(e.name); k := 2; i := 0; WHILE e.name[i] # 0X DO INC(k); INC(i) END;
+  Goto(row, col); CSI(BoxColour); Ch(" "); Str(e.name); k := 2; i := 0; WHILE e.name[i] # 0X DO INC(k); INC(i) END;
   i := 0;
   WHILE (e.sig[i] # 0X) & (k < w) DO
-    IF i = hb THEN CSI("1m") ELSIF i = he THEN CSI("22m") END;
+    IF i = hb THEN CSI(ParamOn) ELSIF i = he THEN CSI(ParamOff) END;
     Ch(e.sig[i]); INC(i); INC(k)
   END;
-  CSI("22m"); Ch(" "); Attr(0)
+  CSI(ParamOff); Ch(" "); Attr(0)
 END DrawHint;
 
 (* the names that begin with what was typed, under the caret line (above it near the bottom) *)
@@ -1222,7 +1226,7 @@ BEGIN
     WHILE len < w DO line[len] := " "; INC(len) END;
     line[w] := 0X;
     Goto(row + i - compTop, col);
-    IF i = compSel THEN CSI("0;1m") ELSE CSI("0;7m") END;
+    IF i = compSel THEN CSI(ChosenColour) ELSE CSI(BoxColour) END;
     Str(line); Attr(0);
     INC(i)
   END;
