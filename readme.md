@@ -325,9 +325,12 @@ their parameters first, then variables, constants and types, read from the modul
 by the port's browser. Ctrl+Space opens the list after any module, imported or not. Each
 character typed narrows the list to the names that begin with it, without regard to capitals,
 and Backspace widens it again; the arrows choose, Enter or Tab puts the name in, followed by `(`
-for a procedure with parameters, and Esc closes the list. While the caret is in the parameters
-of a call `Module.Proc(` on the same line, the line above shows the procedure with the parameter
-at the caret in bold.
+for a procedure with parameters, and Esc closes the list. Ctrl+Space after a name without a
+module lists the names of the text itself: its procedures, variables, constants and types, the
+modules it imports, and the predeclared procedures. While the caret is in the parameters of a
+call, of `Module.Proc(`, of a procedure of the text or of a predeclared one, also when the call
+began lines above, the line above the caret shows the procedure with the parameter at the caret
+in bold.
 
 ### X11 Oberon
 

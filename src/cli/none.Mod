@@ -22,8 +22,11 @@ MODULE none;  (** a small nano-like editor for the console, the size that fits e
    parameters first, then variables, constants and types; Ctrl+Space lists them after any module.
    Each character typed narrows the list to the names beginning with it, Backspace widens it again;
    the arrows choose, Enter or Tab puts the name in (with "(" after a procedure that has parameters),
-   Esc closes the list. With the caret in the parameters of Module.Proc(, the line above shows the
-   procedure, the parameter at the caret in bold. *)
+   Esc closes the list. Ctrl+Space after a name without a module lists the names of the text itself
+   (procedures, variables, constants and types of all its scopes, the modules it imports) and the
+   predeclared procedures. With the caret in the parameters of a call, of Module.Proc( or of a
+   procedure of the text or a predeclared one, also when they began lines above, the line above
+   the caret shows the procedure, the parameter at the caret in bold. *)
 
 IMPORT Kernel, Linux0, Files, Objects, Texts, Oberon0, Out, termios, SYSTEM;
 
@@ -55,6 +58,7 @@ TYPE
     next: Def
   END;
   Matches = POINTER TO ARRAY MaxMatch OF Entry;  (* the ARM compiler takes few global pointers *)
+  Lists = RECORD first, last: ARRAY 6 OF Entry END;  (* entries by kind, in the order of the list *)
 
 VAR
   T: Texts.Text;
@@ -75,7 +79,11 @@ VAR
   W: Texts.Writer;
   source: BOOLEAN;  (* an Oberon source, .Mod or .mod: completion *)
   defs: Def;  (* the modules read so far *)
-  compOn: BOOLEAN; compDot: LONGINT; compDef: Def;  (* completion after the "." at compDot *)
+  compOn, compAll: BOOLEAN; compFrom: LONGINT; compDef: Def;  (* completion of the name from compFrom; compAll:
+    the names of the text itself, no module before them *)
+  edits, ownEdits: LONGINT; ownDef: Def;  (* changes of the text; the names of the text, after ownEdits *)
+  sR: Texts.Reader; sc: CHAR; sp: LONGINT; seot: BOOLEAN;  (* the scanner of the text: the character at sp *)
+  tok: ARRAY 32 OF CHAR; tokKind: INTEGER; tokCh: CHAR; tokPos: LONGINT;  (* the token at tokPos *)
   match: Matches; nMatch, compSel, compTop: LONGINT;
   cap: Chars; capLen: LONGINT;  (* what browser.ShowDef wrote *)
 
@@ -303,7 +311,7 @@ END LooksAt;
 (* insert c at pos, in the looks of the character before *)
 PROCEDURE InsertAt(pos: LONGINT; c: CHAR);
 BEGIN
-  LooksAt(pos); Texts.Write(W, c); Texts.Insert(T, pos, W.buf); modified := TRUE
+  LooksAt(pos); Texts.Write(W, c); Texts.Insert(T, pos, W.buf); modified := TRUE; INC(edits)
 END InsertAt;
 
 (* insert c at the caret *)
@@ -314,7 +322,7 @@ END Insert;
 
 PROCEDURE Delete(beg, end: LONGINT);
 BEGIN
-  IF end > beg THEN Texts.Delete(T, beg, end); modified := TRUE END
+  IF end > beg THEN Texts.Delete(T, beg, end); modified := TRUE; INC(edits) END
 END Delete;
 
 (* ----- selection ----- *)
@@ -811,38 +819,241 @@ BEGIN
   w[n] := 0X
 END WordBefore;
 
-(* the names of the module before the "." the caret follows, with the start of a name typed after it; any:
-   also a module that the text does not import *)
+(* ----- the names of the text itself ----- *)
+
+PROCEDURE SAdv;  (* the next character of the scanner *)
+BEGIN INC(sp); Texts.Read(sR, sc); seot := sR.eot
+END SAdv;
+
+PROCEDURE SOpen;
+BEGIN Texts.OpenReader(sR, T, 0); sp := -1; SAdv
+END SOpen;
+
+(* the next token: tokKind 0 the end, 1 a name, 2 a character tokCh, 3 a number or a string; comments
+   are skipped *)
+PROCEDURE SNext;
+VAR n, depth: LONGINT; q, prev: CHAR;
+BEGIN
+  LOOP
+    WHILE ~seot & (sc <= " ") DO SAdv END;
+    tokPos := sp;
+    IF seot THEN tokKind := 0; RETURN END;
+    IF IsWord(sc) THEN
+      n := 0;
+      WHILE ~seot & IsWord(sc) DO IF n < LEN(tok) - 1 THEN tok[n] := sc; INC(n) END; SAdv END;
+      tok[n] := 0X;
+      IF (tok[0] >= "0") & (tok[0] <= "9") THEN tokKind := 3 ELSE tokKind := 1 END;
+      RETURN
+    ELSIF (sc = 22X) OR (sc = "'") THEN
+      q := sc; SAdv; WHILE ~seot & (sc # q) DO SAdv END;
+      IF ~seot THEN SAdv END;
+      tokKind := 3; RETURN
+    ELSIF sc = "(" THEN
+      SAdv;
+      IF seot OR (sc # "*") THEN tokKind := 2; tokCh := "("; RETURN END;
+      depth := 1; SAdv; prev := 0X;  (* a comment, nested ones in it *)
+      WHILE ~seot & (depth > 0) DO
+        IF (prev = "(") & (sc = "*") THEN INC(depth); prev := 0X
+        ELSIF (prev = "*") & (sc = ")") THEN DEC(depth); prev := 0X
+        ELSE prev := sc
+        END;
+        SAdv
+      END
+    ELSE
+      tokKind := 2; tokCh := sc; SAdv; RETURN
+    END
+  END
+END SNext;
+
+(* the text from beg to end in s, its line ends and tabs as single blanks; oneLine: only its first line *)
+PROCEDURE TextOf(beg, end: LONGINT; VAR s: ARRAY OF CHAR; oneLine: BOOLEAN);
+VAR R: Texts.Reader; c: CHAR; n: LONGINT; blank: BOOLEAN;
+BEGIN
+  Texts.OpenReader(R, T, beg); n := 0; blank := FALSE;
+  WHILE (beg < end) & (n < LEN(s) - 1) DO
+    Texts.Read(R, c); INC(beg);
+    IF IsEol(c) & oneLine THEN beg := end
+    ELSIF (c = " ") OR (c = TAB) OR IsEol(c) THEN
+      IF ~blank & (n > 0) THEN s[n] := " "; INC(n) END;
+      blank := TRUE
+    ELSE s[n] := c; INC(n); blank := FALSE
+    END
+  END;
+  WHILE (n > 0) & (s[n-1] = " ") DO DEC(n) END;
+  s[n] := 0X
+END TextOf;
+
+PROCEDURE NewEntry(kind: CHAR; VAR name, sig: ARRAY OF CHAR): Entry;
+VAR x: Entry;
+BEGIN
+  NEW(x); x.kind := kind; COPY(name, x.name); COPY(sig, x.sig);
+  x.params := (x.sig[0] = "(") & (x.sig[1] # ")"); x.next := NIL;
+  RETURN x
+END NewEntry;
+
+PROCEDURE KindNo(kind: CHAR): INTEGER;  (* the place of a kind in the list *)
+BEGIN
+  IF kind = "p" THEN RETURN 0 ELSIF kind = "v" THEN RETURN 1 ELSIF kind = "c" THEN RETURN 2
+  ELSIF kind = "t" THEN RETURN 3 ELSIF kind = "m" THEN RETURN 4 ELSE RETURN 5
+  END
+END KindNo;
+
+PROCEDURE Put(VAR L: Lists; x: Entry);
+VAR k: INTEGER;
+BEGIN
+  k := KindNo(x.kind);
+  IF L.first[k] = NIL THEN L.first[k] := x ELSE L.last[k].next := x END;
+  L.last[k] := x
+END Put;
+
+PROCEDURE Has(VAR L: Lists; kind: CHAR; VAR name: ARRAY OF CHAR): BOOLEAN;
+VAR x: Entry;
+BEGIN
+  x := L.first[KindNo(kind)]; WHILE (x # NIL) & (x.name # name) DO x := x.next END;
+  RETURN x # NIL
+END Has;
+
+PROCEDURE Std(VAR L: Lists; name, sig: ARRAY OF CHAR);  (* a predeclared procedure *)
+BEGIN Put(L, NewEntry("s", name, sig))
+END Std;
+
+PROCEDURE SectionEnd(VAR s: ARRAY OF CHAR): BOOLEAN;
+BEGIN
+  RETURN (s = "BEGIN") OR (s = "PROCEDURE") OR (s = "END") OR (s = "VAR") OR (s = "CONST") OR (s = "TYPE")
+    OR (s = "IMPORT")
+END SectionEnd;
+
+(* the names declared in the text (procedures, variables, constants and types of all its scopes), the
+   modules it imports and the predeclared procedures; read again after changes *)
+PROCEDURE OwnDef(): Def;
+VAR d: Def; L: Lists; k: INTEGER; x: Entry; kind: CHAR; names: ARRAY 16 OF ARRAY 32 OF CHAR;
+  nn, i, from, pdepth, rdepth: LONGINT; name: ARRAY 32 OF CHAR; sig, val: ARRAY 256 OF CHAR;
+BEGIN
+  IF (ownDef # NIL) & (ownEdits = edits) THEN RETURN ownDef END;
+  NEW(d); d.mod := ""; d.next := NIL;
+  k := 0; WHILE k < 6 DO L.first[k] := NIL; L.last[k] := NIL; INC(k) END;
+  SOpen; SNext;
+  IF (tokKind = 1) & (tok = "MODULE") THEN SNext; IF tokKind = 1 THEN COPY(tok, d.mod) END END;
+  WHILE tokKind # 0 DO
+    IF (tokKind = 1) & (tok = "PROCEDURE") THEN
+      SNext;
+      WHILE (tokKind = 2) & ((tokCh = "^") OR (tokCh = "*") OR (tokCh = "-") OR (tokCh = "+") OR (tokCh = "&")) DO SNext END;
+      IF tokKind = 1 THEN  (* not a receiver or a procedure type *)
+        COPY(tok, name); SNext;
+        IF (tokKind = 2) & ((tokCh = "*") OR (tokCh = "-")) THEN SNext END;
+        from := tokPos; sig := "";
+        IF (tokKind = 2) & ((tokCh = "(") OR (tokCh = ":")) THEN
+          pdepth := 0;
+          WHILE (tokKind # 0) & ~((tokKind = 2) & (tokCh = ";") & (pdepth = 0)) DO
+            IF (tokKind = 2) & (tokCh = "(") THEN INC(pdepth) ELSIF (tokKind = 2) & (tokCh = ")") THEN DEC(pdepth) END;
+            SNext
+          END;
+          TextOf(from, tokPos, sig, FALSE)
+        END;
+        IF ~Has(L, "p", name) THEN Put(L, NewEntry("p", name, sig)) END
+      END
+    ELSIF (tokKind = 1) & (tok = "IMPORT") THEN
+      SNext;
+      WHILE tokKind = 1 DO
+        COPY(tok, name); SNext; sig := "";
+        IF (tokKind = 2) & (tokCh = ":") THEN
+          SNext; IF (tokKind = 2) & (tokCh = "=") THEN SNext END;
+          IF tokKind = 1 THEN sig := " := "; i := 4; nn := 0;
+            WHILE tok[nn] # 0X DO sig[i] := tok[nn]; INC(i); INC(nn) END; sig[i] := 0X; SNext
+          END
+        END;
+        Put(L, NewEntry("m", name, sig));
+        IF (tokKind = 2) & (tokCh = ",") THEN SNext END
+      END
+    ELSIF (tokKind = 1) & ((tok = "VAR") OR (tok = "CONST") OR (tok = "TYPE")) THEN
+      IF tok = "VAR" THEN kind := "v" ELSIF tok = "CONST" THEN kind := "c" ELSE kind := "t" END;
+      SNext;
+      WHILE (tokKind = 1) & ~SectionEnd(tok) DO
+        nn := 0;
+        LOOP  (* the names of a declaration *)
+          IF tokKind # 1 THEN EXIT END;
+          IF nn < LEN(names) THEN COPY(tok, names[nn]); INC(nn) END;
+          SNext;
+          IF (tokKind = 2) & ((tokCh = "*") OR (tokCh = "-")) THEN SNext END;
+          IF (tokKind = 2) & (tokCh = ",") THEN SNext ELSE EXIT END
+        END;
+        from := tokPos; pdepth := 0; rdepth := 0;
+        WHILE (tokKind # 0) & ~((tokKind = 2) & (tokCh = ";") & (pdepth = 0) & (rdepth = 0)) &
+          ~((tokKind = 1) & (tok = "BEGIN")) DO
+          IF tokKind = 2 THEN
+            IF tokCh = "(" THEN INC(pdepth) ELSIF tokCh = ")" THEN DEC(pdepth) END
+          ELSIF (tokKind = 1) & (tok = "RECORD") THEN INC(rdepth)
+          ELSIF (tokKind = 1) & (tok = "END") & (rdepth > 0) THEN DEC(rdepth)
+          END;
+          SNext
+        END;
+        TextOf(from, tokPos, val, TRUE);  (* the type or the value, its first line *)
+        IF kind = "v" THEN COPY(val, sig)
+        ELSE sig[0] := " "; i := 0; WHILE (val[i] # 0X) & (i < LEN(sig) - 2) DO sig[i+1] := val[i]; INC(i) END; sig[i+1] := 0X
+        END;
+        i := 0; WHILE i < nn DO Put(L, NewEntry(kind, names[i], sig)); INC(i) END;
+        IF (tokKind = 2) & (tokCh = ";") THEN SNext END
+      END
+    ELSE SNext
+    END
+  END;
+  Std(L, "ABS", "(x)"); Std(L, "ASH", "(x, n)"); Std(L, "ASSERT", "(b)"); Std(L, "CAP", "(c)");
+  Std(L, "CHR", "(n)"); Std(L, "COPY", "(source, dest)"); Std(L, "DEC", "(v, n)"); Std(L, "ENTIER", "(x)");
+  Std(L, "EXCL", "(s, i)"); Std(L, "HALT", "(n)"); Std(L, "INC", "(v, n)"); Std(L, "INCL", "(s, i)");
+  Std(L, "LEN", "(a, dim)"); Std(L, "LONG", "(x)"); Std(L, "MAX", "(T)"); Std(L, "MIN", "(T)");
+  Std(L, "NEW", "(p, len)"); Std(L, "ODD", "(n)"); Std(L, "ORD", "(c)"); Std(L, "SHORT", "(x)");
+  Std(L, "SIZE", "(T)");
+  d.first := NIL; x := NIL; k := 0;
+  WHILE k < 6 DO
+    IF L.first[k] # NIL THEN
+      IF x = NIL THEN d.first := L.first[k] ELSE x.next := L.first[k] END;
+      x := L.last[k]
+    END;
+    INC(k)
+  END;
+  ownDef := d; ownEdits := edits;
+  RETURN d
+END OwnDef;
+
+(* ----- completion ----- *)
+
+(* a list of names for the name that ends at the caret: after "Module." the exports of the module (any:
+   also a module the text does not import); without a module before it (any) the names of the text *)
 PROCEDURE CompOpen(any: BOOLEAN): BOOLEAN;
-VAR p, dot, s: LONGINT; id, mod: ARRAY 32 OF CHAR; d: Def;
+VAR p, s: LONGINT; id, mod: ARRAY 32 OF CHAR; d: Def;
 BEGIN
   p := cur; WHILE (p > 0) & IsWord(CharAt(p - 1)) DO DEC(p) END;
-  IF (p = 0) OR (CharAt(p - 1) # ".") THEN RETURN FALSE END;
-  dot := p - 1; WordBefore(dot, id, s);
-  IF (id[0] = 0X) OR (id[0] >= "0") & (id[0] <= "9") OR (s > 0) & (CharAt(s - 1) = ".") THEN RETURN FALSE END;
-  IF ~Imported(id, mod) THEN
-    IF any THEN COPY(id, mod) ELSE RETURN FALSE END
+  IF (p > 0) & (CharAt(p - 1) = ".") THEN
+    WordBefore(p - 1, id, s);
+    IF (id[0] = 0X) OR (id[0] >= "0") & (id[0] <= "9") OR (s > 0) & (CharAt(s - 1) = ".") THEN RETURN FALSE END;
+    IF ~Imported(id, mod) THEN
+      IF any THEN COPY(id, mod) ELSE RETURN FALSE END
+    END;
+    d := ReadDef(mod); compAll := FALSE
+  ELSIF any THEN
+    IF (p < cur) & (CharAt(p) >= "0") & (CharAt(p) <= "9") THEN RETURN FALSE END;  (* a number *)
+    d := OwnDef(); compAll := TRUE
+  ELSE RETURN FALSE
   END;
-  d := ReadDef(mod);
   IF d.first = NIL THEN RETURN FALSE END;
-  compDef := d; compDot := dot; compOn := TRUE; compSel := 0; compTop := 0;
+  compDef := d; compFrom := p; compOn := TRUE; compSel := 0; compTop := 0;
   RETURN TRUE
 END CompOpen;
 
-(* the caret is still after the "." and a part of a name *)
+(* the caret is still at the end of the name that started at compFrom (after its "." for a module) *)
 PROCEDURE CompValid(): BOOLEAN;
 VAR p: LONGINT;
 BEGIN
-  IF ~compOn OR (cur <= compDot) OR (compDot >= T.len) OR (CharAt(compDot) # ".") THEN RETURN FALSE END;
-  p := compDot + 1; WHILE p < cur DO IF ~IsWord(CharAt(p)) THEN RETURN FALSE END; INC(p) END;
+  IF ~compOn OR (cur < compFrom) OR ~compAll & ((compFrom = 0) OR (CharAt(compFrom - 1) # ".")) THEN RETURN FALSE END;
+  p := compFrom; WHILE p < cur DO IF ~IsWord(CharAt(p)) THEN RETURN FALSE END; INC(p) END;
   RETURN TRUE
 END CompValid;
 
-(* the names that begin with what was typed after the ".", in capitals or not *)
+(* the names that begin with what was typed, in capitals or not *)
 PROCEDURE Filter;
 VAR prefix: ARRAY 32 OF CHAR; e: Entry; n, i, p: LONGINT;
 BEGIN
-  n := 0; p := compDot + 1;
+  n := 0; p := compFrom;
   WHILE (p < cur) & (n < LEN(prefix) - 1) DO prefix[n] := CharAt(p); INC(n); INC(p) END;
   prefix[n] := 0X;
   nMatch := 0; e := compDef.first;
@@ -859,7 +1070,7 @@ END Filter;
 PROCEDURE Accept;
 VAR e: Entry; i: LONGINT;
 BEGIN
-  e := match[compSel]; Delete(compDot + 1, cur); cur := compDot + 1;
+  e := match[compSel]; Delete(compFrom, cur); cur := compFrom;
   i := 0; WHILE e.name[i] # 0X DO Insert(e.name[i]); INC(i) END;
   IF e.params THEN Insert("(") END;
   compOn := FALSE
@@ -882,28 +1093,32 @@ BEGIN
 END CompKey;
 
 (* after a key that was not the list's: the list follows the typing; "." after an imported module opens it,
-   Ctrl+Space (NUL) after any module *)
+   Ctrl+Space (NUL) after any module, or the names of the text itself *)
 PROCEDURE AfterKey(k: LONGINT);
 BEGIN
   IF compOn & ~CompValid() THEN compOn := FALSE END;
   IF source & ~compOn & (k = ORD(".")) THEN IF CompOpen(FALSE) THEN END END;
-  IF source & (k = 0) & ~CompOpen(TRUE) THEN msg := "No module before the caret, or it has no symbol file" END;
+  IF source & (k = 0) & ~CompOpen(TRUE) THEN msg := "Nothing to complete here" END;
   IF compOn THEN
     IF (k = 7FH) OR (k = 8) OR (k >= 20H) & (k < 100H) THEN compSel := 0; compTop := 0 END;
     Filter
   END
 END AfterKey;
 
-(* the caret is in the parameters of Module.Proc( on this line: the procedure, the number of the
-   parameter (0 the first), where the name of the procedure starts *)
+(* the caret is in the parameters of a call, Module.Proc( or Proc( of the text itself, which may start
+   lines above: the procedure, the number of the parameter (0 the first), where its name starts *)
 PROCEDURE CallAt(VAR e: Entry; VAR arg, pos: LONGINT): BOOLEAN;
-VAR p, ls, depth, q, s: LONGINT; c, quote: CHAR; name, id, mod: ARRAY 32 OF CHAR; d: Def;
+VAR p, limit, depth, q, s: LONGINT; c, quote: CHAR; name, id, mod: ARRAY 32 OF CHAR; d: Def;
 BEGIN
-  ls := LineStart(cur); p := cur; depth := 0; arg := 0;
+  p := cur; limit := cur - 4000; depth := 0; arg := 0;
   LOOP
-    IF p <= ls THEN RETURN FALSE END;
+    IF (p <= 0) OR (p <= limit) THEN RETURN FALSE END;
     DEC(p); c := CharAt(p);
-    IF c = ")" THEN INC(depth)
+    IF (c = ")") & (p > 0) & (CharAt(p - 1) = "*") THEN  (* the end of a comment: back to its start *)
+      DEC(p);
+      REPEAT DEC(p) UNTIL (p < 0) OR (CharAt(p) = "(") & (CharAt(p + 1) = "*");
+      IF p < 0 THEN RETURN FALSE END
+    ELSIF c = ")" THEN INC(depth)
     ELSIF c = "(" THEN
       IF depth = 0 THEN EXIT END;
       DEC(depth)
@@ -911,17 +1126,22 @@ BEGIN
     ELSIF c = ";" THEN RETURN FALSE
     ELSIF (c = 22X) OR (c = "'") THEN  (* a string: back to its start *)
       quote := c;
-      REPEAT DEC(p) UNTIL (p < ls) OR (CharAt(p) = quote);
-      IF p < ls THEN RETURN FALSE END
+      REPEAT DEC(p) UNTIL (p < 0) OR (CharAt(p) = quote);
+      IF p < 0 THEN RETURN FALSE END
     END
   END;
-  q := p; WHILE (q > ls) & (CharAt(q - 1) = " ") DO DEC(q) END;
+  q := p; WHILE (q > 0) & ((CharAt(q - 1) = " ") OR (CharAt(q - 1) = TAB)) DO DEC(q) END;
   WordBefore(q, name, s);
-  IF (name[0] = 0X) OR (s = 0) OR (CharAt(s - 1) # ".") THEN RETURN FALSE END;
-  WordBefore(s - 1, id, pos); pos := s;
-  IF (id[0] = 0X) OR ~Imported(id, mod) THEN RETURN FALSE END;
-  d := ReadDef(mod); e := d.first;
-  WHILE (e # NIL) & ~((e.kind = "p") & (e.name = name)) DO e := e.next END;
+  IF name[0] = 0X THEN RETURN FALSE END;
+  pos := s;
+  IF (s > 0) & (CharAt(s - 1) = ".") THEN
+    WordBefore(s - 1, id, q);
+    IF (id[0] = 0X) OR ~Imported(id, mod) THEN RETURN FALSE END;
+    d := ReadDef(mod)
+  ELSE d := OwnDef()
+  END;
+  e := d.first;
+  WHILE (e # NIL) & ~(((e.kind = "p") OR (e.kind = "s")) & (e.name = name)) DO e := e.next END;
   RETURN (e # NIL) & e.params
 END CallAt;
 
@@ -990,12 +1210,13 @@ BEGIN
     INC(i)
   END;
   IF w > cols THEN w := cols END;
-  col := Col(compDot + 1) - hcol + 1 - 7; IF col + w > cols + 1 THEN col := cols - w + 1 END; IF col < 1 THEN col := 1 END;
+  col := Col(compFrom) - hcol + 1 - 7; IF col + w > cols + 1 THEN col := cols - w + 1 END; IF col < 1 THEN col := 1 END;
   i := compTop;
   WHILE i < compTop + n DO
     e := match[i];
     IF e.kind = "p" THEN tag := "proc " ELSIF e.kind = "v" THEN tag := "var  "
-    ELSIF e.kind = "c" THEN tag := "const" ELSE tag := "type "
+    ELSIF e.kind = "c" THEN tag := "const" ELSIF e.kind = "t" THEN tag := "type "
+    ELSIF e.kind = "m" THEN tag := "mod  " ELSE tag := "std  "
     END;
     len := 0; Put(" "); Put(tag); Put(" "); Put(e.name); Put(e.sig);
     WHILE len < w DO line[len] := " "; INC(len) END;
@@ -1149,7 +1370,8 @@ BEGIN
   Str("^L  Refresh the screen"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
   Str("In .Mod files: Module. lists the exports of an imported module (Ctrl+Space: of any module)"); Ch(CR); Ch(LF);
   Str("    typing narrows the list, Backspace widens it; arrows choose, Enter or Tab takes, Esc closes;"); Ch(CR); Ch(LF);
-  Str("    in the parameters of Module.Proc( the line above shows them, the one at the caret in bold"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
+  Str("    Ctrl+Space after a name without a module: the names of this text and the predeclared ones"); Ch(CR); Ch(LF);
+  Str("    in the parameters of a call the line above shows them, the one at the caret in bold"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
   Str("Plain files stay plain; Oberon texts keep their fonts and colours, new text"); Ch(CR); Ch(LF);
   Str("gets the looks of the character before it."); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
   Attr(7); Str(" Press any key "); Attr(0); Flush;
@@ -1311,6 +1533,7 @@ BEGIN
   cur := 0; top := 0; hcol := 0; goalCol := -1; modified := FALSE; lastCut := FALSE; clip := NIL; clipBlock := FALSE;
   selOn := FALSE; block := FALSE; marking := FALSE; mods := 0;
   source := Ends(name, ".Mod") OR Ends(name, ".mod"); defs := NIL; compOn := FALSE; nMatch := 0;
+  edits := 0; ownDef := NIL; ownEdits := -1;
   IF match = NIL THEN NEW(match) END;
   Texts.OpenWriter(W);
   IF ~Raw() THEN RETURN END;
