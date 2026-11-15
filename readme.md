@@ -319,6 +319,16 @@ Delete unindent. Copies also go to the terminal's clipboard (OSC 52). In the Wri
 ^T switches between storing as Oberon text and as plain text, so an Oberon text can be saved
 as a plain file. It runs on every port.
 
+In Oberon sources (files ending in .Mod or .mod) it completes names. A `.` after a module of the
+IMPORT list, or after an alias of one, opens a list of what the module exports: procedures with
+their parameters first, then variables, constants and types, read from the module's symbol file
+by the port's browser. Ctrl+Space opens the list after any module, imported or not. Each
+character typed narrows the list to the names that begin with it, without regard to capitals,
+and Backspace widens it again; the arrows choose, Enter or Tab puts the name in, followed by `(`
+for a procedure with parameters, and Esc closes the list. While the caret is in the parameters
+of a call `Module.Proc(` on the same line, the line above shows the procedure with the parameter
+at the caret in bold.
+
 ### X11 Oberon
 
 The same `bin/x86/loksh` starts the whole Oberon desktop:

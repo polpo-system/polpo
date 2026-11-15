@@ -15,9 +15,17 @@ MODULE none;  (** a small nano-like editor for the console, the size that fits e
    Alt+Shift with the movement keys selects a block too. ^C copies the selection (without one: the location), ^K cuts it (without
    one: the line), ^V and ^U paste. Typing, Backspace and Delete replace a selection; with a block
    they act on every line of it (a block of width 0 types into all its lines: indenting). Copies
-   go to the terminal's clipboard too (OSC 52); a paste from the terminal is taken as it is. *)
+   go to the terminal's clipboard too (OSC 52); a paste from the terminal is taken as it is.
 
-IMPORT Kernel, Linux0, Files, Objects, Texts, termios, SYSTEM;
+   In Oberon sources (.Mod, .mod), a "." after a module of the IMPORT list (or an alias of one) lists
+   what the module exports, from its symbol file as browser.ShowDef shows it: procedures with their
+   parameters first, then variables, constants and types; Ctrl+Space lists them after any module.
+   Each character typed narrows the list to the names beginning with it, Backspace widens it again;
+   the arrows choose, Enter or Tab puts the name in (with "(" after a procedure that has parameters),
+   Esc closes the list. With the caret in the parameters of Module.Proc(, the line above shows the
+   procedure, the parameter at the caret in bold. *)
+
+IMPORT Kernel, Linux0, Files, Objects, Texts, Oberon0, Out, termios, SYSTEM;
 
 CONST
   ESC = 1BX; CR = 0DX; LF = 0AX; TAB = 09X;
@@ -27,6 +35,26 @@ CONST
   KPaste = 1011;  (* the start of a bracketed paste of the terminal *)
   KEsc = 1012;    (* Esc alone *)
   Shift = 1; Alt = 2; Ctrl = 4;  (* mods *)
+  ListRows = 8;  (* the names shown at a time by completion *)
+  MaxMatch = 512;
+
+TYPE
+  Chars = POINTER TO ARRAY OF CHAR;
+  Entry = POINTER TO EntryDesc;  (* an exported name of a module, as browser.ShowDef writes it *)
+  EntryDesc = RECORD
+    kind: CHAR;  (* "p" procedure, "v" variable, "c" constant, "t" type *)
+    params: BOOLEAN;  (* a procedure with parameters *)
+    name: ARRAY 32 OF CHAR;
+    sig: ARRAY 256 OF CHAR;  (* the rest: parameters and result, ": type", " = value" *)
+    next: Entry
+  END;
+  Def = POINTER TO DefDesc;  (* the exports of a module *)
+  DefDesc = RECORD
+    mod: ARRAY 32 OF CHAR;
+    first: Entry;
+    next: Def
+  END;
+  Matches = POINTER TO ARRAY MaxMatch OF Entry;  (* the ARM compiler takes few global pointers *)
 
 VAR
   T: Texts.Text;
@@ -45,6 +73,11 @@ VAR
   saved, rawT, timedT: termios.Termios;  (* the terminal before, raw, raw with a short timeout *)
   obuf: ARRAY 65536 OF CHAR; opos: LONGINT;
   W: Texts.Writer;
+  source: BOOLEAN;  (* an Oberon source, .Mod or .mod: completion *)
+  defs: Def;  (* the modules read so far *)
+  compOn: BOOLEAN; compDot: LONGINT; compDef: Def;  (* completion after the "." at compDot *)
+  match: Matches; nMatch, compSel, compTop: LONGINT;
+  cap: Chars; capLen: LONGINT;  (* what browser.ShowDef wrote *)
 
 (* ----- terminal ----- *)
 
@@ -597,9 +630,384 @@ BEGIN
   s[i] := 0X
 END Append;
 
+(* s ends with t *)
+PROCEDURE Ends(VAR s: ARRAY OF CHAR; t: ARRAY OF CHAR): BOOLEAN;
+VAR i, j: LONGINT;
+BEGIN
+  i := 0; WHILE s[i] # 0X DO INC(i) END;
+  j := 0; WHILE t[j] # 0X DO INC(j) END;
+  IF j > i THEN RETURN FALSE END;
+  WHILE (j > 0) & (s[i-1] = t[j-1]) DO DEC(i); DEC(j) END;
+  RETURN j = 0
+END Ends;
+
 PROCEDURE Help(k, label: ARRAY OF CHAR);
 BEGIN Attr(7); Str(k); Attr(0); Ch(" "); Str(label); Str("  ")
 END Help;
+
+(* ----- completion in Oberon sources ----- *)
+
+PROCEDURE Capture(VAR s: ARRAY OF CHAR; len: LONGINT);  (* Out.writer while browser.ShowDef runs *)
+VAR b: Chars; i: LONGINT;
+BEGIN
+  IF capLen + len > LEN(cap^) THEN
+    NEW(b, 2 * LEN(cap^) + len); i := 0; WHILE i < capLen DO b[i] := cap[i]; INC(i) END; cap := b
+  END;
+  i := 0; WHILE i < len DO cap[capLen] := s[i]; INC(capLen); INC(i) END
+END Capture;
+
+(* the entries of the definition in cap: procedures first, then variables, constants and types, each in
+   the order of the definition *)
+PROCEDURE ParseDef(d: Def);
+VAR p, e, i, j, tabs, section: LONGINT; line: ARRAY 512 OF CHAR; name: ARRAY 32 OF CHAR;
+  names: ARRAY 16 OF ARRAY 32 OF CHAR; nn: LONGINT; first, last: ARRAY 4 OF Entry; x: Entry; k: INTEGER;
+  kw: ARRAY 12 OF CHAR;
+
+  PROCEDURE Add(kind: CHAR; VAR nm: ARRAY OF CHAR; from: LONGINT);  (* sig: the line from from, without ";" *)
+  VAR x: Entry; n: LONGINT; k: INTEGER;
+  BEGIN
+    NEW(x); x.kind := kind; COPY(nm, x.name); n := 0;
+    WHILE (line[from] # 0X) & (n < LEN(x.sig) - 1) DO x.sig[n] := line[from]; INC(n); INC(from) END;
+    WHILE (n > 0) & (x.sig[n-1] = ";") DO DEC(n) END;
+    x.sig[n] := 0X; x.params := (x.sig[0] = "(") & (x.sig[1] # ")"); x.next := NIL;
+    IF kind = "p" THEN k := 0 ELSIF kind = "v" THEN k := 1 ELSIF kind = "c" THEN k := 2 ELSE k := 3 END;
+    IF first[k] = NIL THEN first[k] := x ELSE last[k].next := x END;
+    last[k] := x
+  END Add;
+
+  PROCEDURE Word(VAR i: LONGINT; VAR w: ARRAY OF CHAR);  (* the identifier at line[i] *)
+  VAR n: LONGINT;
+  BEGIN
+    n := 0;
+    WHILE IsWord(line[i]) DO IF n < LEN(w) - 1 THEN w[n] := line[i]; INC(n) END; INC(i) END;
+    w[n] := 0X
+  END Word;
+
+  PROCEDURE Is(s: ARRAY OF CHAR): BOOLEAN;  (* the line is a tab and s *)
+  VAR i: LONGINT;
+  BEGIN
+    i := 0; WHILE (s[i] # 0X) & (line[i+1] = s[i]) DO INC(i) END;
+    RETURN (s[i] = 0X) & (line[i+1] = 0X)
+  END Is;
+
+  (* a line of two tabs: name* = ... or name*, name*: type *)
+  PROCEDURE Names(kind: CHAR);
+  VAR i, j: LONGINT;
+  BEGIN
+    i := 2; nn := 0;
+    LOOP
+      Word(i, name);
+      IF (name[0] = 0X) OR (line[i] # "*") & (line[i] # "-") THEN nn := 0; EXIT END;
+      INC(i); COPY(name, names[nn]); INC(nn);
+      IF (line[i] = ",") & (nn < LEN(names)) THEN INC(i); WHILE line[i] = " " DO INC(i) END ELSE EXIT END
+    END;
+    j := 0; WHILE j < nn DO Add(kind, names[j], i); INC(j) END
+  END Names;
+
+BEGIN
+  k := 0; WHILE k < 4 DO first[k] := NIL; last[k] := NIL; INC(k) END;
+  p := 0; section := 0;
+  WHILE p < capLen DO
+    e := p; WHILE (e < capLen) & (cap[e] # LF) & (cap[e] # CR) DO INC(e) END;
+    i := 0; j := p; WHILE (j < e) & (i < LEN(line) - 1) DO line[i] := cap[j]; INC(i); INC(j) END;
+    line[i] := 0X;
+    tabs := 0; WHILE line[tabs] = TAB DO INC(tabs) END;
+    IF tabs = 1 THEN
+      IF Is("CONST") THEN section := 1
+      ELSIF Is("TYPE") THEN section := 2
+      ELSIF Is("VAR") THEN section := 3
+      ELSE
+        section := 0;
+        line[0] := " "; kw := " PROCEDURE "; i := 1;
+        WHILE (i < 11) & (line[i] = kw[i]) DO INC(i) END;
+        IF i = 11 THEN
+          Word(i, name);
+          IF (name[0] # 0X) & ((line[i] = "*") OR (line[i] = "-")) THEN Add("p", name, i + 1) END
+        END
+      END
+    ELSIF (tabs = 2) & (section = 1) THEN Names("c")
+    ELSIF (tabs = 2) & (section = 2) THEN Names("t")
+    ELSIF (tabs = 2) & (section = 3) THEN Names("v")
+    END;
+    p := e + 1
+  END;
+  d.first := NIL; x := NIL; k := 0;
+  WHILE k < 4 DO
+    IF first[k] # NIL THEN
+      IF x = NIL THEN d.first := first[k] ELSE x.next := first[k] END;
+      x := last[k]
+    END;
+    INC(k)
+  END
+END ParseDef;
+
+(* the exports of module mod, as the port's browser.ShowDef writes them; read once *)
+PROCEDURE ReadDef(VAR mod: ARRAY OF CHAR): Def;
+VAR d: Def; par: Oberon0.ParList; w: Texts.Writer; old: Out.Writer; res: INTEGER;
+BEGIN
+  d := defs; WHILE (d # NIL) & (d.mod # mod) DO d := d.next END;
+  IF d = NIL THEN
+    NEW(d); COPY(mod, d.mod); d.first := NIL; d.next := defs; defs := d;
+    NEW(cap, 4096); capLen := 0;
+    Texts.OpenWriter(w); Texts.WriteString(w, mod); Texts.WriteString(w, " ~");
+    NEW(par); NEW(par.text); Texts.Open(par.text, ""); Texts.Append(par.text, w.buf); par.pos := 0;
+    old := Out.writer; Out.writer := Capture;
+    Oberon0.Call("browser.ShowDef", par, FALSE, res);
+    Out.writer := old;
+    IF res = 0 THEN ParseDef(d) END;
+    cap := NIL
+  END;
+  RETURN d
+END ReadDef;
+
+(* id is a module of the IMPORT list of the text, or an alias of one there: that module in mod *)
+PROCEDURE Imported(VAR id, mod: ARRAY OF CHAR): BOOLEAN;
+VAR R: Texts.Reader; c: CHAR; w, a: ARRAY 32 OF CHAR; n, depth: LONGINT; inImport, assign: BOOLEAN;
+BEGIN
+  Texts.OpenReader(R, T, 0); Texts.Read(R, c); inImport := FALSE; assign := FALSE; a[0] := 0X;
+  LOOP
+    IF R.eot THEN RETURN FALSE END;
+    IF c = "(" THEN
+      Texts.Read(R, c);
+      IF c = "*" THEN  (* a comment, nested ones in it *)
+        depth := 1; Texts.Read(R, c);
+        WHILE ~R.eot & (depth > 0) DO
+          IF c = "(" THEN Texts.Read(R, c); IF c = "*" THEN INC(depth); Texts.Read(R, c) END
+          ELSIF c = "*" THEN Texts.Read(R, c); IF c = ")" THEN DEC(depth); Texts.Read(R, c) END
+          ELSE Texts.Read(R, c)
+          END
+        END
+      END
+    ELSIF IsWord(c) THEN
+      n := 0;
+      WHILE ~R.eot & IsWord(c) DO IF n < LEN(w) - 1 THEN w[n] := c; INC(n) END; Texts.Read(R, c) END;
+      w[n] := 0X;
+      IF ~inImport THEN
+        IF w = "IMPORT" THEN inImport := TRUE
+        ELSIF (w = "CONST") OR (w = "TYPE") OR (w = "VAR") OR (w = "PROCEDURE") OR (w = "BEGIN") THEN RETURN FALSE
+        END
+      ELSIF assign THEN  (* w is the module of the alias a *)
+        IF a = id THEN COPY(w, mod); RETURN TRUE END;
+        assign := FALSE; a[0] := 0X
+      ELSE COPY(w, a)
+      END
+    ELSIF c = ":" THEN
+      Texts.Read(R, c); IF inImport & (c = "=") THEN assign := TRUE; Texts.Read(R, c) END
+    ELSIF (c = ",") OR (c = ";") THEN
+      IF inImport & ~assign & (a[0] # 0X) & (a = id) THEN COPY(a, mod); RETURN TRUE END;
+      IF inImport & (c = ";") THEN RETURN FALSE END;
+      a[0] := 0X; assign := FALSE; Texts.Read(R, c)
+    ELSE Texts.Read(R, c)
+    END
+  END
+END Imported;
+
+(* the identifier that ends at pos, and where it starts *)
+PROCEDURE WordBefore(pos: LONGINT; VAR w: ARRAY OF CHAR; VAR start: LONGINT);
+VAR n: LONGINT;
+BEGIN
+  start := pos; WHILE (start > 0) & IsWord(CharAt(start - 1)) DO DEC(start) END;
+  n := 0; WHILE (start + n < pos) & (n < LEN(w) - 1) DO w[n] := CharAt(start + n); INC(n) END;
+  w[n] := 0X
+END WordBefore;
+
+(* the names of the module before the "." the caret follows, with the start of a name typed after it; any:
+   also a module that the text does not import *)
+PROCEDURE CompOpen(any: BOOLEAN): BOOLEAN;
+VAR p, dot, s: LONGINT; id, mod: ARRAY 32 OF CHAR; d: Def;
+BEGIN
+  p := cur; WHILE (p > 0) & IsWord(CharAt(p - 1)) DO DEC(p) END;
+  IF (p = 0) OR (CharAt(p - 1) # ".") THEN RETURN FALSE END;
+  dot := p - 1; WordBefore(dot, id, s);
+  IF (id[0] = 0X) OR (id[0] >= "0") & (id[0] <= "9") OR (s > 0) & (CharAt(s - 1) = ".") THEN RETURN FALSE END;
+  IF ~Imported(id, mod) THEN
+    IF any THEN COPY(id, mod) ELSE RETURN FALSE END
+  END;
+  d := ReadDef(mod);
+  IF d.first = NIL THEN RETURN FALSE END;
+  compDef := d; compDot := dot; compOn := TRUE; compSel := 0; compTop := 0;
+  RETURN TRUE
+END CompOpen;
+
+(* the caret is still after the "." and a part of a name *)
+PROCEDURE CompValid(): BOOLEAN;
+VAR p: LONGINT;
+BEGIN
+  IF ~compOn OR (cur <= compDot) OR (compDot >= T.len) OR (CharAt(compDot) # ".") THEN RETURN FALSE END;
+  p := compDot + 1; WHILE p < cur DO IF ~IsWord(CharAt(p)) THEN RETURN FALSE END; INC(p) END;
+  RETURN TRUE
+END CompValid;
+
+(* the names that begin with what was typed after the ".", in capitals or not *)
+PROCEDURE Filter;
+VAR prefix: ARRAY 32 OF CHAR; e: Entry; n, i, p: LONGINT;
+BEGIN
+  n := 0; p := compDot + 1;
+  WHILE (p < cur) & (n < LEN(prefix) - 1) DO prefix[n] := CharAt(p); INC(n); INC(p) END;
+  prefix[n] := 0X;
+  nMatch := 0; e := compDef.first;
+  WHILE (e # NIL) & (nMatch < MaxMatch) DO
+    i := 0; WHILE (prefix[i] # 0X) & (CAP(prefix[i]) = CAP(e.name[i])) DO INC(i) END;
+    IF prefix[i] = 0X THEN match[nMatch] := e; INC(nMatch) END;
+    e := e.next
+  END;
+  IF compSel >= nMatch THEN compSel := nMatch - 1 END;
+  IF compSel < 0 THEN compSel := 0 END
+END Filter;
+
+(* the chosen name in place of the part typed; "(" after a procedure with parameters *)
+PROCEDURE Accept;
+VAR e: Entry; i: LONGINT;
+BEGIN
+  e := match[compSel]; Delete(compDot + 1, cur); cur := compDot + 1;
+  i := 0; WHILE e.name[i] # 0X DO Insert(e.name[i]); INC(i) END;
+  IF e.params THEN Insert("(") END;
+  compOn := FALSE
+END Accept;
+
+(* the keys of the list while it shows names: TRUE when k was one of them *)
+PROCEDURE CompKey(k: LONGINT): BOOLEAN;
+BEGIN
+  IF ~compOn THEN RETURN FALSE END;
+  IF k = KEsc THEN compOn := FALSE; RETURN TRUE END;
+  IF nMatch = 0 THEN RETURN FALSE END;
+  IF k = KUp THEN IF compSel > 0 THEN DEC(compSel) END
+  ELSIF k = KDown THEN IF compSel < nMatch - 1 THEN INC(compSel) END
+  ELSIF k = KPgUp THEN DEC(compSel, ListRows); IF compSel < 0 THEN compSel := 0 END
+  ELSIF k = KPgDn THEN INC(compSel, ListRows); IF compSel >= nMatch THEN compSel := nMatch - 1 END
+  ELSIF (k = 0DH) OR (k = 0AH) OR (k = 9) THEN Accept
+  ELSE RETURN FALSE
+  END;
+  RETURN TRUE
+END CompKey;
+
+(* after a key that was not the list's: the list follows the typing; "." after an imported module opens it,
+   Ctrl+Space (NUL) after any module *)
+PROCEDURE AfterKey(k: LONGINT);
+BEGIN
+  IF compOn & ~CompValid() THEN compOn := FALSE END;
+  IF source & ~compOn & (k = ORD(".")) THEN IF CompOpen(FALSE) THEN END END;
+  IF source & (k = 0) & ~CompOpen(TRUE) THEN msg := "No module before the caret, or it has no symbol file" END;
+  IF compOn THEN
+    IF (k = 7FH) OR (k = 8) OR (k >= 20H) & (k < 100H) THEN compSel := 0; compTop := 0 END;
+    Filter
+  END
+END AfterKey;
+
+(* the caret is in the parameters of Module.Proc( on this line: the procedure, the number of the
+   parameter (0 the first), where the name of the procedure starts *)
+PROCEDURE CallAt(VAR e: Entry; VAR arg, pos: LONGINT): BOOLEAN;
+VAR p, ls, depth, q, s: LONGINT; c, quote: CHAR; name, id, mod: ARRAY 32 OF CHAR; d: Def;
+BEGIN
+  ls := LineStart(cur); p := cur; depth := 0; arg := 0;
+  LOOP
+    IF p <= ls THEN RETURN FALSE END;
+    DEC(p); c := CharAt(p);
+    IF c = ")" THEN INC(depth)
+    ELSIF c = "(" THEN
+      IF depth = 0 THEN EXIT END;
+      DEC(depth)
+    ELSIF (c = ",") & (depth = 0) THEN INC(arg)
+    ELSIF c = ";" THEN RETURN FALSE
+    ELSIF (c = 22X) OR (c = "'") THEN  (* a string: back to its start *)
+      quote := c;
+      REPEAT DEC(p) UNTIL (p < ls) OR (CharAt(p) = quote);
+      IF p < ls THEN RETURN FALSE END
+    END
+  END;
+  q := p; WHILE (q > ls) & (CharAt(q - 1) = " ") DO DEC(q) END;
+  WordBefore(q, name, s);
+  IF (name[0] = 0X) OR (s = 0) OR (CharAt(s - 1) # ".") THEN RETURN FALSE END;
+  WordBefore(s - 1, id, pos); pos := s;
+  IF (id[0] = 0X) OR ~Imported(id, mod) THEN RETURN FALSE END;
+  d := ReadDef(mod); e := d.first;
+  WHILE (e # NIL) & ~((e.kind = "p") & (e.name = name)) DO e := e.next END;
+  RETURN (e # NIL) & e.params
+END CallAt;
+
+(* above the caret line: the procedure being called, its parameter at the caret in bold *)
+PROCEDURE DrawHint;
+VAR e: Entry; arg, pos, row, col, w, i, k, hb, he, depth: LONGINT;
+BEGIN
+  IF ~CallAt(e, arg, pos) THEN RETURN END;
+  i := 1; k := 0; hb := -1; he := -1;
+  LOOP  (* a group of parameters: VAR, names, a type *)
+    WHILE e.sig[i] = " " DO INC(i) END;
+    IF (e.sig[i] = "V") & (e.sig[i+1] = "A") & (e.sig[i+2] = "R") & (e.sig[i+3] = " ") THEN INC(i, 4) END;
+    LOOP
+      WHILE e.sig[i] = " " DO INC(i) END;
+      IF k = arg THEN hb := i END;
+      WHILE IsWord(e.sig[i]) DO INC(i) END;
+      IF k = arg THEN he := i END;
+      INC(k);
+      WHILE e.sig[i] = " " DO INC(i) END;
+      IF e.sig[i] = "," THEN INC(i) ELSE EXIT END
+    END;
+    depth := 0;
+    WHILE (e.sig[i] # 0X) & ~((depth = 0) & ((e.sig[i] = ";") OR (e.sig[i] = ")"))) DO
+      IF e.sig[i] = "(" THEN INC(depth) ELSIF e.sig[i] = ")" THEN DEC(depth) END;
+      INC(i)
+    END;
+    IF e.sig[i] = ";" THEN INC(i) ELSE EXIT END
+  END;
+  w := 2; i := 0; WHILE e.name[i] # 0X DO INC(w); INC(i) END;
+  i := 0; WHILE e.sig[i] # 0X DO INC(w); INC(i) END;
+  IF w > cols THEN w := cols END;
+  row := LineNo(cur) - LineNo(top) + 2; IF row > 2 THEN DEC(row) ELSE INC(row) END;
+  col := Col(pos) - hcol; IF col + w > cols + 1 THEN col := cols - w + 1 END; IF col < 1 THEN col := 1 END;
+  Goto(row, col); CSI("0;7m"); Ch(" "); Str(e.name); k := 2; i := 0; WHILE e.name[i] # 0X DO INC(k); INC(i) END;
+  i := 0;
+  WHILE (e.sig[i] # 0X) & (k < w) DO
+    IF i = hb THEN CSI("1m") ELSIF i = he THEN CSI("22m") END;
+    Ch(e.sig[i]); INC(i); INC(k)
+  END;
+  CSI("22m"); Ch(" "); Attr(0)
+END DrawHint;
+
+(* the names that begin with what was typed, under the caret line (above it near the bottom) *)
+PROCEDURE DrawList;
+VAR n, r, row, col, w, len, i, j: LONGINT; e: Entry; line: ARRAY 320 OF CHAR; tag: ARRAY 8 OF CHAR;
+
+  PROCEDURE Put(s: ARRAY OF CHAR);
+  VAR i: LONGINT;
+  BEGIN i := 0; WHILE (s[i] # 0X) & (len < LEN(line) - 1) DO line[len] := s[i]; INC(len); INC(i) END
+  END Put;
+
+BEGIN
+  n := nMatch; IF n > ListRows THEN n := ListRows END;
+  IF compSel < compTop THEN compTop := compSel ELSIF compSel >= compTop + n THEN compTop := compSel - n + 1 END;
+  r := LineNo(cur) - LineNo(top) + 2;
+  IF r + n <= height + 1 THEN row := r + 1
+  ELSIF r - n >= 2 THEN row := r - n
+  ELSE row := 2; n := r - 2; IF n < 1 THEN RETURN END
+  END;
+  w := 0; i := compTop;
+  WHILE i < compTop + n DO
+    e := match[i]; len := 9;
+    j := 0; WHILE e.name[j] # 0X DO INC(len); INC(j) END;
+    j := 0; WHILE e.sig[j] # 0X DO INC(len); INC(j) END;
+    IF len > w THEN w := len END;
+    INC(i)
+  END;
+  IF w > cols THEN w := cols END;
+  col := Col(compDot + 1) - hcol + 1 - 7; IF col + w > cols + 1 THEN col := cols - w + 1 END; IF col < 1 THEN col := 1 END;
+  i := compTop;
+  WHILE i < compTop + n DO
+    e := match[i];
+    IF e.kind = "p" THEN tag := "proc " ELSIF e.kind = "v" THEN tag := "var  "
+    ELSIF e.kind = "c" THEN tag := "const" ELSE tag := "type "
+    END;
+    len := 0; Put(" "); Put(tag); Put(" "); Put(e.name); Put(e.sig);
+    WHILE len < w DO line[len] := " "; INC(len) END;
+    line[w] := 0X;
+    Goto(row + i - compTop, col);
+    IF i = compSel THEN CSI("0;1m") ELSE CSI("0;7m") END;
+    Str(line); Attr(0);
+    INC(i)
+  END;
+  Goto(rows - 2, 1); Attr(7); Ch(" "); Str(compDef.mod); Ch(" "); Int(compSel + 1); Ch("/"); Int(nMatch);
+  Str("  arrows choose, Enter or Tab takes, Esc closes "); Attr(0); CSI("K");
+END DrawList;
 
 (* keep the caret on the screen *)
 PROCEDURE Follow;
@@ -650,6 +1058,7 @@ BEGIN
   CSI("K"); Goto(rows, 1);
   Help("^X", "Exit"); Help("^A", "Select All"); Help("^E", "Line End"); Help("Shift", "Select"); Help("^B", "Block");
   CSI("K");
+  IF source THEN IF compOn & (nMatch > 0) THEN DrawList ELSE DrawHint END END;
   IF selOn & block THEN Goto(LineNo(cur) - LineNo(top) + 2, cCol - hcol + 1)
   ELSE Goto(LineNo(cur) - LineNo(top) + 2, Col(cur) - hcol + 1)
   END;
@@ -738,6 +1147,9 @@ BEGIN
   Str("Home  Line Start   ^E  Line End   (also End)   Ctrl+Left/Right  by words"); Ch(CR); Ch(LF);
   Str("^Y  Prev Page    (also PgUp; Next Page: PgDn)"); Ch(CR); Ch(LF);
   Str("^L  Refresh the screen"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
+  Str("In .Mod files: Module. lists the exports of an imported module (Ctrl+Space: of any module)"); Ch(CR); Ch(LF);
+  Str("    typing narrows the list, Backspace widens it; arrows choose, Enter or Tab takes, Esc closes;"); Ch(CR); Ch(LF);
+  Str("    in the parameters of Module.Proc( the line above shows them, the one at the caret in bold"); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
   Str("Plain files stay plain; Oberon texts keep their fonts and colours, new text"); Ch(CR); Ch(LF);
   Str("gets the looks of the character before it."); Ch(CR); Ch(LF); Ch(CR); Ch(LF);
   Attr(7); Str(" Press any key "); Attr(0); Flush;
@@ -898,6 +1310,8 @@ BEGIN
   END;
   cur := 0; top := 0; hcol := 0; goalCol := -1; modified := FALSE; lastCut := FALSE; clip := NIL; clipBlock := FALSE;
   selOn := FALSE; block := FALSE; marking := FALSE; mods := 0;
+  source := Ends(name, ".Mod") OR Ends(name, ".mod"); defs := NIL; compOn := FALSE; nMatch := 0;
+  IF match = NIL THEN NEW(match) END;
   Texts.OpenWriter(W);
   IF ~Raw() THEN RETURN END;
   running := TRUE;
@@ -905,7 +1319,7 @@ BEGIN
     Draw;
     k := ReadKey();
     IF (k = 3) & ~selOn THEN Draw; Location; Flush; k := ReadKey() END;  (* ^C shows the location until the next key *)
-    Key(k)
+    IF ~CompKey(k) THEN Key(k); AfterKey(k) END
   END;
   Restore
 END Edit;
@@ -923,5 +1337,5 @@ BEGIN
 END Open;
 
 BEGIN
-  raw := FALSE; opos := 0; search := ""
+  raw := FALSE; opos := 0; search := ""; match := NIL
 END none.
