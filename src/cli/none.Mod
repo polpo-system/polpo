@@ -927,6 +927,24 @@ BEGIN
     OR (s = "IMPORT")
 END SectionEnd;
 
+(* the token starts the next declaration or a body, so a declaration before it is not finished: BEGIN,
+   END, CONST, TYPE, IMPORT, VAR (where depth = 0) or PROCEDURE and a name (not a procedure type) *)
+PROCEDURE NextDecl(depth: LONGINT): BOOLEAN;
+VAR R: Texts.Reader; c: CHAR; p, pos: LONGINT; eot: BOOLEAN; t: ARRAY 32 OF CHAR; kind: INTEGER; ch: CHAR;
+  name: BOOLEAN;
+BEGIN
+  IF tokKind # 1 THEN RETURN FALSE END;
+  IF (tok = "BEGIN") OR (tok = "END") OR (tok = "CONST") OR (tok = "TYPE") OR (tok = "IMPORT") THEN RETURN TRUE END;
+  IF tok = "VAR" THEN RETURN depth = 0 END;
+  IF tok # "PROCEDURE" THEN RETURN FALSE END;
+  R := sR; c := sc; p := sp; eot := seot; COPY(tok, t); kind := tokKind; ch := tokCh; pos := tokPos;
+  SNext;
+  WHILE (tokKind = 2) & ((tokCh = "^") OR (tokCh = "*") OR (tokCh = "-") OR (tokCh = "+") OR (tokCh = "&")) DO SNext END;
+  name := tokKind = 1;
+  sR := R; sc := c; sp := p; seot := eot; COPY(t, tok); tokKind := kind; tokCh := ch; tokPos := pos;
+  RETURN name
+END NextDecl;
+
 (* the names declared in the text (procedures, variables, constants and types of all its scopes), the
    modules it imports and the predeclared procedures; read again after changes *)
 PROCEDURE OwnDef(): Def;
@@ -945,16 +963,16 @@ BEGIN
       IF tokKind = 1 THEN  (* not a receiver or a procedure type *)
         COPY(tok, name); SNext;
         IF (tokKind = 2) & ((tokCh = "*") OR (tokCh = "-")) THEN SNext END;
-        from := tokPos; sig := "";
+        from := tokPos; sig := ""; pdepth := 0;
         IF (tokKind = 2) & ((tokCh = "(") OR (tokCh = ":")) THEN
-          pdepth := 0;
-          WHILE (tokKind # 0) & ~((tokKind = 2) & (tokCh = ";") & (pdepth = 0)) DO
+          WHILE (tokKind # 0) & ~((tokKind = 2) & (tokCh = ";") & (pdepth = 0)) & ~NextDecl(pdepth) DO
             IF (tokKind = 2) & (tokCh = "(") THEN INC(pdepth) ELSIF (tokKind = 2) & (tokCh = ")") THEN DEC(pdepth) END;
             SNext
           END;
           TextOf(from, tokPos, sig, FALSE)
         END;
-        IF ~Has(L, "p", name) THEN Put(L, NewEntry("p", name, sig)) END
+        (* a heading whose parameters are not closed yet is not listed *)
+        IF (pdepth = 0) & ~Has(L, "p", name) THEN Put(L, NewEntry("p", name, sig)) END
       END
     ELSIF (tokKind = 1) & (tok = "IMPORT") THEN
       SNext;
@@ -983,7 +1001,7 @@ BEGIN
         END;
         from := tokPos; pdepth := 0; rdepth := 0;
         WHILE (tokKind # 0) & ~((tokKind = 2) & (tokCh = ";") & (pdepth = 0) & (rdepth = 0)) &
-          ~((tokKind = 1) & (tok = "BEGIN")) DO
+          ~((rdepth = 0) & NextDecl(pdepth)) DO
           IF tokKind = 2 THEN
             IF tokCh = "(" THEN INC(pdepth) ELSIF tokCh = ")" THEN DEC(pdepth) END
           ELSIF (tokKind = 1) & (tok = "RECORD") THEN INC(rdepth)
@@ -1138,6 +1156,14 @@ BEGIN
   WordBefore(q, name, s);
   IF name[0] = 0X THEN RETURN FALSE END;
   pos := s;
+  (* PROCEDURE Name( or PROCEDURE (r: T) Name( is a heading being written, not a call *)
+  q := s; WHILE (q > 0) & (CharAt(q - 1) <= " ") DO DEC(q) END;
+  IF (q > 0) & (CharAt(q - 1) = ")") THEN RETURN FALSE END;  (* a receiver before the name *)
+  WHILE (q > 0) & ((CharAt(q - 1) = "^") OR (CharAt(q - 1) = "*") OR (CharAt(q - 1) = "-") OR (CharAt(q - 1) = "+")
+    OR (CharAt(q - 1) = "&")) DO DEC(q) END;
+  WHILE (q > 0) & (CharAt(q - 1) <= " ") DO DEC(q) END;
+  WordBefore(q, id, q);
+  IF id = "PROCEDURE" THEN RETURN FALSE END;
   IF (s > 0) & (CharAt(s - 1) = ".") THEN
     WordBefore(s - 1, id, q);
     IF (id[0] = 0X) OR ~Imported(id, mod) THEN RETURN FALSE END;
