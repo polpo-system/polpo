@@ -6,7 +6,8 @@ MODULE Gemini0;  (** the core of Gemini and Spartan clients: requests, answers, 
    1024 bytes) and into the data of a Spartan request. The answer is a Response: the status
    (Gemini 10..69; Spartan 2..5), the meta (a type, a prompt, a redirect, an error), and the body
    in chunks, complete when the server ended it properly (close_notify; for Spartan the end of
-   the connection). Fetch follows redirects.
+   the connection). Fetch follows redirects. A request ends when a read or a write on its
+   connection waits longer than the timeout of its options (a minute unless set otherwise).
    A server is trusted on first use (Tofu, the default): the SHA-256 of its key is kept in
    $HOME/.gemini_hosts ("host:port key") and a different key later is refused; or not checked
    at all (None); or it must have the certificate whose SHA-256 is pin (Pin). A server with a
@@ -27,6 +28,7 @@ CONST
   MaxCandidates* = 32;
   NameLen = 256;
   PathLen = 1024;
+  DefaultTimeout = 60000;  (* milliseconds *)
 
 TYPE
   Chunk* = POINTER TO ChunkDesc;  (** a piece of a body *)
@@ -42,7 +44,8 @@ TYPE
     pin*: ARRAY 100 OF CHAR;         (** Pin: the SHA-256 of the certificate, hex (colons and case do not matter) *)
     identity*: TLSIdentity.Identity; (** presented when a server asks for a certificate, or NIL *)
     redirects*: LONGINT;            (** Fetch follows at most this many *)
-    maxBody*: LONGINT               (** bytes kept of a body *)
+    maxBody*: LONGINT;              (** bytes kept of a body *)
+    timeout*: LONGINT               (** milliseconds a read or write may wait, 0: no limit *)
   END;
 
   Response* = POINTER TO ResponseDesc;
@@ -424,11 +427,13 @@ END SavePin;
 
 (* ----- requests ----- *)
 
-(** the options of a plain request: trust on first use, no identity, 5 redirects, 32 MB *)
+(** the options of a plain request: trust on first use, no identity, 5 redirects, 32 MB, a timeout
+  of a minute *)
 PROCEDURE NewOptions*(): Options;
 VAR o: Options;
 BEGIN
   NEW(o); o.trust := Tofu; o.pin := ""; o.identity := NIL; o.redirects := 5; o.maxBody := 32 * 1024 * 1024;
+  o.timeout := DefaultTimeout;
   RETURN o
 END NewOptions;
 
@@ -544,14 +549,19 @@ END SpartanRequest;
   in url; Spartan: the data), "" for none; o: NIL for NewOptions(); FALSE (lastError says why) if
   there is no answer, else r has it, whatever its status *)
 PROCEDURE Request*(url, input: ARRAY OF CHAR; o: Options; VAR r: Response): BOOLEAN;
-VAR host, port, path: ARRAY MaxURL OF CHAR; req, enc: ARRAY 3200 OF CHAR; i: LONGINT;
+VAR host, port, path: ARRAY MaxURL OF CHAR; req, enc: ARRAY 3200 OF CHAR; i, t: LONGINT; ok: BOOLEAN;
 BEGIN
   lastError := "";
   IF o = NIL THEN o := NewOptions() END;
   NEW(r); COPY(url, r.url); r.protocol := Protocol(url); r.status := 0; r.meta := ""; r.body := NIL; r.length := 0;
   r.complete := FALSE; r.certPin := ""; r.keyPin := ""; r.firstUse := FALSE; r.identitySent := FALSE;
   IF ~Split(r.url, host, port, path) THEN SetError("not a gemini:// or spartan:// URL: ", url); RETURN FALSE END;
-  IF r.protocol = Spartan THEN RETURN SpartanRequest(host, port, path, input, o, r) END;
+  IF r.protocol = Spartan THEN
+    t := Internet.timeout; Internet.timeout := o.timeout;
+    ok := SpartanRequest(host, port, path, input, o, r);
+    Internet.timeout := t;
+    RETURN ok
+  END;
   COPY(r.url, req);
   i := 0; WHILE (req[i] # 0X) & (req[i] # "#") DO INC(i) END; req[i] := 0X;
   IF input[0] # 0X THEN
@@ -561,7 +571,10 @@ BEGIN
   IF Len(req) > 1024 THEN SetError("the request is longer than the 1024 bytes Gemini allows", ""); RETURN FALSE END;
   COPY(req, r.url);
   i := Len(req); req[i] := 0DX; req[i + 1] := 0AX; req[i + 2] := 0X;
-  RETURN GeminiRequest(host, port, req, o, r)
+  t := Internet.timeout; Internet.timeout := o.timeout;
+  ok := GeminiRequest(host, port, req, o, r);
+  Internet.timeout := t;
+  RETURN ok
 END Request;
 
 (** Request, following redirects (3x) to Gemini or Spartan URLs, at most o.redirects; r.url is the
@@ -583,13 +596,15 @@ END Fetch;
 
 (** fp := the SHA-256 of the certificate of the server of url (a Gemini URL), whatever it is *)
 PROCEDURE Fingerprint*(url: ARRAY OF CHAR; VAR fp: ARRAY OF CHAR): BOOLEAN;
-VAR host, port, path: ARRAY MaxURL OF CHAR; ok: BOOLEAN;
+VAR host, port, path: ARRAY MaxURL OF CHAR; t: LONGINT; ok: BOOLEAN;
 BEGIN
   fp[0] := 0X; lastError := "";
   IF (Protocol(url) # Gemini) OR ~Split(url, host, port, path) THEN SetError("not a gemini:// URL: ", url); RETURN FALSE END;
   IF s = NIL THEN NEW(s); TLS13Live.Init(s^) END;
   TLS13Live.SetIdentity(NIL);
+  t := Internet.timeout; Internet.timeout := DefaultTimeout;
   ok := TLS13Live.ConnectPinned(host, port, s^, "");
+  Internet.timeout := t;
   IF ~ok THEN SetError("no connection: ", TLS13Live.lastError); RETURN FALSE END;
   COPY(TLS13Live.certPin, fp); TLS13Live.Disconnect(s^);
   RETURN TRUE

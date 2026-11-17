@@ -1,8 +1,9 @@
 MODULE GeminiTest;  (* GeminiTest.Run: the core of the Gemini clients without a network: links made
-  absolute, file names for URLs, input encoding, status names, gemtext lines, and identities made,
-  listed and found (in the directory zq_idents, made here) *)
+  absolute, file names for URLs, input encoding, status names, gemtext lines, identities made,
+  listed and found (in the directory zq_idents, made here), and Gemini and Spartan requests to a
+  local server (a child process) that never answers, which end after the timeout *)
 
-IMPORT SYSTEM, Linux0, Gemini0, Gemtext0, Out;
+IMPORT SYSTEM, Linux0, Kernel, Sockets, Internet, Gemini0, Gemtext0, Out;
 
 VAR fails, checks: LONGINT;
 
@@ -124,10 +125,42 @@ BEGIN
   END
 END Idents;
 
+(* the child: accepts one connection and sends nothing until the client has gone *)
+PROCEDURE Silent(l: Sockets.Socket);
+VAR c: Sockets.Socket; peer: Sockets.Address; p, n: LONGINT; buf: ARRAY 512 OF CHAR;
+BEGIN
+  c := Sockets.Accept(l, peer, p); IF c = NIL THEN Linux0.Exit0(3) END;
+  REPEAT n := Sockets.Receive(c, buf, LEN(buf)) UNTIL n <= 0;
+  Linux0.Exit0(0)
+END Silent;
+
+(* a request to scheme://127.0.0.1:port/ of a silent server, with a timeout of a second *)
+PROCEDURE Stalled(scheme: ARRAY OF CHAR);
+VAR l: Sockets.Socket; a: Sockets.Address; o: Gemini0.Options; r: Gemini0.Response;
+  port, pid, t, i, k, status: LONGINT; url: ARRAY 64 OF CHAR; d: ARRAY 8 OF CHAR; ok: BOOLEAN;
+BEGIN
+  ok := Sockets.ParseAddress("127.0.0.1", a); l := Sockets.ListenAt(a, 0, 1);
+  IF (l = NIL) OR ~Sockets.LocalAddress(l, a, port) THEN Check("listener", FALSE); RETURN END;
+  pid := Linux0.Fork0();
+  IF pid = 0 THEN Silent(l) END;
+  Sockets.Close(l);
+  COPY(scheme, url); k := 0; WHILE url[k] # 0X DO INC(k) END;
+  i := 0; REPEAT d[i] := CHR(port MOD 10 + ORD("0")); port := port DIV 10; INC(i) UNTIL port = 0;
+  WHILE i > 0 DO DEC(i); url[k] := d[i]; INC(k) END;
+  url[k] := "/"; url[k + 1] := 0X;
+  o := Gemini0.NewOptions(); o.trust := Gemini0.None; o.timeout := 1000;
+  t := Kernel.GetTimer(); ok := Gemini0.Request(url, "", o, r); t := Kernel.GetTimer() - t;
+  Check("no answer", ~ok);
+  Check("after the timeout", (t >= 900) & (t < 10000));
+  Check("timeout restored", Internet.timeout = 0);
+  status := 0; Check("server done", (Linux0.Waitpid0(pid, SYSTEM.ADR(status), 0) = pid) & (status = 0))
+END Stalled;
+
 PROCEDURE Run*;
 BEGIN
   fails := 0; checks := 0;
   URLs; Lines; Idents;
+  Stalled("spartan://127.0.0.1:"); Stalled("gemini://127.0.0.1:");
   Out.String("GeminiTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
