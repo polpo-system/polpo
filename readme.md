@@ -222,6 +222,10 @@ bin/x86/loksh fetch.Get https://example.com/ page.html # TLS 1.3
 bin/x86/loksh gemini.Get gemini://norayr.am/gd.gif     # Gemini; gemini.Show prints the page
 ```
 
+A download by `fetch` stops when a read or a write on its connection waits for a minute. Other
+programs set the limit with `Internet.timeout` (milliseconds, 0 for none, the default); it applies
+to the connections `Internet.Connect` makes after it is set.
+
 `dcs`, the digital command system, is the Gemini and Spartan client with everything: it prints
 the URL, the status, the meta and the body as it arrived, sends input, saves, pins certificates,
 and logs in with identities (client certificates); `DCS` does the same in the desktop, each

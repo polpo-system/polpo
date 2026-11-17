@@ -8,9 +8,12 @@ MODULE fetch;  (** HTTP downloads with the http module *)
    root of the CA bundle (SSL_CERT_FILE, else /etc/ssl/certs/ca-certificates.crt), the host
    name, CertificateVerify and Finished are checked; the connection is refused otherwise.
    An incomplete body (shorter than its length, no last chunk, or a TLS connection that ended
-   without close_notify) is not saved. *)
+   without close_notify) is not saved. A download stops when a read or a write on its connection
+   waits for a minute. *)
 
-IMPORT Texts, Files, http, httpsPure, TLS13Live, strTypes, Out;
+IMPORT Texts, Files, Internet, http, httpsPure, TLS13Live, strTypes, Out;
+
+CONST Timeout = 60000;  (* milliseconds *)
 
 VAR secure: BOOLEAN;  (* the last Split saw https *)
 
@@ -49,11 +52,13 @@ BEGIN
 END Split;
 
 PROCEDURE Fetch(VAR url: ARRAY OF CHAR; VAR h: http.Client): BOOLEAN;
-VAR host, port, path: ARRAY 1024 OF CHAR; body: strTypes.pstring;
+VAR host, port, path: ARRAY 1024 OF CHAR; body: strTypes.pstring; t: LONGINT;
 BEGIN
   IF ~Split(url, host, port, path) THEN Out.String("fetch: bad url "); Out.String(url); Out.Ln; RETURN FALSE END;
   IF secure THEN h := httpsPure.Create(host, port, path) ELSE h := http.Create(host, port, path) END;
+  t := Internet.timeout; Internet.timeout := Timeout;
   body := h.Get(h);
+  Internet.timeout := t;
   RETURN body # NIL
 END Fetch;
 
