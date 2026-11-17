@@ -11,6 +11,9 @@ CONST
 TYPE
   Socket* = LONGINT; (* INT32, the file descriptor *)
 
+VAR
+  timeout*: LONGINT;  (** milliseconds a read or write on a connection made by Connect may wait, 0: no limit *)
+
 (** write the bytes buf[0..n) *)
 PROCEDURE WriteBytes*(VAR fd: Socket; VAR buf: ARRAY OF CHAR; n: LONGINT): BOOLEAN;
 VAR done, r: LONGINT;
@@ -108,6 +111,7 @@ BEGIN
   IF s = NIL THEN
     Out.String("Internet.Connect: connect failed, error "); Out.Int(-Sockets.res, 0); Out.Ln; RETURN FALSE
   END;
+  IF timeout > 0 THEN Sockets.SetTimeout(s, timeout) END;
   conn := s.fd;
   RETURN TRUE
 END Connect;
@@ -119,4 +123,6 @@ BEGIN
   r := Linux0.Shutdown0(fd, 2); r := Linux0.Close0(fd)
 END Disconnect;
 
+BEGIN
+  timeout := 0
 END Internet.
