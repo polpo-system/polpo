@@ -802,6 +802,15 @@ BEGIN
   RETURN (a = 07FFFFFFH) & (b = -134217728) & (c = -1) & (n = -5)
 END Shifts;
 
+(* a string literal of 200 characters *)
+PROCEDURE LongString(): BOOLEAN;
+VAR s: ARRAY 256 OF CHAR; i: LONGINT;
+BEGIN
+  s := "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+  i := 0; WHILE s[i] # 0X DO INC(i) END;
+  RETURN (i = 200) & (s[100] = "0") & (s[199] = "9")
+END LongString;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -869,6 +878,7 @@ BEGIN
   Check("DIV and MOD of a function result by a variable", CallDiv(100, 7));
   Check("a condition of seven elements of open arrays on the heap", OpenConds());
   Check("shifts by a negative parameter, the parameter used again", Shifts(-2, -1, -5));
+  Check("a string literal of 200 characters", LongString());
   Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 

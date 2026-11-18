@@ -378,8 +378,8 @@ Oberon-1 compiler, the x86 one knows some Oberon-2, the ROP2 compilers (ARMv7, R
 
     EXIT only inside LOOP, and HALT(100) (the ports accept different ranges of trap numbers);
 
-    module names shorter than 20 characters, identifiers shorter than 32, string constants
-    shorter than 128 characters, and less than 16 KB of them in a module;
+    identifiers (module names too) shorter than 32 characters, string constants shorter than 256
+    characters, and less than 16 KB of them in a module;
 
     DIV and MOD only with a divisor > 0, as in Oberon-07: a constant divisor <= 0 does not
     compile (err 237), a variable one stops the program (trap 10). For a negative dividend

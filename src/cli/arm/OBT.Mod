@@ -28,7 +28,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
     Struct* = POINTER TO StrDesc;
 
     ConstExt* = RECORD
-                str*: ARRAY 128 OF CHAR;
+                str*: ARRAY 256 OF CHAR;
                 entered* : BOOLEAN;
               END;
     

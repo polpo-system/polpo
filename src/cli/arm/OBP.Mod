@@ -11,7 +11,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
   IMPORT SYSTEM, Texts := Texts0, Oberon := Oberon0, Root, OBS, OBT, OBA, OBC, OBE, OBH, OC := OBM;
 
   CONST
-    NofCases = 128; ModNameLen = 20; 
+    NofCases = 128; ModNameLen = 32; 
     RecDescSize = 8; AdrSize = 4; ProcSize = 4; PtrSize = 4;
     XParOrg = 12; LParOrg = 8; MaxJumpTableEntries = 1024; (* reine Willkür! *) 
     

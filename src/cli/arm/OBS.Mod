@@ -23,7 +23,7 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
 
   CONST KW = 47;  (*size of hash table*)
         maxDig = 32;
-        maxStrLen = 128;
+        maxStrLen = 256;
         
         SetLen = MAX(SET)+1;
         NumErrors = (1003+SetLen) DIV SetLen * SetLen;
@@ -109,12 +109,13 @@ MODULE OBS;  (*NW 7.6.87 / 18.3.93*)  (** shared ARM compiler scanner, UI-free *
   END String;
 
   PROCEDURE Identifier(VAR sym: INTEGER);
-    VAR i, k: INTEGER;
-  BEGIN name[0] := prev; i := 1; k := ORD(prev);
+    VAR i, k: INTEGER; long: BOOLEAN;
+  BEGIN name[0] := prev; i := 1; k := ORD(prev); long := FALSE;
     WHILE (CAP(ch) >= "A") & (CAP(ch) <= "Z") OR (ch >= "0") & (ch <= "9") DO
-      IF i < 31 THEN name[i] := ch; INC(i); INC(k, ORD(ch)) END ;
+      IF i < 31 THEN name[i] := ch; INC(i); INC(k, ORD(ch)) ELSE long := TRUE END ;
       GetCh
     END ;
+    IF long THEN Mark(240) END ;
     name[i] := 0X;
     k := (k+i) MOD KW;  (*hash function*)
     IF (keyTab[k].symb # 0) & (keyTab[k].id = name) THEN sym := keyTab[k].symb
