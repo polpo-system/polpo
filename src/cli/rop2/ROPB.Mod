@@ -1239,6 +1239,7 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
         ELSIF x^.comp = Array THEN
           IF (ynode^.class = Nconst) & (g = Char) THEN CharToString(ynode); y := ynode^.typ; g := String END ;
           IF x = y THEN (* ok *)
+          ELSIF (g = Comp) & (y # OPT.hinttyp) & (y^.comp = Array) & (y^.BaseTyp = x^.BaseTyp) & (y^.n = x^.n) THEN (* ok: the same element type and length *)
           ELSIF (g = String) & (x^.BaseTyp = OPT.chartyp) THEN (*check length of string*)
             IF ynode^.conval^.intval2 > x^.n THEN err(114) END ;
           ELSE err(113)

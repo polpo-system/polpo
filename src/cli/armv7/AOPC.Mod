@@ -801,7 +801,7 @@ END PowerOf2;
     | OPL.Comp:
         IF x.typ^.comp = OPL.Array THEN
           s := x.typ^.size;
-          IF x.typ = y.typ THEN MoveBlock(x, y, s)
+          IF (x.typ = y.typ) OR (g = OPL.Comp) THEN MoveBlock(x, y, s)  (* the same type, or the same element type and length *)
           ELSE (* String *) MoveBlock(x, y, y.Tjmp)
           END
         ELSIF x.typ^.comp = OPL.DynArr THEN  (* x is an argument *)

@@ -329,6 +329,7 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
       | OC.Array:
           s := x.typ.size;
           IF x.typ = y.typ THEN MoveBlock(x, y, s)
+          ELSIF (g = OC.Array) & (y.typ # OBT.hinttyp) & (y.typ.BaseTyp = x.typ.BaseTyp) & (y.typ.size = s) THEN MoveBlock(x, y, s)  (* the same element type and length *)
           ELSIF (g = OC.String) & (x.typ.BaseTyp.form = OC.Char) THEN
             s := y.b; vsz := x.typ.size;  (*check length of string*)
             IF s > vsz THEN OBS.Mark(114) END ;

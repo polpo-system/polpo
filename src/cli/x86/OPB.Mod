@@ -1412,6 +1412,7 @@ MODULE OPB;  (** non-portable *)
         IF x^.comp = StaticArr THEN
           IF (ynode^.class = Nconst) & (g = Char) THEN CharToString(ynode); y := ynode^.typ; g := String END ;
           IF x = y THEN (* ok *)
+          ELSIF (g = Comp) & (y^.comp = StaticArr) & (y^.BaseTyp = x^.BaseTyp) & (y^.n = x^.n) THEN (* ok: the same element type and length *)
           ELSIF (ynode.typ.form=Pointer) & (x=ynode.typ.BaseTyp) THEN (* ok *)
           ELSIF (g = String) & (x^.BaseTyp = OPT.chartyp) THEN (*check length of string*)
             IF ynode^.conval^.intval2 > x^.n THEN err(114) END ;

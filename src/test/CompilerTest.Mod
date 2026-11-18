@@ -86,6 +86,7 @@ TYPE
   Saved = POINTER TO SavedDesc; SavedDesc = RECORD a, b, c: LONGINT END;
   Pix = POINTER TO RECORD w: LONGINT; pix: POINTER TO ARRAY OF CHAR END;
   Smalls = POINTER TO ARRAY OF Small;
+  Bytes8 = ARRAY 8 OF CHAR;
 
 VAR
   cells: POINTER TO RECORD r: ARRAY 10 OF LONGINT END; cellx: LONGINT;
@@ -802,6 +803,26 @@ BEGIN
   RETURN (a = 07FFFFFFH) & (b = -134217728) & (c = -1) & (n = -5)
 END Shifts;
 
+(* the sum of the bytes of k, a value parameter *)
+PROCEDURE Sum8(k: Bytes8): LONGINT;
+VAR i, s: LONGINT;
+BEGIN
+  s := 0; i := 0; WHILE i < 8 DO INC(s, ORD(k[i])); INC(i) END;
+  RETURN s
+END Sum8;
+
+(* arrays of the same element type and length, declared apart: assigned, and passed to a value parameter
+  of a named type; the bytes include 0X *)
+PROCEDURE SameShape(): BOOLEAN;
+VAR a: ARRAY 8 OF CHAR; b: ARRAY 8 OF CHAR; x: ARRAY 3 OF LONGINT; y: ARRAY 3 OF LONGINT; i, s: LONGINT; ok: BOOLEAN;
+BEGIN
+  i := 0; s := 0; WHILE i < 8 DO a[i] := CHR(i * 31); INC(s, i * 31); INC(i) END;
+  b := a; ok := TRUE;
+  i := 0; WHILE i < 8 DO ok := ok & (b[i] = CHR(i * 31)); INC(i) END;
+  x[0] := 1; x[1] := -2; x[2] := MAX(LONGINT); y := x;
+  RETURN ok & (y[0] = 1) & (y[1] = -2) & (y[2] = MAX(LONGINT)) & (Sum8(a) = s)
+END SameShape;
+
 (* a string literal of 200 characters *)
 PROCEDURE LongString(): BOOLEAN;
 VAR s: ARRAY 256 OF CHAR; i: LONGINT;
@@ -878,6 +899,7 @@ BEGIN
   Check("DIV and MOD of a function result by a variable", CallDiv(100, 7));
   Check("a condition of seven elements of open arrays on the heap", OpenConds());
   Check("shifts by a negative parameter, the parameter used again", Shifts(-2, -1, -5));
+  Check("arrays of the same element type and length, declared apart", SameShape());
   Check("a string literal of 200 characters", LongString());
   Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;

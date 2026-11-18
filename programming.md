@@ -381,6 +381,9 @@ Oberon-1 compiler, the x86 one knows some Oberon-2, the ROP2 compilers (ARMv7, R
     identifiers (module names too) shorter than 32 characters, string constants shorter than 256
     characters, and less than 16 KB of them in a module;
 
+    an array is assigned to an array of the same type, or of the same element type and length (as in
+    Oberon-07), never from an open array; COPY is for strings only, it stops at the first 0X;
+
     DIV and MOD only with a divisor > 0, as in Oberon-07: a constant divisor <= 0 does not
     compile (err 237), a variable one stops the program (trap 10). For a negative dividend
     they round down: -7 DIV 2 = -4, -7 MOD 2 = 1, the remainder is never negative.
