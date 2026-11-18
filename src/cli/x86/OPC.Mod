@@ -2028,7 +2028,7 @@ Intel i386 :
     MakeCon (char0X, OPT.chartyp, 0);
     Length (zLen, z); Length (xLen, x);
     IF (zLen.mode = Con) & (xLen.mode = Con) THEN
-      IF zLen.adr >= xLen.adr THEN MoveBlock (z, x, xLen, OPO.Bit8)
+      IF zLen.adr > xLen.adr THEN MoveBlock (z, x, xLen, OPO.Bit8)
       ELSE
         DEC (zLen.adr); (* last char is always 0X *)
         MoveBlock (z, x, zLen, OPO.Bit8);
@@ -2052,7 +2052,7 @@ Intel i386 :
         OPL.Instr [xLen0.adr].hint := OPL.tryECX;
         GenFlags (cmp, xLen0, zLen);
         Lfix := -2-pc;
-        Gen1 (jg, Nil, NIL)
+        Gen1 (jge, Nil, NIL)
       ELSE
         zLen0 := zLen;
         IF zLen0.typ.form # LInt THEN Convert (zLen0, LInt)
@@ -2067,13 +2067,13 @@ Intel i386 :
         END;
         GenFlags (cmp, zLen0, xLen0);
         Lfix := -2-pc;
-        Gen1 (jl, Nil, NIL)
+        Gen1 (jle, Nil, NIL)
       END;
-      (* first case: |src| <= |trg|: copy all *)
+      (* first case: |src| < |trg|: copy all *)
       z0 := z; x0 := x; MoveBlock (z0, x0, xLen, OPO.Bit8);
       L := -2-pc; Gen1 (jmp, Nil, NIL);
       FixLink (Lfix);
-      (* second case: |src| > |trg|: copy |trg|-1 bytes *)
+      (* second case: |src| >= |trg|: copy |trg|-1 bytes and 0X, also for a source without 0X *)
       IF zLen.mode = Con THEN DEC (zLen.adr)
       ELSE
         MakeCon (len, OPT.linttyp, 1);

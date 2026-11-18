@@ -643,7 +643,7 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
     OPL.LenDesc(x, x, typ)
   END Len;
   
-  PROCEDURE Copy*(VAR x, y: OPL.Item);  (* x := y *)
+  PROCEDURE Copy*(VAR x, y: OPL.Item);  (* COPY(y, x): until 0X, at most LEN(x) - 1 characters, then 0X *)
     VAR until: LONGINT; xadr, yadr, len: OPL.Item;
   BEGIN
     IF x.typ^.comp = OPL.DynArr THEN OPL.Size(x, len, -1, x.typ);
@@ -654,11 +654,13 @@ MODULE VOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
     OPL.LoadAddr(x, OPL.T1); OPL.Move(xadr, x, OPL.LInt);
     OPL.LoadAddr(y, OPL.T2); OPL.Move(yadr, y, OPL.LInt);
     OPL.Add(xadr, len, -1, FALSE); until := xadr.reg;
+    (* loop: *) OPL.PutSB(OPL.BGEU, OPL.T1, until, 6);  (* end *)
     OPL.PutI(OPL.LB, OPL.T0, OPL.T2, 0);
     OPL.PutI(OPL.ADDI, OPL.T2, OPL.T2, 1);
     OPL.PutS(OPL.SB, OPL.T0, OPL.T1, 0);
     OPL.PutI(OPL.ADDI, OPL.T1, OPL.T1, 1);
-    OPL.PutSB(OPL.BNE, OPL.T1, until, -4);  (* loop *)
+    OPL.PutSB(OPL.BNE, OPL.T0, 0, -5);  (* loop *)
+    (* end: *) OPL.PutS(OPL.SB, 0, OPL.T1, 0)
   END Copy;
   
   PROCEDURE Base(typ: OPT.Struct): SHORTINT;

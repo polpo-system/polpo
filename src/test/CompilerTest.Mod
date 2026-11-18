@@ -832,6 +832,28 @@ BEGIN
   RETURN (i = 200) & (s[100] = "0") & (s[199] = "9")
 END LongString;
 
+PROCEDURE CopyOpen(source: ARRAY OF CHAR; VAR dest: ARRAY OF CHAR);
+BEGIN COPY(source, dest)
+END CopyOpen;
+
+(* COPY writes at most LEN - 1 characters and a 0X: from an array without 0X, into an array of one
+  character, from a longer and a shorter string, also through open arrays *)
+PROCEDURE Copies(): BOOLEAN;
+VAR one: ARRAY 1 OF CHAR; three: ARRAY 3 OF CHAR; raw: ARRAY 3 OF CHAR; ok: BOOLEAN;
+BEGIN
+  raw[0] := "a"; raw[1] := "b"; raw[2] := "c";
+  one[0] := "x"; COPY("abc", one); ok := one[0] = 0X;
+  three[0] := "z"; three[1] := "z"; three[2] := "z"; COPY(raw, three);
+  ok := ok & (three[0] = "a") & (three[1] = "b") & (three[2] = 0X);
+  three[2] := "z"; COPY("abcdef", three); ok := ok & (three[1] = "b") & (three[2] = 0X);
+  three[1] := "z"; three[2] := "z"; COPY("a", three); ok := ok & (three[0] = "a") & (three[1] = 0X);
+  one[0] := "x"; CopyOpen("abc", one); ok := ok & (one[0] = 0X);
+  three[2] := "z"; CopyOpen(raw, three); ok := ok & (three[0] = "a") & (three[1] = "b") & (three[2] = 0X);
+  three[2] := "z"; CopyOpen("abcdef", three); ok := ok & (three[2] = 0X);
+  three[1] := "z"; CopyOpen("a", three); ok := ok & (three[0] = "a") & (three[1] = 0X);
+  RETURN ok
+END Copies;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -901,6 +923,7 @@ BEGIN
   Check("shifts by a negative parameter, the parameter used again", Shifts(-2, -1, -5));
   Check("arrays of the same element type and length, declared apart", SameShape());
   Check("a string literal of 200 characters", LongString());
+  Check("COPY: at most LEN - 1 characters and 0X", Copies());
   Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 

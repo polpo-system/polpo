@@ -695,7 +695,7 @@ END PowerOf2;
     OPL.LenDesc(x, x, typ)
   END Len;
   
-  PROCEDURE Copy*(VAR x, y: OPL.Item);  (* x := y *)
+  PROCEDURE Copy*(VAR x, y: OPL.Item);  (* COPY(y, x): until 0X, at most LEN(x) - 1 characters, then 0X *)
     VAR until, at0: LONGINT; xadr, yadr, len: OPL.Item;
   BEGIN
     IF x.typ^.comp = OPL.DynArr THEN OPL.Size(x, len, -1, x.typ);
@@ -707,10 +707,14 @@ END PowerOf2;
     OPL.LoadAddr(y, OPL.T0); OPL.Move(yadr, y, OPL.LInt);
     OPL.Add(xadr, len, -1, FALSE); until := xadr.reg;
     at0:=-1; OPL.GetR(OPL.TempReg, at0);
+    (* loop: *) OPL.PutR( OPL.CMP, 0, OPL.T1, until);
+    OPL.PutB(OPL.B-OPL.AL+OPL.GE, 5 -OPL.pcahead);  (* end *)
     OPL.PutLS(OPL.LDRB+ OPL.IncAfter, at0, OPL.T0, 1);
     OPL.PutLS(OPL.STRB+ OPL.IncAfter, at0, OPL.T1, 1);
-    OPL.PutR( OPL.CMP, 0, OPL.T1, until);
-    OPL.PutB(OPL.B-OPL.AL+OPL.LT, -3 -OPL.pcahead);  (* loop *)
+    OPL.PutI(OPL.CMPI, 0, at0, 0);
+    OPL.PutB(OPL.B-OPL.AL+OPL.NE, -5 -OPL.pcahead);  (* loop *)
+    (* end: *) OPL.PutI(OPL.MOVI, at0, 0, 0);
+    OPL.PutLS(OPL.STRB, at0, OPL.T1, 0);
     OPL.ReleaseR( at0);
   END Copy;
   
