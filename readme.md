@@ -295,9 +295,12 @@ the others waiting in the queue of the listening socket, and Ctrl+C stops them. 
 `cobweb.Help` and the READMEs of their repositories tell the rest, and how to make a
 self-signed certificate with openssl.
 
-`http`, `Internet`, `Sockets`, `DNS`, `strUtils` and `Base64` are the same files in voc
-(github.com/norayr: http, Internet, strutils, base64: main, master for Internet), apart from their
-import lines; `vocsync.To` writes the voc version of a file.
+`http`, `Internet`, `Sockets`, `DNS`, `NetSystem`, `strUtils`, `StringBase64` and the tls modules are
+the same files as in voc (github.com/norayr: http, Internet, strutils, base64, tls). The network
+modules import `Linux0 := unixNet` on both systems; in polpo the module `unixNet` passes the calls
+on to `Linux0`. Where voc's copy imports `Strings` (the Oakwood module of voc), polpo's imports
+`Strings := oocStrings`, as polpo's `Strings` is the one of ETH Oberon. `vocsync.From` (in `src/test`)
+copies voc's files into polpo, `vocsync.To` back.
 
 ### none, a console editor
 

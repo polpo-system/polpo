@@ -1,5 +1,5 @@
 MODULE strUtils;
-IMPORT S := strTypes, Strings := oocStrings, Out;  (* voc: Strings := oocStrings, Out *)
+IMPORT S := strTypes, Strings := oocStrings, Out;  (* polpo: Strings := strings, Out := out *)
 
 CONST
   CR* = 0DX;
@@ -26,20 +26,20 @@ CONST
    Returns @oconst{less}, @oconst{equal}, or @oconst{greater}, according as
    @oparam{stringVal1} is lexically less than, equal to, or greater than
    @oparam{stringVal2}.  Note that Oberon-2 and Oberon-07 already contains predefined comparison operators on strings.  *)
- PROCEDURE Compare* (stringVal1, stringVal2: ARRAY OF CHAR): CompareResults;
+  PROCEDURE Compare* (stringVal1, stringVal2: ARRAY OF CHAR): CompareResults;
   VAR
-    i: INTEGER;
+    i: LONGINT;
+    c1, c2: CHAR;
   BEGIN
     i := 0;
-    WHILE (stringVal1[i] # 0X) & (stringVal1[i] = stringVal2[i]) DO
+    LOOP
+      c1 := 0X; c2 := 0X;
+      IF i < LEN(stringVal1) THEN c1 := stringVal1[i] END;
+      IF i < LEN(stringVal2) THEN c2 := stringVal2[i] END;
+      IF c1 < c2 THEN RETURN less END;
+      IF c1 > c2 THEN RETURN greater END;
+      IF c1 = 0X THEN RETURN equal END;
       INC (i)
-    END;
-    IF (stringVal1[i] < stringVal2[i]) THEN
-      RETURN less
-    ELSIF (stringVal1[i] > stringVal2[i]) THEN
-      RETURN greater
-    ELSE
-      RETURN equal
     END
   END Compare;
 
@@ -48,15 +48,8 @@ CONST
    assigned to a procedure variable.  *)
 
 PROCEDURE Assign* (source: ARRAY OF CHAR; VAR destination: ARRAY OF CHAR);
-  VAR
-    i: INTEGER;
   BEGIN
-    i := -1;
-    REPEAT
-      INC (i);
-      destination[i] := source[i]
-    UNTIL (destination[i] = 0X) OR (i = LEN (destination)-1);
-    destination[i] := 0X
+    COPY(source, destination)
   END Assign;
 
 PROCEDURE Pos* (substr : CHAR ; s : ARRAY OF CHAR; n : INTEGER) : INTEGER;
@@ -64,7 +57,8 @@ VAR
   i : INTEGER;
 BEGIN
   i := n;
-  WHILE i <= Strings.Length(s) DO
+  IF i < 0 THEN RETURN 0 END;
+  WHILE (i < LEN(s)) & (i <= Strings.Length(s)) DO
     IF s[i] = substr THEN RETURN(i) END;
     INC(i)
   END;
@@ -73,7 +67,7 @@ END Pos;
 
 PROCEDURE RemoveLeftChars* (VAR s : ARRAY OF CHAR; ch : CHAR);
 BEGIN
-WHILE (s[0] # 0X) & (s[0] = ch) DO Strings.Delete (s, 0, 1) END
+WHILE (LEN(s) > 0) & (s[0] # 0X) & (s[0] = ch) DO Strings.Delete (s, 0, 1) END
 
 END RemoveLeftChars;
 
@@ -90,21 +84,17 @@ END RemoveRightChars;
 PROCEDURE WordCount* (s : ARRAY OF CHAR; ch : CHAR) : INTEGER;
 VAR
   k,l : INTEGER;
+  inWord: BOOLEAN;
 BEGIN
-  RemoveLeftChars(s, ch);
-  RemoveRightChars (s, ch);
-  k := 0;
-  l := 0;
-  REPEAT
-    IF s[l] = ch THEN
-      INC(k);
-      REPEAT
-        INC(l);
-      UNTIL s[l] # ch;
+  k := 0; l := 0; inWord := FALSE;
+  WHILE (l < LEN(s)) & (s[l] # 0X) DO
+    IF s[l] = ch THEN inWord := FALSE
+    ELSE
+      IF ~inWord THEN INC(k) END;
+      inWord := TRUE
     END;
-    INC(l);
-  UNTIL l = Strings.Length(s);
-  INC(k);
+    INC(l)
+  END;
   RETURN(k);
 END WordCount;
 
@@ -116,7 +106,7 @@ VAR
 BEGIN
   n := 0;
   i := 0;
-  WHILE i <= Strings.Length(s) DO
+  WHILE (i < LEN(s)) & (i <= Strings.Length(s)) DO
     IF s[i] = ch THEN INC(n) END;
     INC(i)
   END;
@@ -130,11 +120,12 @@ VAR
   l : INTEGER;
 BEGIN
   l := Strings.Length (s);
-  IF s[l] = ch THEN RETURN(l) END;
-  REPEAT
+  IF (l < LEN(s)) & (s[l] = ch) THEN RETURN(l) END;
+  WHILE l > 0 DO
     DEC(l);
-  UNTIL (s[l] = ch) OR (l = 0);
-  RETURN(l);
+    IF s[l] = ch THEN RETURN(l) END
+  END;
+  RETURN(0);
 END Rpos;
 
 (** Returns the leftmost index of character ch in string s; if not found, returns 0. *)
@@ -144,11 +135,10 @@ VAR
   l : INTEGER;
 BEGIN
   l := 0;
-  IF s[l] = ch THEN RETURN(l) END;
-  REPEAT
-    INC(l);
+  WHILE (l < LEN(s)) & (l <= Strings.Length(s)) DO
     IF s[l] = ch THEN RETURN(l) END;
-  UNTIL l = Strings.Length(s);
+    INC(l)
+  END;
   RETURN(0);
 END Lpos;
 
@@ -186,11 +176,9 @@ VAR
   i, j : LONGINT;
 BEGIN
   i := start; j := 0;
-  IF i < (LEN(dst)-1) THEN
-     REPEAT
-       dst[i] := src[j];
-       INC(i); INC(j);
-     UNTIL (i = LEN(dst)) OR (j = LEN(src)) OR (j = quantity);
+  IF i < 0 THEN RETURN END;
+  WHILE (i < LEN(dst)) & (j < LEN(src)) & (j < quantity) DO
+    dst[i] := src[j]; INC(i); INC(j)
   END
 END copyBytes;
 
@@ -255,39 +243,27 @@ END string2pstrings;
 
 PROCEDURE ExtractWord* (n : INTEGER; s : ARRAY OF CHAR; ch : CHAR) : pstring;
 VAR
-  i, j, k, l : INTEGER;
-  str : string;
+  i, start, count, k : INTEGER;
   pstr : pstring;
 BEGIN
-  RemoveLeftChars (s, ch);
-  RemoveRightChars (s, ch);
-  IF n = WordCount (s, ch) THEN
-    l := Rpos (s, ch);
-    Strings.Extract (s, l+1, Strings.Length(s)-l-1, str);
-    string2pstring(str, pstr);
-    RETURN (pstr);
-  ELSIF n = 1 THEN
-    l := Lpos(s, ch);
-    Strings.Extract (s, 0, l, str);
-    string2pstring(str, pstr);
-    RETURN (pstr);
-  ELSE
-    j := 0;
-    k := 0;
-    l := 0;
-    i := 0;
-    REPEAT
-      IF s[i] = ch THEN
-        INC(j) ;
-        IF j = (n-1) THEN k := i  END;
-        IF j = n THEN l := i END;
-      END;
-      INC(i);
-    UNTIL i = Strings.Length(s);
-    Strings.Extract(s, k+1, l-k-1, str);
-    string2pstring(str, pstr);
-    RETURN (pstr)
+  i := 0; count := 0;
+  WHILE (i < LEN(s)) & (s[i] # 0X) DO
+    WHILE (i < LEN(s)) & (s[i] = ch) DO INC(i) END;
+    start := i;
+    WHILE (i < LEN(s)) & (s[i] # 0X) & (s[i] # ch) DO INC(i) END;
+    IF i > start THEN
+      INC(count);
+      IF count = n THEN
+        NEW(pstr, i - start + 1);
+        k := 0;
+        WHILE start < i DO pstr[k] := s[start]; INC(k); INC(start) END;
+        pstr[k] := 0X;
+        RETURN pstr
+      END
     END
+  END;
+  NEW(pstr, 1); pstr[0] := 0X;
+  RETURN pstr
 END ExtractWord;
 
 (** Outputs a detailed dump of string s: index, ordinal value, and character. *)
@@ -340,6 +316,8 @@ PROCEDURE copyAll* (src : ARRAY OF CHAR ; VAR dst : ARRAY OF CHAR);
 VAR i, k : LONGINT;
 BEGIN
   IF LEN (src) < LEN(dst) THEN k := LEN(src) ELSE k := LEN(dst)  END;
+  IF LEN(dst) = 0 THEN RETURN END;
+  IF k = 0 THEN dst[0] := 0X; RETURN END;
   i := 0;
   WHILE i <= k-2 DO
     dst[i] := src[i];
@@ -355,10 +333,10 @@ VAR
 BEGIN
   i := LEN(str);
   j := 0;
-  REPEAT
+  WHILE j < i DO
     str[j] := 0X;
     INC(j)
-  UNTIL j = i;
+  END;
 END zeroStr;
 
 (** Appends LF and CR characters to str and updates the null terminator. *)
@@ -368,6 +346,7 @@ VAR
   l : INTEGER;
 BEGIN
         l := Strings.Length(str);
+        IF l > LEN(str) - 3 THEN RETURN END;
         str[l] := LF;
         str[l+1] := CR;
         str[l+2] := 0X;
@@ -381,6 +360,7 @@ VAR
 BEGIN
   i := -1; pos := -1;
   b := FALSE;
+  IF LEN(line) = 0 THEN RETURN END;
   REPEAT
     INC(i);
     IF line[i] = ch THEN b := TRUE; pos := i END;
@@ -398,6 +378,7 @@ BEGIN
   COPY("", dst);
   findChar(LF, src, found, pos);
   IF found THEN
+    IF LEN(dst) <= 1 THEN RETURN END;
     i := 0;
     REPEAT
       dst[i] := src[i];
@@ -427,28 +408,14 @@ END terminateLine;
 PROCEDURE getTillEOL*(VAR src: ARRAY OF CHAR; spos: INTEGER; VAR dst: ARRAY OF CHAR); (* actually get till any character < ' ' *)
 VAR
   i, j: INTEGER;
-  l, k: LONGINT;
 BEGIN
-  l := Strings.Length(src);
-  k := Strings.Length(dst);
- (*       Out.String("getTillEOL"); Out.Ln;
-        Out.String(src); Out.Ln;
-        Out.String("spos="); Out.Int(spos, 0); Out.Ln;
-        Out.String("l="); Out.Int(l, 0); Out.Ln;
-        Out.String("k="); Out.Int(k, 0); Out.Ln;
-        Out.String("LEN(src)="); Out.Int(LEN(src), 0); Out.Ln;
-        Out.String("LEN(dst)="); Out.Int(LEN(dst), 0); Out.Ln;*)
   zeroStr(dst);
   i := 0;
+  IF (spos < -1) OR (spos >= LEN(src) - 1) THEN RETURN END;
   j := spos+1;
-  REPEAT
-              (* Out.String("i="); Out.Int(i, 0); Out.Ln;
-               Out.String("j="); Out.Int(j, 0); Out.Ln;
-               Out.String("i+j="); Out.Int(i+j, 0); Out.Ln;
-               Out.String("src[i+j]="); Out.Char(src[i+j]); Out.Ln;*)
-    dst[i] := src[i+j];
-    INC(i);
-  UNTIL (i+j >= l) OR (src[i+j] < ' ') OR (i+j >= LEN(src)) OR (j >= LEN(dst));
+  WHILE (j < LEN(src)) & (i < LEN(dst) - 1) & (src[j] >= ' ') DO
+    dst[i] := src[j]; INC(i); INC(j)
+  END;
 END getTillEOL;
 
 (** Extracts word from src starting at spos into dst, ending at space or control char. *)
@@ -460,10 +427,10 @@ BEGIN
   zeroStr(dst);
   i := 0;
   j := spos;
-  REPEAT
-    dst[i] := src[i+j];
-  INC(i);
-  UNTIL (i+j = Strings.Length(src)) OR (src[i+j] <= ' ');
+  IF j < 0 THEN RETURN END;
+  WHILE (j < LEN(src)) & (i < LEN(dst) - 1) & (src[j] > ' ') DO
+    dst[i] := src[j]; INC(i); INC(j)
+  END;
 END getNextWord;
 
 
@@ -472,52 +439,41 @@ END getNextWord;
 PROCEDURE getNextAlphaNumWord*(VAR src: ARRAY OF CHAR; spos: INTEGER; VAR dst: ARRAY OF CHAR);
 VAR
   i, j: INTEGER;
-  notAN: BOOLEAN;
   o: INTEGER;
 BEGIN
   zeroStr(dst);
   i := 0;
   j := spos;
-  notAN := FALSE;
-  REPEAT
-    dst[i] := src[i+j];
-  INC(i);
-  o := ORD(src[i+j]);
-  IF ~ ( ((o >= 48) & (o <=57)) OR ((o >= 65) & (o <= 90)) OR ( (o >= 97) & (o <= 122)  ) ) THEN notAN := TRUE END;
-  UNTIL (i+j = Strings.Length(src))OR notAN OR (src[i+j] <= ' ');
+  IF j < 0 THEN RETURN END;
+  WHILE (j < LEN(src)) & (i < LEN(dst) - 1) DO
+    o := ORD(src[j]);
+    IF ~(((o >= 48) & (o <= 57)) OR ((o >= 65) & (o <= 90)) OR
+         ((o >= 97) & (o <= 122))) THEN RETURN END;
+    dst[i] := src[j]; INC(i); INC(j)
+  END;
 END getNextAlphaNumWord;
 
 (** Scans line manually to check if pattern occurs using substring comparison. *)
 
 PROCEDURE contains* (VAR line : ARRAY OF CHAR; pattern: ARRAY OF CHAR): BOOLEAN;
 VAR
- found: BOOLEAN;
- pos : INTEGER;
- i : INTEGER;
- patternLength: INTEGER;
- tmpline: POINTER TO ARRAY OF CHAR;
+ i, j, n, m: INTEGER;
 BEGIN
-  i := 0;
-  patternLength := Strings.Length(pattern);
-  NEW(tmpline, patternLength+1);
-  found := FALSE;
-  REPEAT
-    Strings.Extract(line, i, patternLength, tmpline^);
-    found := Strings.Equal(pattern, tmpline^);
-    INC(i);
-UNTIL found OR (i = LEN(line) - patternLength - 1);
-  IF found THEN RETURN TRUE ELSE RETURN FALSE END
+  n := Strings.Length(line); m := Strings.Length(pattern); i := 0;
+  WHILE i <= n - m DO
+    j := 0;
+    WHILE (j < m) & (line[i+j] = pattern[j]) DO INC(j) END;
+    IF j = m THEN RETURN TRUE END;
+    INC(i)
+  END;
+  RETURN FALSE
 END contains;
 
 (** Uses Strings.FindNext to check if pat is found in line starting at position 0. *)
 
 PROCEDURE contains1*(VAR line: ARRAY OF CHAR; pat : ARRAY OF CHAR): BOOLEAN;
-VAR
- found: BOOLEAN;
- pos : INTEGER;
 BEGIN
-  Strings.FindNext(pat, line, 0, found, pos);
-  IF found THEN RETURN TRUE ELSE RETURN FALSE END
+  RETURN contains(line, pat)
 END contains1;
 
 (*

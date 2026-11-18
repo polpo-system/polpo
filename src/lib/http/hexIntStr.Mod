@@ -1,6 +1,6 @@
 MODULE hexIntStr;
 
-IMPORT Conv := ConvTypes;  (* voc: Conv := oocConvTypes *)
+IMPORT Conv := ConvTypes;
 
 TYPE
   ConvResults*= Conv.ConvResults;
@@ -54,5 +54,4 @@ BEGIN
 END StrToInt;
 
 END hexIntStr.
-
 

@@ -21,6 +21,7 @@ arc 0.1.0
 asciicoder 0.1.0
 asciicoder-desktop 0.1.0
 checksums 0.1.0
+unixnet 0.1.0
 sockets 0.1.0
 dns 0.1.0
 ooc-strings 0.1.0
@@ -31,7 +32,7 @@ ooc-time 0.1.0
 ooc-io 0.1.0
 ooc-uri 0.1.0
 strutils 0.1.0
-base64 0.1.0
+stringbase64 0.1.0
 internet 0.1.0
 netsystem 0.1.0
 http 0.1.0
