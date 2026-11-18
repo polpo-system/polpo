@@ -10,7 +10,7 @@ MODULE DNS;  (** host names to addresses and back: /etc/hosts, then the name ser
    (IPv4, also an IPv4 address mapped into IPv6) or of the 32 hexadecimal digits under ip6.arpa.
    Bytes are read with LONG(ORD(c)): ORD gives an INTEGER (16 bits). *)
 
-IMPORT Kernel, Linux0, Sockets, SYSTEM;
+IMPORT Kernel, Linux0 := unixNet, Sockets, SYSTEM;
 
 CONST
   Any* = 0;  (** Lookup family: IPv6 and IPv4 addresses *)

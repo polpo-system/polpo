@@ -2,7 +2,7 @@ MODULE TLSNow;
 (* the current time in UTC, for certificate validity: GetTimeOfDay of Linux0 (polpo's, or the one
    of the voc Internet module), days to the civil date after H. Hinnant's days_from_civil
    inverse. Seconds are signed 32 bits: good until 2038. *)
-IMPORT Linux0, SYSTEM, TLSX509Validity;
+IMPORT Linux0 := unixNet, SYSTEM, TLSX509Validity;
 
 PROCEDURE Current*(VAR t: TLSX509Validity.Time);
 VAR tv: ARRAY 2 OF LONGINT; r, secs, days, sod, z, era, doe, yoe, doy, mp: LONGINT;

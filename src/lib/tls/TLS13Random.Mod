@@ -1,7 +1,7 @@
 MODULE TLS13Random;
 (* random bytes from /dev/urandom, through Linux0 (polpo's, or the one of the voc Internet
    module); replaces the ulmRandomGenerators filler, which was not cryptographically secure *)
-IMPORT Linux0, SYSTEM;
+IMPORT Linux0 := unixNet, SYSTEM;
 
 (** buf[0..n) := n random bytes; FALSE if /dev/urandom cannot give them *)
 PROCEDURE Fill*(VAR buf: ARRAY OF CHAR; n: LONGINT): BOOLEAN;
