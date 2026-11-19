@@ -1,5 +1,5 @@
 MODULE unixNet;  (** the system calls of voc's module unixNet, on polpo's Linux0: modules shared with voc
-  (Sockets, DNS, Internet, NetSystem, the tls modules) import Linux0 := unixNet on both systems *)
+  (Sockets, DNS, Internet, NetSystem, the tls modules) import unixNet on both systems *)
 
 IMPORT Linux0;
 

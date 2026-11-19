@@ -297,10 +297,10 @@ self-signed certificate with openssl.
 
 `http`, `Internet`, `Sockets`, `DNS`, `NetSystem`, `strUtils`, `StringBase64` and the tls modules are
 the same files as in voc (github.com/norayr: http, Internet, strutils, base64, tls). The network
-modules import `Linux0 := unixNet` on both systems; in polpo the module `unixNet` passes the calls
-on to `Linux0`. Where voc's copy imports `Strings` (the Oakwood module of voc), polpo's imports
-`Strings := oocStrings`, as polpo's `Strings` is the one of ETH Oberon. `vocsync.From` (in `src/test`)
-copies voc's files into polpo, `vocsync.To` back.
+modules make their system calls through `unixNet`, which in polpo passes them on to `Linux0`. They
+import `Strings := oocStrings`: a plain `Strings` is the Oakwood module in voc but the one of ETH
+Oberon in polpo, whose procedures take their arguments in another order. `vocsync.From` (in
+`src/test`) copies voc's files into polpo, `vocsync.To` back.
 
 ### none, a console editor
 

@@ -9,8 +9,8 @@ MODULE vocsync;  (** modules shared with voc: copies with the imports of voc or 
        src/lib/base64/StringBase64.Mod -> base64
        src/lib/http/http.Mod, hexIntStr.Mod -> http
        src/lib/tls/*.Mod, src/lib/tls/test/TLSTest*.Mod -> tls
-     The network modules import Linux0 := unixNet on both systems (polpo's module unixNet passes the
-     calls to Linux0).
+     The network modules import unixNet on both systems (polpo's module unixNet passes the calls to
+     Linux0).
    vocsync.From voc-file ... polpo-dir
      copies modules of a voc repository into polpo-dir. A module of voc that imports Strings means
      the Oakwood module of voc, which is oocStrings in polpo (polpo's Strings is the one of ETH
