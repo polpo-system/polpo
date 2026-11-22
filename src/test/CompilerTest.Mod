@@ -836,6 +836,15 @@ PROCEDURE CopyOpen(source: ARRAY OF CHAR; VAR dest: ARRAY OF CHAR);
 BEGIN COPY(source, dest)
 END CopyOpen;
 
+(* 0.0 into a register that held a NaN: the ARM compiler made zero as the register less itself, a NaN *)
+PROCEDURE ZeroAfterNaN(): BOOLEAN;
+VAR n, z: REAL; ln, lz: LONGREAL; bits: LONGINT;
+BEGIN
+  bits := 7FC00000H; n := SYSTEM.VAL(REAL, bits); n := n * 2.0; z := 0.0;
+  ln := n; ln := ln * 2.0; lz := 0.0;
+  RETURN (z = 0.0) & (lz = 0.0)
+END ZeroAfterNaN;
+
 (* COPY writes at most LEN - 1 characters and a 0X: from an array without 0X, into an array of one
   character, from a longer and a shorter string, also through open arrays *)
 PROCEDURE Copies(): BOOLEAN;
@@ -924,6 +933,7 @@ BEGIN
   Check("arrays of the same element type and length, declared apart", SameShape());
   Check("a string literal of 200 characters", LongString());
   Check("COPY: at most LEN - 1 characters and 0X", Copies());
+  Check("0.0 after a NaN in the same register", ZeroAfterNaN());
   Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 

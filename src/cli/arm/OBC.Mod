@@ -61,6 +61,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     ADDADR = 0E2800F00H;
 
     VSUBS= 0EE300A40H;  VSUBD= 0EE300B40H;
+    VMOVSR= 0EE000A10H;  VMOVDRR= 0EC400B10H;  (* single from an ARM register; double from two *)
 
 
     (* Op-Codes Block Data Transfer (BDT) *)
@@ -464,7 +465,8 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
   PROCEDURE LoadRConst*(regf, const: LONGINT);
   VAR ofs, reg: LONGINT;
   BEGIN
-    IF const=0 THEN PutVFP( VSUBS, regf, regf, regf); (* is this allowed ? *)
+    IF const=0 THEN  (* not regf - regf, a NaN when regf holds an infinity or a NaN *)
+      GetReg( reg); PutDP1( MOV, reg, 0, 0); PutVFP( VMOVSR, regf, reg, 0); FreeReg( reg)
     ELSE
       ofs:=EnterRConst( const);
       GetReg( reg);
@@ -480,7 +482,8 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
   PROCEDURE LoadLRConst*(regf: LONGINT; const: LONGREAL);
   VAR ofs, reg: LONGINT;
   BEGIN
-    IF const=0.0 THEN PutVFP( VSUBD, regf, regf, regf); (* is this allowed ? *)
+    IF const=0.0 THEN  (* not regf - regf, a NaN when regf holds an infinity or a NaN *)
+      GetReg( reg); PutDP1( MOV, reg, 0, 0); PutVFP( VMOVDRR, reg, reg, regf); FreeReg( reg)
     ELSE
       ofs:=EnterLRConst( const);
       GetReg( reg);
