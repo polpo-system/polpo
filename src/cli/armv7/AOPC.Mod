@@ -235,7 +235,6 @@ END PowerOf2;
   PROCEDURE LoadMTA*(VAR ap: OPL.Item; super, deref: BOOLEAN; VAR proc: OPL.Item);  (* ap unchanged *)
     VAR tag: OPL.Item; typ: OPT.Struct; r0: LONGINT;
   BEGIN
-    OPM.err(700);  (* LoadMTA supposed not to be needed at all *)
     tag := ap; r0 := OPL.ZeroReg;
     IF tag.mode IN {OPL.Reg, OPL.Based} THEN r0 := tag.reg; OPL.GetR(OPL.FrozenReg, r0) END ;
     IF super THEN

@@ -493,11 +493,13 @@ MODULE AOPV;  (* RC 14.3.90 / 17.6.93 *)  (* object model 4.12.93 *)
 *)
 
       expr(n, ap, -1);
+      (* polpo: the tag of the receiver before Param, which changes ap (its type becomes LONGINT) and frees
+         its register for the later parameters *)
+      IF n = receiver THEN OPC.LoadMTA(ap, proc.Tjmp = 1, n^.class = Nderef, proc) END;
       fip:=FALSE;
       HasFunction(n^.link);
       IF ~fip THEN OPC.Relation(ap, -1); OPC.Param(ap, fp, n^.class = Nderef) END;  (* freeing registers only works without function parameter. and without reg param?*)
       ActualPar(n^.link, receiver, fp^.link, proc);
-      IF n = receiver THEN HALT(255); (*OPC.LoadMTA(ap, proc.Tjmp = 1, n^.class = Nderef, proc) *) END;  (* seems to be never executed *)
       IF fip THEN OPC.Relation(ap, -1); OPC.Param(ap, fp, n^.class = Nderef) END;  (* not freeing registers *)
 
     END

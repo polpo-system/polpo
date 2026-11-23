@@ -213,7 +213,6 @@ MODULE MOPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
   PROCEDURE LoadMTA*(VAR ap: OPL.Item; super, deref: BOOLEAN; VAR proc: OPL.Item);  (* ap unchanged *)
     VAR tag: OPL.Item; typ: OPT.Struct; r: LONGINT;
   BEGIN
-    OPM.err(700);  (* LoadMTA supposed not to be needed at all *)
     tag := ap; r := 0;
     IF tag.mode IN {Reg, Based} THEN r := tag.reg; OPL.GetR(FrozenReg, r) END ;
     IF super THEN

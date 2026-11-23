@@ -150,8 +150,25 @@ MODULE POPC;  (* RC 14.3.90 / 11.2.94 *)  (* object model 29.4.93 *)
   END TypTest;
 
   PROCEDURE LoadMTA*(VAR ap: OPL.Item; super, deref: BOOLEAN; VAR proc: OPL.Item);  (* ap unchanged *)
+    VAR tag: OPL.Item; typ: OPT.Struct; r: LONGINT;
   BEGIN
-    OPM.err(700)  (* type-bound procedures are not supported by the ROP2 back ends *)
+    tag := ap; r := 0;
+    IF tag.mode IN {OPL.Reg, OPL.Based} THEN r := tag.reg; OPL.GetR(OPL.FrozenReg, r) END ;
+    IF super THEN
+      typ := tag.typ^.BaseTyp;
+      IF tag.typ^.form = OPL.Pointer THEN typ := typ^.BaseTyp END;
+      tag.mode := OPL.Var; tag.mnolev := - typ^.mno; tag.offset := 64;
+      tag.obj := typ^.strobj; OPL.LoadAddr(tag, -1)
+    ELSIF tag.typ^.form = OPL.Pointer THEN DeRef(tag, -1); tag.offset := -4
+    ELSIF deref THEN (* ap = p^ *) tag.offset := -4
+    ELSIF tag.mode = OPL.VarPar THEN tag.mode := OPL.Var;
+      IF tag.offset < 64 THEN (* Reg *) INC(tag.offset) ELSE INC(tag.offset, 4) END
+    ELSE tag.mode := OPL.Var; tag.mnolev := - tag.typ^.mno; tag.offset := 64;
+      tag.obj := tag.typ^.strobj; OPL.LoadAddr(tag, -1)
+    END ;
+    tag.typ := OPT.linttyp; OPL.Load(tag, -1);
+    IF r # 0 THEN OPL.ThawR(OPL.FrozenReg, r); OPL.GetR(OPL.TempReg, r) END ;
+    proc.reg := tag.reg; OPL.GetR(OPL.FrozenReg, tag.reg)  (* thaw in Call *)
   END LoadMTA;
 
   PROCEDURE CheckIntRange(VAR x: OPL.Item; g: SHORTINT);  (* x.mode = Reg *)
