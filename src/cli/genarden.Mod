@@ -325,6 +325,11 @@ BEGIN
   Append(s, it.s)
 END Tok;
 
+PROCEDURE Common(it: Item): BOOLEAN;  (* built on every architecture, with the same /x and /2 on all of them *)
+BEGIN
+  RETURN (it.archs = {0..MaxArchs-1}) & ((it.xflag = {}) OR (it.xflag = it.archs)) & ((it.oflag = {}) OR (it.oflag = it.archs))
+END Common;
+
 PROCEDURE Write(p: Package; VAR index: Item);
 VAR cat, desc, author, lic, path, tok: Name; all, l, it, files, deps, x: Item; a: INTEGER; i, j: LONGINT; f: Files.File; key: ARRAY 32 OF CHAR;
   none: BOOLEAN; tf: TOML.Field;
@@ -350,12 +355,12 @@ BEGIN
   (* the modules, in build order: the common ones under all, the rest per architecture *)
   Ln; Ws("[MODULES]"); Ln;
   all := NIL; it := p.sources;
-  WHILE it # NIL DO IF it.archs = {0..MaxArchs-1} THEN Tok(it, {0..MaxArchs-1}, tok); x := Add(all, tok) END; it := it.next END;
+  WHILE it # NIL DO IF Common(it) THEN Tok(it, {0..MaxArchs-1}, tok); x := Add(all, tok) END; it := it.next END;
   IF all # NIL THEN Ws("all = "); Arr(all); Ln END;
   a := 0;
   WHILE a < MaxArchs DO
     l := NIL; it := p.sources;
-    WHILE it # NIL DO IF (a IN it.archs) & (it.archs # {0..MaxArchs-1}) THEN Tok(it, {a}, tok); x := Add(l, tok) END; it := it.next END;
+    WHILE it # NIL DO IF (a IN it.archs) & ~Common(it) THEN Tok(it, {a}, tok); x := Add(l, tok) END; it := it.next END;
     IF l # NIL THEN Ws(archs[a]); Ws(" = "); Arr(l); Ln END;
     INC(a)
   END;
