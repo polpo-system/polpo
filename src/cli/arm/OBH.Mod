@@ -164,7 +164,7 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
   END Hidden;
 
   (* the registers item x holds *)
-  PROCEDURE ItemRegs(VAR x: OBT.Item): SET;
+  PROCEDURE ItemRegs*(VAR x: OBT.Item): SET;
     VAR s: SET;
   BEGIN s := {};
     IF x.mode = OC.Reg THEN INCL(s, x.r)
@@ -425,7 +425,7 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
   
   PROCEDURE PrepCall*(VAR x: OBT.Item; VAR fpar: OBT.Object);
   BEGIN
-    IF x.mode = OC.LProc THEN
+    IF x.mode IN {OC.LProc, OC.TProc} THEN
       fpar := x.obj.dsc; 
     ELSIF (x.typ # NIL) & (x.typ.form = OC.ProcTyp) THEN
       fpar := x.typ.link;
@@ -483,7 +483,7 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
   END Param;
 
   PROCEDURE Call*(VAR x: OBT.Item);
-  VAR  sL: OBT.Item; 
+  VAR  sL: OBT.Item; t: OBT.Struct;
   BEGIN
     IF x.mode = OC.LProc THEN
       IF x.lev >= 0 THEN
@@ -502,6 +502,24 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
         END
       ELSE OBC.PutBext(-x.lev,x.a);
       END
+    ELSIF x.mode = OC.TProc THEN
+      (* polpo: a type-bound procedure, through the method table of the receiver's type descriptor. The
+        parameters are on the stack, the receiver at x.a: a pointer, or the address and above it the tag of a
+        VAR record. A super call (x.b = 1) takes the descriptor of the base type of the receiver's type. *)
+      IF x.b = 1 THEN
+        t := x.rcv.typ; IF t.form = OC.Pointer THEN t := t.BaseTyp END ;
+        t := t.BaseTyp;
+        sL.mode := OC.Var; sL.r := OBC.PC; sL.lev := -t.mno; sL.a := t.adr; sL.typ := OBT.linttyp; OBE.load(sL)
+      ELSE
+        sL.mode := OC.Reg; sL.typ := OBT.linttyp; OBC.GetReg(sL.r);
+        IF x.obj.dsc.mode = OC.Par THEN OBC.PutSDT(OBC.LDR, sL.r, OBC.SP, x.a + 4)
+        ELSE OBC.PutSDT(OBC.LDR, sL.r, OBC.SP, x.a); OBC.PutSDT(OBC.LDR, sL.r, sL.r, -4)
+        END
+      END ;
+      OBC.LoadMethod(sL.r, x.obj);
+      OBC.PutDP(OBC.MOV,OBC.LR,0,OBC.PC,0);
+      OBC.PutDP(OBC.MOV,OBC.PC,0,sL.r,0);
+      OBC.FreeReg(sL.r)
     ELSIF (x.mode < OC.Const) & (x.typ.form # OC.Undef) THEN
       OBE.load(x);
       OBC.PutDP(OBC.MOV,OBC.LR,0,OBC.PC,0);

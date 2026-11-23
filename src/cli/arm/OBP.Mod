@@ -84,12 +84,12 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     VAR typ: OBT.Struct;
   BEGIN NEW(typ);
     typ.form := form; typ.mno := 0; typ.size := 4; typ.ref := 0;
-    typ.BaseTyp := OBT.undftyp; typ.strobj := NIL; RETURN typ
+    typ.BaseTyp := OBT.undftyp; typ.strobj := NIL; typ.nofmth := 0; typ.methods := NIL; RETURN typ
   END NewStr;
 
   PROCEDURE CheckMark(VAR mk: BOOLEAN);
   BEGIN OBS.Get(sym);
-    IF sym = OC.times THEN
+    IF (sym = OC.times) OR (sym = OC.minus) THEN  (* polpo: a read-only mark (Oberon-2) exports too, writable *)
       IF OBC.level = 0 THEN mk := TRUE ELSE mk := FALSE; OBS.Mark(47) END ;
       OBS.Get(sym)
     ELSE mk := FALSE
@@ -207,6 +207,11 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       par, par1: OBT.Object; typ: OBT.Struct; name: ARRAY 4 OF CHAR;
   BEGIN
     par1 := OBT.topScope; adr := 0; psize0 := psize;
+    WHILE par1.next # NIL DO  (* polpo: the receiver of a type-bound procedure is there already, the first parameter *)
+      par1 := par1.next;
+      IF (par1.mode = OC.Par) & (par1.typ.form = OC.Record) THEN DEC(adr, RecDescSize) ELSE DEC(adr, AdrSize) END ;
+      par1.a0 := adr
+    END ;
     IF (sym = OC.ident) OR (sym = OC.var) THEN
       LOOP
         IF sym = OC.var THEN OBS.Get(sym); mode := OC.Par ELSE mode := OC.Var END ;      
@@ -350,8 +355,20 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     END
   END FormalType;
 
+  (* polpo: x becomes the call of the type-bound procedure mth, the receiver x (a record, ptyp the type of the
+    designator before its dereference) kept in x.rcv: for a receiver of a pointer type, the pointer *)
+  PROCEDURE MethodItem(VAR x: OBT.Item; ptyp: OBT.Struct; mth: OBT.Object);
+  BEGIN
+    NEW(x.rcv);
+    IF mth.dsc.mode = OC.Var THEN
+      IF ptyp.form = OC.Pointer THEN OBE.loadAdr(x); x.typ := ptyp; x.obj := NIL ELSE OBS.Mark(71) END
+    END ;
+    x.rcv^ := x;
+    x.mode := OC.TProc; x.obj := mth; x.typ := mth.typ; x.a := 0; x.b := 0
+  END MethodItem;
+
   PROCEDURE selector(VAR x: OBT.Item);
-    VAR fld: OBT.Object; y: OBT.Item;
+    VAR fld, mth: OBT.Object; y: OBT.Item; ptyp: OBT.Struct;
   BEGIN
     LOOP
       IF sym = OC.lbrak THEN OBS.Get(sym);
@@ -367,8 +384,12 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       ELSIF sym = OC.period THEN OBS.Get(sym);
         IF sym = OC.ident THEN
           IF x.typ # NIL THEN
+            ptyp := x.typ;
             IF x.typ.form = OC.Pointer THEN OBE.DeRef(x) END ;
-            IF x.typ.form = OC.Record THEN OBT.FindField(x.typ, fld); OBE.Field(x, fld) ; 
+            IF x.typ.form = OC.Record THEN
+              OBT.FindField(x.typ, fld); mth := NIL;
+              IF fld = NIL THEN mth := OBT.FindMethod(x.typ, OBS.name) END ;
+              IF mth # NIL THEN MethodItem(x, ptyp, mth) ELSE OBE.Field(x, fld) END
             ELSE OBS.Mark(53)
             END
           ELSE OBS.Mark(52)
@@ -377,7 +398,8 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         ELSE OBS.Mark(10)
         END
       ELSIF sym = OC.arrow THEN
-        OBS.Get(sym); OBE.DeRef(x)
+        OBS.Get(sym);
+        IF x.mode = OC.TProc THEN x.b := 1 (* polpo: a super call *) ELSE OBE.DeRef(x) END
       ELSIF (sym = OC.lparen) & (x.mode < OC.Typ) & (x.typ.form # OC.ProcTyp) THEN
         OBS.Get(sym);
         IF sym = OC.ident THEN
@@ -391,13 +413,32 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     END
   END selector;
 
+  (* polpo: the receiver of the call x of a type-bound procedure, the first parameter fpar *)
+  PROCEDURE Receiver(VAR x: OBT.Item; VAR fpar: OBT.Object; VAR psize: LONGINT);
+    VAR R: SET;
+  BEGIN
+    R := OBC.UsedRegisters() - OBH.ItemRegs(x.rcv^);
+    OBH.Param(x.rcv^, fpar, psize); fpar := fpar.next; OBC.FreeRegs(R)
+  END Receiver;
+
+  (* polpo: a type-bound procedure called without a parameter list: the receiver alone; x.a its place above SP *)
+  PROCEDURE ReceiverAlone(VAR x: OBT.Item; fpar: OBT.Object);
+    VAR psize: LONGINT; rcv: OBT.Object;
+  BEGIN
+    rcv := fpar; psize := fpar.a0 + fpar.typ.size; psize := (psize+3) DIV 4 * 4;
+    Receiver(x, fpar, psize);
+    IF OBT.IsParam(fpar) THEN OBS.Mark(65) END ;
+    x.a := rcv.a0 - psize
+  END ReceiverAlone;
+
   PROCEDURE ActualParameters(VAR x: OBT.Item; fpar: OBT.Object);
-    VAR apar: OBT.Item; R: SET; psize : LONGINT; typ: OBT.Struct; n: Narrowed;
-  BEGIN psize := 0;
+    VAR apar: OBT.Item; R: SET; psize : LONGINT; typ: OBT.Struct; n: Narrowed; rcv: OBT.Object;
+  BEGIN psize := 0; rcv := NIL;
     IF OBT.IsParam(fpar) THEN
       (* Calculate size of Parameter-Block including both links and return address and align it *)
       psize:=fpar.a0+fpar.typ.size; psize:=(psize+3) DIV 4 * 4; 
     END;
+    IF x.mode = OC.TProc THEN rcv := fpar; Receiver(x, fpar, psize) END ;  (* polpo: the receiver first *)
     IF sym # OC.rparen THEN
       R := OBC.UsedRegisters();
       LOOP
@@ -424,7 +465,8 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       END
     END;
     IF OBT.IsParam(fpar) THEN OBS.Mark(65)
-    END
+    END ;
+    IF rcv # NIL THEN x.a := rcv.a0 - psize END  (* polpo: where the receiver is above SP *)
   END ActualParameters;
 
   PROCEDURE NewOpenArr(VAR x : OBT.Item);
@@ -514,7 +556,9 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       ELSIF sym = OC.lparen THEN
         OBS.Get(sym); 
         OBH.PrepCall(x, fpar); 
-        OBC.SaveRegisters(gR, gF, x); 
+        IF x.mode = OC.TProc THEN OBC.SaveRegistersKeep(gR, gF, OBH.ItemRegs(x.rcv^))  (* polpo: the receiver stays *)
+        ELSE OBC.SaveRegisters(gR, gF, x)
+        END ;
         ActualParameters(x, fpar);
         OBH.Call(x); 
         OBC.RestoreRegisters(gR, gF, x); 
@@ -605,6 +649,84 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     END
   END Expression;
 
+  (* polpo: PROCEDURE [^] (r: T) or (VAR r: R) Name ...: a type-bound procedure of the record R (or the record T
+    points to), declared in this module. The receiver is the first parameter. The procedure is not in the scope: it
+    is in the list of methods of R, and called through the type descriptor of the receiver (OBH.Call). *)
+  PROCEDURE MethodDeclaration(body: BOOLEAN);
+    VAR proc, old, rcv: OBT.Object; rtyp, rec: OBT.Struct; x: OBT.Item; rmode: SHORTINT;
+      psize, dsize, oldpsize: LONGINT; rname: ARRAY 32 OF CHAR;
+  BEGIN
+    dsize := 0; rtyp := OBT.undftyp; rec := NIL; proc := NIL;
+    OBS.Get(sym);
+    IF sym = OC.var THEN rmode := OC.Par; OBS.Get(sym) ELSE rmode := OC.Var END ;
+    IF sym = OC.ident THEN COPY(OBS.name, rname); OBS.Get(sym) ELSE rname := "@self"; OBS.Mark(10) END ;
+    CheckSym(OC.colon);
+    IF sym = OC.ident THEN
+      qualident(x);
+      IF x.mode = OC.Typ THEN
+        rtyp := x.typ;
+        IF (rmode = OC.Var) & (rtyp.form = OC.Pointer) & (rtyp.BaseTyp.form = OC.Record) THEN rec := rtyp.BaseTyp
+        ELSIF (rmode = OC.Par) & (rtyp.form = OC.Record) THEN rec := rtyp
+        ELSE OBS.Mark(70)  (* a pointer to a record, or a VAR record *)
+        END ;
+        IF (rec # NIL) & (rec.mno # 0) THEN OBS.Mark(72); rec := NIL END  (* a type of this module *)
+      ELSE OBS.Mark(52)
+      END
+    ELSE OBS.Mark(10)
+    END ;
+    CheckSym(OC.rparen);
+    IF OBC.level # 0 THEN OBS.Mark(73) END ;
+    IF sym = OC.ident THEN
+      old := NIL;
+      IF rec # NIL THEN
+        old := rec.methods; WHILE (old # NIL) & (old.name # OBS.name) DO old := old.next END ;
+        OBT.FindField(rec, rcv); IF rcv # NIL THEN OBS.Mark(1) END  (* a field of that name *)
+      END ;
+      IF (old # NIL) & (old.a0 = -1) & (old.a1 = 1) THEN proc := old  (* completes the forward declaration *)
+      ELSE
+        IF old # NIL THEN OBS.Mark(1) END ;
+        NEW(proc); COPY(OBS.name, proc.name); proc.next := NIL; proc.mode := OC.TProc; proc.a3 := -1;
+        IF rec # NIL THEN  (* appended: the methods keep their order *)
+          IF rec.methods = NIL THEN rec.methods := proc
+          ELSE old := rec.methods; WHILE old.next # NIL DO old := old.next END ; old.next := proc
+          END
+        END ;
+        old := NIL
+      END ;
+      CheckMark(proc.marked);
+      proc.a0 := -1; proc.a1 := 0; proc.a2 := 0;
+      IF ~body THEN proc.a1 := 1 END ;  (* a forward declaration *)
+      INC(OBC.level); OBT.OpenScope(OBC.level); psize := LParOrg;
+      OBT.Insert(rname, rcv); rcv.mode := rmode; rcv.typ := rtyp;
+      IF sym = OC.lparen THEN OBS.Get(sym); FormalParameters(rtyp, psize)
+      ELSE rcv.a0 := psize; IF rmode = OC.Par THEN INC(psize, RecDescSize) ELSE INC(psize, AdrSize) END ; rtyp := OBT.notyp
+      END ;
+      IF old # NIL THEN
+        OBH.CompareParLists(OBT.topScope.next.next, proc.dsc.next);
+        IF rtyp # proc.typ THEN OBS.Mark(118) END
+      END ;
+      proc.typ := rtyp; proc.dsc := OBT.topScope.next;
+      IF body THEN
+        CheckSym(OC.semicolon);
+        OBT.topScope.typ := proc.typ;
+        oldpsize := OBH.curProcParamSize; OBH.curProcParamSize := psize - 8;
+        Block(dsize, proc);
+        proc.dsc := OBT.topScope.next;
+        IF proc.typ = OBT.notyp THEN OBH.Return(FALSE) ELSE OBH.Trap(OC.NoReturnTrap) END ;
+        OBC.FlushConsts;
+        OBH.curProcParamSize := oldpsize;
+        proc.a2 := OBC.pc;
+        IF sym = OC.ident THEN
+          IF OBS.name # proc.name THEN OBS.Mark(4) END ;
+          OBS.Get(sym)
+        ELSE OBS.Mark(10)
+        END
+      END ;
+      DEC(OBC.level); OBT.CloseScope
+    ELSE OBS.Mark(10)
+    END
+  END MethodDeclaration;
+
   PROCEDURE ProcedureDeclaration;
     VAR proc, proc1, par: OBT.Object;
       L1: INTEGER;
@@ -612,13 +734,15 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       oldpsize, psize, dsize, fwdCalls, fwdAddrs: LONGINT;
   BEGIN 
     dsize := 0; proc := NIL; body := TRUE; fwdCalls := 0; fwdAddrs := 0;
+    IF sym = OC.lparen THEN MethodDeclaration(TRUE); RETURN END ;
     IF sym # OC.ident THEN  (* polpo: forward declarations of local procedures too *)
       mode:=OC.LProc;
       IF sym = OC.arrow THEN (*forward*) body := FALSE
       ELSIF (OBC.level = 0) & ((sym = OC.times) OR (sym = OC.plus) OR (sym = OC.minus)) THEN (* just ignore it! *)
       ELSE mode := OC.LProc; OBS.Mark(10)
       END ;
-      OBS.Get(sym)
+      OBS.Get(sym);
+      IF ~body & (sym = OC.lparen) THEN MethodDeclaration(FALSE); RETURN END
     ELSE mode := OC.LProc
     END ;
     IF sym = OC.ident THEN
@@ -729,7 +853,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
   END CaseLabelList;
 
   PROCEDURE StatSeq;
-    VAR fpar: OBT.Object; xtyp: OBT.Struct; n: Narrowed;
+    VAR fpar, wobj: OBT.Object; xtyp: OBT.Struct; n: Narrowed;
         x, x0, xv, y, z: OBT.Item; ExitIndex: INTEGER;
         L0, L1 : LONGINT;
         tempVar : BOOLEAN;
@@ -778,6 +902,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         ELSE OBH.PrepCall(x, fpar);
           IF sym = OC.lparen THEN
             OBS.Get(sym); ActualParameters(x, fpar); CheckSym(OC.rparen)
+          ELSIF x.mode = OC.TProc THEN ReceiverAlone(x, fpar)  (* polpo *)
           ELSIF OBT.IsParam(fpar) THEN OBS.Mark(65)
           END ;
           OBH.Call(x);
@@ -860,24 +985,34 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         ELSE OBS.Mark(10)
         END
       ELSIF sym = OC.with THEN
-        OBS.Get(sym); x.obj := NIL; xtyp := NIL;
-        IF sym = OC.ident THEN
-          qualident(x); CheckSym(OC.colon);
-          IF sym = OC.ident THEN qualident(y);
-            IF y.mode = OC.Typ THEN
-              IF x.obj # NIL THEN
-                xtyp := x.typ; OBE.TypTest(x, y, FALSE,OC.WithGuardTrap); x.obj.typ := x.typ;
-                NEW(n); n.obj := x.obj; n.typ := xtyp; n.next := narrowed; narrowed := n
-              ELSE OBS.Mark(130)
+        (* polpo: Oberon-2's WITH v: T0 DO S0 | v: T1 DO S1 ... ELSE S END, as type tests in turn; without ELSE a
+          variable of none of the types traps *)
+        L1 := 0;
+        LOOP
+          OBS.Get(sym); x.obj := NIL; xtyp := NIL; L0 := 0; wobj := NIL;
+          IF sym = OC.ident THEN
+            qualident(x); CheckSym(OC.colon);
+            IF sym = OC.ident THEN qualident(y);
+              IF y.mode = OC.Typ THEN
+                IF x.obj # NIL THEN
+                  wobj := x.obj; xtyp := x.typ; OBE.TypTest(x, y, TRUE, OC.WithGuardTrap); OBE.CFJ(x, L0);
+                  wobj.typ := y.typ;
+                  NEW(n); n.obj := wobj; n.typ := xtyp; n.next := narrowed; narrowed := n
+                ELSE OBS.Mark(130)
+                END
+              ELSE OBS.Mark(52)
               END
-            ELSE OBS.Mark(52)
+            ELSE OBS.Mark(10)
             END
           ELSE OBS.Mark(10)
-          END
-        ELSE OBS.Mark(10)
+          END ;
+          CheckSym(OC.do); OBC.FreeRegs({}); StatSeq;
+          IF xtyp # NIL THEN wobj.typ := xtyp; narrowed := narrowed.next END ;
+          OBE.FJ(L1); OBC.FlushConsts; OBC.FixLink(L0);
+          IF sym # OC.bar THEN EXIT END
         END ;
-        CheckSym(OC.do); OBC.FreeRegs({}); StatSeq; CheckSym(OC.end);
-        IF xtyp # NIL THEN x.obj.typ := xtyp; narrowed := narrowed.next END
+        IF sym = OC.else THEN OBS.Get(sym); StatSeq ELSE OBH.Trap(OC.WithGuardTrap) END ;
+        OBC.FixLink(L1); CheckSym(OC.end)
       ELSIF sym = OC.exit THEN
         IF (LoopLevel>0) & (LoopLevel<=MaxLoopNesting) THEN OBH.RemoveTempVars(ForDepth[LoopLevel-1]) END;
         OBS.Get(sym); OBE.FJ(L0);
@@ -1061,6 +1196,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       END ;
       IF ~OBS.scanerr THEN
         Block(dsize,NIL); OBH.Return(TRUE); OBC.FlushConsts;
+        OBC.NumberMethods;  (* polpo: the numbers of the type-bound procedures, before the symbol and object files *)
         IF sym = OC.ident THEN
           IF OBS.name # OBE.modName THEN OBS.Mark(4) END ;
           OBS.Get(sym)

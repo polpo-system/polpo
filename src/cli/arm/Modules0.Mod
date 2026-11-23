@@ -32,6 +32,7 @@ CONST
   done = 0;
   fileNotFound = 1;
   invalidObjFile = 2;
+  oldObjFile = 12;  (* polpo: of the compiler before type-bound procedures *)
   keyMismatch = 3;
   corruptedObjFile = 4;
   cmdNotFound = 5;
@@ -139,6 +140,7 @@ BEGIN
     Append(resMsg, importing);
     IF (res = fileNotFound) OR (res = moduleNotFound) THEN Append(resMsg, " not found")
     ELSIF res = invalidObjFile THEN Append(resMsg, " not an obj-file")
+    ELSIF res = oldObjFile THEN Append(resMsg, " compiled by an older compiler: compile it again")
     ELSIF res = keyMismatch THEN
       Append(resMsg, " imports "); Append(resMsg, imported); Append(resMsg, " with bad key")
     ELSIF res = corruptedObjFile THEN Append(resMsg, " corrupted obj file")
@@ -180,8 +182,8 @@ PROCEDURE LoadModule (VAR f : File; VAR m: Module);
   END Expect;
   
   PROCEDURE ReadTypes (VAR R: File);
-    VAR i, j, t, k, tdsize, tagaddr, recordSize, offset, mno, eno: LONGINT;
-      nofPointers, root : INTEGER;
+    VAR i, j, t, k, tdsize, tagaddr, recordSize, offset, mno, eno, base, b0, entry: LONGINT;
+      nofPointers, root, nofmeth, nm4, nofnew, mthno, bnofmeth : INTEGER;
       td: TDesc; name: ModuleName; ch: CHAR;
       extlev : SHORTINT;
   BEGIN
@@ -191,32 +193,40 @@ PROCEDURE LoadModule (VAR f : File; VAR m: Module);
       SYSTEM.GET( f.adrpos, recordSize); INC( f.adrpos, 4);
       ReadString(R,name); 
       SYSTEM.GET( f.adrpos, extlev); INC( f.adrpos);      
-      root := 13+MaxExts+2;
-      tdsize:=nofPointers*4+8+56+(MaxExts+1)*4;
+      (* polpo: the number of methods follows the base types and the pointers *)
+      SYSTEM.GET( f.adrpos + LONG(extlev)*4 + LONG(nofPointers)*4, nofmeth);
+      (* the methods are between the header and the extension table: method n at root-18-n, as on ROP2; their area
+        a multiple of 4 words, as a tag is 16-byte aligned (its low bits mark) *)
+      nm4 := (nofmeth + 3) DIV 4 * 4;
+      root := 13+nm4+MaxExts+2;
+      tdsize:=nofPointers*4+8+56+(MaxExts+1)*4+nm4*4;
       SYSTEM.NEW(td, tdsize - 24 (* overhead of SysBlk header *) );
       DEC(SYSTEM.VAL(ADDRESS, td), 24);  (* overhead of SysBlk header *)
       types[i].tdaddr := SYSTEM.ADR(td.word[root]);
       td.word[0] := tdsize;
       td.word[1] := -4; (* sentinel *)
       td.word[2] := SYSTEM.ADR(td.word[root]); (* self *)
-      td.word[3] := 0; (* filler *)
+      td.word[3] := nofmeth; (* polpo: the number of methods, for the extensions *)
       k := SYSTEM.ADR(td.word[4]); j := 0;
       REPEAT ch := name[j]; SYSTEM.PUT(k, ch); INC(j); INC(k) UNTIL ch = 0X;
       td.word[12] := SYSTEM.ADR(m^); (* mdesc *)
+      j := 0; WHILE j < nm4 DO td.word[13+j] := 0; INC(j) END;
 
+      base := 0;
       FOR j:=0 TO extlev-1 DO
         SYSTEM.GET( f.adrpos, t); INC( f.adrpos, 4); (* tag *) 
         IF t<0 THEN (* non exported tag *)
-          SYSTEM.GET(m.sb+t,k); td.word[13+MaxExts-j]:=k;
+          SYSTEM.GET(m.sb+t,k); td.word[13+nm4+MaxExts-j]:=k;
           ELSE (* exported or imported *)
           mno:=t DIV 100H; eno:=t MOD 100H;
-          IF mno=0 THEN td.word[13+MaxExts-j]:=m.entries[eno]
-          ELSE SYSTEM.GET(m.imports[mno].entries[eno],k); td.word[13+MaxExts-j]:=k;
+          IF mno=0 THEN td.word[13+nm4+MaxExts-j]:=m.entries[eno]
+          ELSE SYSTEM.GET(m.imports[mno].entries[eno],k); td.word[13+nm4+MaxExts-j]:=k;
           END
-        END
+        END;
+        base := td.word[13+nm4+MaxExts-j]  (* the direct base type, the last *)
       END;
-      td.word[13+MaxExts-extlev]:=SYSTEM.ADR(td.word[root]);
-      FOR j:=extlev+1 TO MaxExts DO td.word[13+MaxExts-j]:=0 END;
+      td.word[13+nm4+MaxExts-extlev]:=SYSTEM.ADR(td.word[root]);
+      FOR j:=extlev+1 TO MaxExts DO td.word[13+nm4+MaxExts-j]:=0 END;
       
       td.word[root - 1] := SYSTEM.ADR(td.word[0]); (* tag of subobj *)
       td.word[root] := recordSize;
@@ -228,6 +238,20 @@ PROCEDURE LoadModule (VAR f : File; VAR m: Module);
         INC(j)
       END;
       td.word[root+1+nofPointers] := -(nofPointers+1)*4; (* sentinel *)
+
+      (* polpo: the new methods, then the inherited ones not overridden *)
+      INC( f.adrpos, 2); SYSTEM.GET( f.adrpos, nofnew); INC( f.adrpos, 2);
+      j := 0;
+      WHILE j < nofnew DO
+        SYSTEM.GET( f.adrpos, mthno); INC( f.adrpos, 2); SYSTEM.GET( f.adrpos, entry); INC( f.adrpos, 4);
+        td.word[root-18-mthno] := m.sb + entry; INC(j)
+      END;
+      IF base # 0 THEN
+        SYSTEM.GET(base - 4, b0); SYSTEM.GET(b0 + 12, bnofmeth); j := 0;
+        WHILE j < bnofmeth DO
+          IF td.word[root-18-j] = 0 THEN SYSTEM.GET(base - 72 - 4*j, td.word[root-18-j]) END; INC(j)
+        END
+      END;
       
       (* Fix the tag in the global var section *)
       SYSTEM.PUT(m.sb+tagaddr,types[i].tdaddr);
@@ -446,8 +470,9 @@ BEGIN
     SYSTEM.GET(f.adrpos, tag); INC(f.adrpos);
     IF tag = 0F5X THEN
       SYSTEM.GET(f.adrpos, tag); INC(f.adrpos);
-      IF tag = 030X THEN
+      IF tag = 031X THEN
         LoadModule(f, m)
+      ELSIF tag = 030X THEN COPY(name, importing); res := oldObjFile; ErrMsg(res)
       ELSE res := invalidObjFile; ErrMsg(res)
       END
     ELSE

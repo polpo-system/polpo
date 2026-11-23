@@ -177,6 +177,19 @@ BEGIN
   END
 END WriteInterval;
 
+(* polpo: the type-bound procedures of the record typ *)
+PROCEDURE WriteMethods (typ: OBT.Struct; i: INTEGER);
+  VAR m: OBT.Object;
+BEGIN m := typ.methods;
+  WHILE m # NIL DO
+    Indent(i); Str("PROCEDURE (");
+    IF m.dsc.mode = OBM.Par THEN Str("VAR ") END;
+    Str(m.dsc.name); Str(": "); WriteType(m.dsc.typ, 0, FALSE); Str(") "); Str(m.name); Ch("*");
+    WriteParams(m.dsc.next, m.typ); Ch(";"); Ln;
+    m := m.next
+  END
+END WriteMethods;
+
 PROCEDURE WriteForm (typ: OBT.Struct; i: INTEGER; arrDone: BOOLEAN);
   VAR open: BOOLEAN;
 BEGIN
@@ -184,8 +197,8 @@ BEGIN
     Str("RECORD"); WriteBase(typ);
     IF typ.strobj # NIL THEN WriteFlags (typ.strobj) END;
     IF showAdr IN option THEN Str(" [size = "); Num( typ^.size); Ch("]") END;
-    IF typ^.link # NIL (*OR (expandTypes IN option)*) THEN
-      Ln; WriteInstVars(typ, i, typ.extlev); Indent(i - 1) ELSE Ch(" ")
+    IF (typ^.link # NIL) OR (typ.methods # NIL) THEN
+      Ln; WriteInstVars(typ, i, typ.extlev); WriteMethods(typ, i); Indent(i - 1) ELSE Ch(" ")
     END;
     Str("END")
   ELSIF typ^.form IN {OBM.Array, OBM.DynArr} THEN

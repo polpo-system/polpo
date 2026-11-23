@@ -28,6 +28,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     MaxConstDist = ConstLength-15; (* in Words including a safety range *)
     MaxUnknownProcs = 128;
     MaxPtrs = 512; MaxRecs = 128; MaxComs = 40; MaxExts = 15;
+    MaxMthFix = 1024; Mth0Offset = -72;  (* polpo: the method table below the type descriptor, as Modules0 builds it *)
     
     (* Constants for Bit x set *)
     C22 = 400000H; C23 = 800000H; C24 = 1000000H; C25 = 2000000H; C28= 10000000H;
@@ -99,6 +100,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     END;
               
     LIAPtr= POINTER TO ARRAY OF LONGINT;
+    MthFixTab = POINTER TO ARRAY MaxMthFix OF OBT.Object;  (* polpo: on the heap: the ARM compiler counts global pointers *)
             
   VAR  
     pc* : LONGINT;
@@ -113,6 +115,9 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     fixlist0 : LONGINT; (* module local fixups *)
     recTypesOffset : LONGINT;
     recTab: ARRAY MaxRecs OF OBT.Struct;
+    nofmthfix: INTEGER;  (* polpo: loads of methods of this module, their numbers set at the end *)
+    mthFixPc: ARRAY MaxMthFix OF LONGINT;
+    mthFixObj: MthFixTab;
     code:  ARRAY CodeLength OF LONGINT;
     preferredReg : LONGINT;
       
@@ -824,6 +829,44 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     ELSE OBS.Mark(223)
     END
   END RegisterRecType;
+
+  (* polpo: r := the entry of the method mth in the type descriptor r. The numbers of the methods of this module are
+    known at its end (NumberMethods): their loads are fixed then. *)
+  PROCEDURE LoadMethod*(r: LONGINT; mth: OBT.Object);
+  BEGIN
+    IF mth.a3 >= 0 THEN PutSDT(LDR, r, r, Mth0Offset - 4*mth.a3)
+    ELSE
+      PutSDT(LDR, r, r, Mth0Offset);
+      IF nofmthfix < MaxMthFix THEN mthFixPc[nofmthfix] := pc - 1; mthFixObj[nofmthfix] := mth; INC(nofmthfix)
+      ELSE OBS.Mark(223)
+      END
+    END
+  END LoadMethod;
+
+  (* polpo: at the end of the module, the numbers of the methods of its record types (a base type comes before its
+    extensions): an overriding method takes the number of the method it overrides, a new one the next free number
+    after those of the base type; then the loads of LoadMethod are fixed *)
+  PROCEDURE NumberMethods*;
+    VAR i: INTEGER; typ: OBT.Struct; m, b: OBT.Object; n, loc: LONGINT;
+  BEGIN
+    i := 0;
+    WHILE i < nofrecs DO
+      typ := recTab[i]; n := 0;
+      IF typ.BaseTyp # NIL THEN n := typ.BaseTyp.nofmth END ;
+      m := typ.methods;
+      WHILE m # NIL DO
+        IF m.a0 = -1 THEN OBS.Mark(129) END ;  (* declared forward, without a body *)
+        b := NIL; IF typ.BaseTyp # NIL THEN b := OBT.FindMethod(typ.BaseTyp, m.name) END ;
+        IF b # NIL THEN m.a3 := b.a3 ELSE m.a3 := n; INC(n) END ;
+        m := m.next
+      END ;
+      typ.nofmth := n; INC(i)
+    END ;
+    i := 0;
+    WHILE i < nofmthfix DO
+      loc := mthFixPc[i]; code[loc] := code[loc] - code[loc] MOD 1000H - Mth0Offset + 4*mthFixObj[i].a3; INC(i)
+    END
+  END NumberMethods;
 (*
   PROCEDURE SaveRegisters*(VAR gR: SET; VAR x: OBT.Item);
     VAR t: SET;
@@ -989,7 +1032,8 @@ END PopF;
 
   PROCEDURE Init*;
   BEGIN 
-    pc := 0; level := 0; nofrecs := 0; RegSet := {};   RegSetF := {};
+    pc := 0; level := 0; nofrecs := 0; nofmthfix := 0; RegSet := {};   RegSetF := {};
+    IF mthFixObj = NIL THEN NEW(mthFixObj) END;
     strConstBlockCnt:=0; unknownProcCnt:=0; fixlist0:=0;
     constCnt := 0; constRefChain := -1; allowConstFlushing := 0; constDist := -1;
     extcallfixlist:=0; extaddrfixlist:=0; preferredReg:=-1; flushing:=FALSE;
@@ -1038,7 +1082,7 @@ END PopF;
       tmp : LONGINT;
       refpos: LONGINT;
       nofcom, nofptrs: LONGINT;
-      obj:    OBT.Object;
+      obj, mth:    OBT.Object;
       typ:    OBT.Struct;
       ObjFile:   Files.File;
       out:    Files.Rider;
@@ -1120,7 +1164,7 @@ END PopF;
       (* WHILE nofptrs < nofrecs DO PtrTab[nofptrs] := recTab[nofptrs].adr; INC(nofptrs) END ; *)
       Collect; 
     (*header block*)
-      Files.Write(out, ObjMark); Files.Write(out, "0"); 
+      Files.Write(out, ObjMark); Files.Write(out, "1");  (* polpo: "1": type descriptors with their methods *)
       Files.WriteLInt(out, refpos); (* will be fixed at the end of OutCode *)
       Files.WriteLInt(out, moduleBody*4); (* not necessary, but we don't want to scan RefBlks to get the entry point! *)
       Files.WriteInt(out, OBT.nofGmod); 
@@ -1176,7 +1220,7 @@ END PopF;
       Files.Write(out,089X);
       i := 0;
       WHILE i < nofrecs DO
-        typ := recTab[i]; recTab[i] := NIL; INC(i);
+        typ := recTab[i]; INC(i);
         np := 0; 
         FindPtrs(typ, 0, PtrTab, np); 
         Files.WriteLInt(out, typ.adr);                 (* addr of tag (tag=ptr to Type Desc) *)
@@ -1188,11 +1232,22 @@ END PopF;
         Files.Write(out, CHR(typ.extlev));          (* Nr of BaseTypes *)
         OutBaseTypes(typ);
         m := 0;
-        WHILE m < np DO Files.WriteLInt(out, PtrTab[m]); INC(m) END
+        WHILE m < np DO Files.WriteLInt(out, PtrTab[m]); INC(m) END ;
+        (* polpo: the number of methods, then the new ones: method number, entry *)
+        Files.WriteInt(out, SHORT(typ.nofmth));
+        m := 0; mth := typ.methods; WHILE mth # NIL DO INC(m); mth := mth.next END ;
+        Files.WriteInt(out, SHORT(m)); mth := typ.methods;
+        WHILE mth # NIL DO Files.WriteInt(out, SHORT(mth.a3)); Files.WriteLInt(out, mth.a0*4); mth := mth.next END
       END ;
     (*ref block*)
       refpos := Files.Pos(out);
       Files.Write(out,08BX);
+      i := 0;
+      WHILE i < nofrecs DO  (* polpo: the type-bound procedures *)
+        mth := recTab[i].methods;
+        WHILE mth # NIL DO OutRefBlk(mth.dsc, mth.a0, mth.name); mth := mth.next END ;
+        recTab[i] := NIL; INC(i)
+      END ;
       OutRefBlk(OBT.topScope.next, moduleBody, "$$");
       Files.Set(out, ObjFile, 2); Files.WriteLInt(out, refpos);
         IF ~OBS.scanerr THEN Files.Register(ObjFile); Files.ReleaseRead(ObjFile) END  (* polpo: the descriptor back *)

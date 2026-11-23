@@ -14,6 +14,7 @@ MODULE OBM;  (* as 8.2.99 *)
       CC*  = 8;  Var2* = 9; 
 
       Fld*   = 13; Typ*   = 14; LProc* = 15; SProc* = 16;  Mod*   = 19; Head*  = 20;
+      TProc* = 21;  (* polpo: a type-bound procedure, as object and as the item of a call *)
 
     (*structure forms*)
       Undef* = 0; Byte* = 1; Bool* = 2; Char* = 3; SInt* = 4; Int* = 5; LInt* = 6;

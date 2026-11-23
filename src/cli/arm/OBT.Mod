@@ -26,6 +26,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
   TYPE
     Object* = POINTER TO ObjDesc;
     Struct* = POINTER TO StrDesc;
+    ItemRef* = POINTER TO Item;
 
     ConstExt* = RECORD
                 str*: ARRAY 256 OF CHAR;
@@ -36,6 +37,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
                 dsc*, next*: Object;
                 typ*:  Struct;
                 a0*, a1*, a2* : LONGINT;
+                a3*: LONGINT;  (* polpo: TProc: the method number *)
                 mode*: SHORTINT;
                 marked*: BOOLEAN;
                 name*: ARRAY 32 OF CHAR;
@@ -47,14 +49,17 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
                 ref*: SHORTINT;
                 size*, adr*: LONGINT;
                 BaseTyp*: Struct;
-                link*, strobj*: Object
+                link*, strobj*: Object;
+                nofmth*: LONGINT;  (* polpo: Record: the number of methods, inherited ones and hidden ones too *)
+                methods*: Object  (* polpo: Record: the type-bound procedures of this type, linked by next *)
               END ;
 
     Item* =    RECORD
                 mode*, lev*: LONGINT;
                 a*, b*, r* : LONGINT; 
                 typ*: Struct;
-                obj*: Object
+                obj*: Object;
+                rcv*: ItemRef  (* polpo: TProc: the receiver of the call *)
               END ;
 
   (** Item forms:
@@ -200,6 +205,18 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
     res := obj
   END FindField;
 
+  (* polpo: the type-bound procedure name of the record typ or of its base types, else NIL *)
+  PROCEDURE FindMethod*(typ: Struct; name: ARRAY OF CHAR): Object;
+    VAR obj: Object;
+  BEGIN obj := NIL;
+    WHILE (typ # NIL) & (obj = NIL) DO
+      obj := typ.methods;
+      WHILE (obj # NIL) & (obj.name # name) DO obj := obj.next END ;
+      typ := typ.BaseTyp
+    END ;
+    RETURN obj
+  END FindMethod;
+
   PROCEDURE Insert*(VAR name: ARRAY OF CHAR; VAR res: Object);
     VAR obj, new: Object;
   BEGIN obj := topScope;
@@ -317,7 +334,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
               ELSIF obj.mode = OC.Typ THEN struct[s] := ob0.next.typ
               END
             |  8..12: (*structure*)
-              NEW(typ); typ.strobj := NIL; typ.ref := 0;
+              NEW(typ); typ.strobj := NIL; typ.ref := 0; typ.nofmth := 0; typ.methods := NIL;
               Files.Read(R, ch); typ.BaseTyp := struct[ORD(ch)];
               Files.Read(R, ch); typ.mno := SHORT(LocMod[ORD(ch)].a0);
               CASE class OF
@@ -361,6 +378,24 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
               Files.Read(R, ch); typ := struct[ORD(ch)];
               Files.Read(R, ch1);
               IF typ.BaseTyp = undftyp THEN typ.BaseTyp := struct[ORD(ch1)] END
+            | 25: (* polpo: a type-bound procedure: record, receiver type, result type, receiver mode and address,
+                   method number, name, the name of the receiver; its other parameters before it *)
+              Files.Read(R, ch); typ := struct[ORD(ch)];
+              NEW(ob0); ob0.dsc := NIL;
+              Files.Read(R, ch); ob0.typ := struct[ORD(ch)];
+              NEW(obj); obj.mode := OC.TProc; obj.marked := TRUE; obj.a0 := 0; obj.a1 := 0; obj.a2 := 0;
+              Files.Read(R, ch); obj.typ := struct[ORD(ch)];
+              Files.Read(R, si); ob0.mode := si; Files.ReadLInt(R, ob0.a0);
+              Files.ReadLInt(R, obj.a3); Files.ReadString(R, obj.name); Files.ReadString(R, ob0.name);
+              ob0.next := reversedList(lastpar[parlev]); DEC(parlev); obj.dsc := ob0;
+              obj.next := NIL; ob0 := typ.methods;  (* appended, in their order; the type may come twice *)
+              IF ob0 = NIL THEN typ.methods := obj
+              ELSE
+                WHILE (ob0.next # NIL) & (ob0.name # obj.name) DO ob0 := ob0.next END ;
+                IF ob0.name # obj.name THEN ob0.next := obj END
+              END
+            | 26: (* polpo: the number of methods of a record *)
+              Files.Read(R, ch); typ := struct[ORD(ch)]; Files.ReadLInt(R, k); typ.nofmth := k
             | 21, 23, 24: OBS.Mark(151); EXIT
             | 22: (*module anchor*)
               Files.ReadLInt(R, k); Files.ReadString(R, modname);
@@ -423,6 +458,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
   (*---------------------- export ------------------------*)
 
   PROCEDURE^ OutStr(VAR W: Files.Rider; typ: Struct);
+  PROCEDURE^ OutMethods(VAR W: Files.Rider; typ: Struct);
 
   PROCEDURE OutPars(VAR W: Files.Rider; par: Object);
   BEGIN Files.Write(W, 13);
@@ -494,9 +530,28 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
         Files.WriteString(W, typ.strobj.name)
       END ;
       typ.ref := SHORT(strno); INC(strno);
-      IF strno > maxStr THEN OBS.Mark(228) END
+      IF strno > maxStr THEN OBS.Mark(228) END ;
+      IF typ.form = OC.Record THEN OutMethods(W, typ) END
     END
   END OutStr;
+
+  (* polpo: the exported type-bound procedures of the record typ and its number of methods; the receiver is not in
+    the parameter list, which would write the record within itself *)
+  PROCEDURE OutMethods(VAR W: Files.Rider; typ: Struct);
+    VAR obj, rcv: Object;
+  BEGIN obj := typ.methods;
+    WHILE obj # NIL DO
+      IF obj.marked THEN
+        rcv := obj.dsc;
+        OutStr(W, rcv.typ); OutStr(W, obj.typ); OutPars(W, rcv.next);
+        Files.Write(W, 25); Files.Write(W, typ.ref); Files.Write(W, rcv.typ.ref); Files.Write(W, obj.typ.ref);
+        Files.Write(W, rcv.mode); Files.WriteLInt(W, rcv.a0); Files.WriteLInt(W, obj.a3); Files.WriteString(W, obj.name);
+        Files.WriteString(W, rcv.name)
+      END ;
+      obj := obj.next
+    END ;
+    IF typ.nofmth > 0 THEN Files.Write(W, 26); Files.Write(W, typ.ref); Files.WriteLInt(W, typ.nofmth) END
+  END OutMethods;
 
   PROCEDURE OutObjs(VAR W: Files.Rider);
     VAR obj: Object; f: INTEGER;

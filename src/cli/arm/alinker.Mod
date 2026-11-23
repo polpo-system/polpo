@@ -71,6 +71,9 @@ VAR
         tags : ARRAY MaxExts OF LONGINT;
         recsize : LONGINT;
         name : ARRAY 32 OF CHAR;
+        nofmth, nofnew: INTEGER;  (* polpo: the methods, and the new ones: their numbers and entries *)
+        mthno: POINTER TO ARRAY OF INTEGER;
+        mthentry: POINTER TO ARRAY OF LONGINT
       END;
                 
     Object = POINTER TO ObjectDesc;
@@ -244,18 +247,22 @@ VAR
       Files.Read(r,extlev); o.types[i].extlev:=extlev;
       FOR j:=0 TO extlev-1 DO Files.ReadLInt(r,o.types[i].tags[j]) END;
       FOR j:=0 TO o.types[i].nofPtrs-1 DO Files.ReadLInt(r,o.types[i].ptrs[j]) END;
+      Files.ReadInt(r,o.types[i].nofmth); Files.ReadInt(r,o.types[i].nofnew);
+      NEW(o.types[i].mthno,o.types[i].nofnew+1); NEW(o.types[i].mthentry,o.types[i].nofnew+1);
+      FOR j:=0 TO o.types[i].nofnew-1 DO Files.ReadInt(r,o.types[i].mthno[j]); Files.ReadLInt(r,o.types[i].mthentry[j]) END
     END
   END ReadTypes;
       
   PROCEDURE BuildTypeDescs(o : Object);
-  VAR i,j, start, t,mno, eno : LONGINT;
+  VAR i,j, start, t,mno, eno, nm4, mstart, base, b0, bn : LONGINT;
       init : Init;
   BEGIN
     FOR i:=0 TO o.nofRecs-1 DO
       (* adjust PC so that PC MOD 32 = 28, remember that pc is "word-counting"!!! *)
       INC(pc,7-(pc MOD 8));
     
-      o.types[i].tdaddr:=LoadBase4+pc*4+124;
+      nm4 := (o.types[i].nofmth + 3) DIV 4 * 4;  (* polpo: the methods, a multiple of 4 words (alignment) *)
+      o.types[i].tdaddr:=LoadBase4+pc*4+124+nm4*4;
       (*
       (* DEBUG only *)  
       Out.String("patch at: "); Hex(o.types[i].tagaddr); Out.String(" with "); Hex(o.types[i].tdaddr); 
@@ -268,12 +275,17 @@ VAR
       (* Now, generate the Type Desc *)
       code[pc]:=LoadBase4+(pc+1)*4;  INC(pc); 
       start:=pc;
-      code[pc]:=o.types[i].nofPtrs*4+8+56+(MaxExts+1)*4; INC(pc);       (* tdsize *)
+      code[pc]:=o.types[i].nofPtrs*4+8+56+(MaxExts+1)*4+nm4*4; INC(pc);       (* tdsize *)
       code[pc]:=-4; INC(pc);  (* sentinel *)
       code[pc]:=LoadBase4+pc*4+72; INC(pc); (* self *)
-      code[pc]:=0; INC(pc); (* filler *)
+      code[pc]:=o.types[i].nofmth; INC(pc); (* polpo: the number of methods *)
       FOR j:=0 TO 7 DO SYSTEM.GET( SYSTEM.ADR(o.types[i].name[j*4]), code[pc]); INC(pc) END;
       code[pc]:=0; INC(pc);  (* mdesc. will be fixed later *)
+      mstart := pc;  (* polpo: method n at mstart+nm4-1-n, root-18-n as in Modules0 *)
+      FOR j:=0 TO nm4-1 DO code[pc]:=0; INC(pc) END;
+      FOR j:=0 TO o.types[i].nofnew-1 DO
+        code[mstart+nm4-1-o.types[i].mthno[j]]:=o.base+o.types[i].mthentry[j]
+      END;
       FOR j:=0 TO o.types[i].extlev-1 DO 
         t:=o.types[i].tags[j];
         IF t<0 THEN (* non exported tag *)
@@ -286,6 +298,13 @@ VAR
         END
       END;
       FOR j:=o.types[i].extlev TO MaxExts DO code[pc+MaxExts-j]:=0 END;
+      IF o.types[i].extlev > 0 THEN  (* polpo: the methods of the base type not overridden *)
+        base := (code[pc+MaxExts-o.types[i].extlev+1] - LoadBase4) DIV 4;
+        b0 := (code[base-1] - LoadBase4) DIV 4; bn := code[b0+3];
+        FOR j:=0 TO bn-1 DO
+          IF code[mstart+nm4-1-j] = 0 THEN code[mstart+nm4-1-j]:=code[base-18-j] END
+        END
+      END;
       INC(pc,MaxExts+1);
       code[pc]:=LoadBase4+start*4; INC(pc);
     
@@ -587,7 +606,7 @@ VAR
     WHILE o#NIL DO 
       FOR i:=0 TO o.nofRecs-1 DO
         p:=(o.types[i].tdaddr-LoadBase4) DIV 4;
-        code[p-2-(MaxExts+1)]:=o.mdesc;  
+        code[p-2-(MaxExts+1)-(o.types[i].nofmth+3) DIV 4 * 4]:=o.mdesc;  (* polpo: below the methods *)
       END;
       o:=o.next
     END

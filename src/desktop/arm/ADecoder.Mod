@@ -310,7 +310,7 @@ MODULE ADecoder;   (*ms 30.06.97 / as 24.11.98 *)
       i, x, cd, beg ,end, time, tmp, endPC, mno, pno, cw, ldummy : LONGINT;
       name: ARRAY 320 OF CHAR; modname: ARRAY 32 OF CHAR;
       str : ARRAY 128 OF CHAR;
-      V: MenuViewers.Viewer; X, Y, j, dummy : INTEGER; 
+      V: MenuViewers.Viewer; X, Y, j, dummy, dummy2 : INTEGER; 
       nextProc : ARRAY 128 OF CHAR;
       nextStart : LONGINT;
       
@@ -466,6 +466,8 @@ MODULE ADecoder;   (*ms 30.06.97 / as 24.11.98 *)
           Files.Read(r,tag); (* nr of basetypes *)
           FOR j:=0 TO ORD(tag)-1 DO Files.ReadLInt(r,ldummy) END;
           FOR j:=0 TO dummy-1 DO Files.ReadLInt(r,ldummy) END;
+          Files.ReadInt(r,dummy); (* polpo: nofmth *) Files.ReadInt(r,dummy); (* new methods: number, entry *)
+          FOR j:=0 TO dummy-1 DO Files.ReadInt(r,dummy2); Files.ReadLInt(r,ldummy) END;
           tab; Hex(x); Str("  tag for "); Str(str); Ln;
         END; Ln;  
                 
