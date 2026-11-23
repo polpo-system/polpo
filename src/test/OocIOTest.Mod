@@ -1,4 +1,4 @@
-MODULE OocIOTest;  (** loksh OocIOTest.Run alpha "b c": the channels of the OOC library (x86) *)
+MODULE OocIOTest;  (** loksh OocIOTest.Run alpha "b c": the channels of the OOC library *)
 
 (* Writes and reads zq_oocio1.txt (TextRider) and zq_oocio2.bin (a Tmp file, BinaryRider) in the
    current directory, then deletes them; ProgramArgs gives the command name and the arguments. *)

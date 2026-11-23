@@ -365,14 +365,15 @@ command that makes a program and starts it, or looks into it first, reads it wit
 ## Code that compiles on all ports
 
 polpo has seven compilers, and they do not all accept the same language. The ARM compiler is an
-Oberon-1 compiler, the x86 one knows some Oberon-2, the ROP2 compilers (ARMv7, RISC-V, MIPS, PowerPC,
-68020) something in between. A module that keeps to the following compiles with all of them:
+Oberon-1 compiler with some Oberon-2 added, the x86 one knows most of Oberon-2, the ROP2 compilers
+(ARMv7, RISC-V, MIPS, PowerPC, 68020) something in between. All of them take type-bound procedures
+(the x86 compiler with the option /2), super calls (r.Proc^()), and WITH with several guards and an
+ELSE. A module that keeps to the following compiles with all of them:
 
     declarations (CONST, TYPE, VAR) come before the procedures, in modules and in procedures;
 
-    no read-only exports (-): export with *;
-
-    no type-bound procedures (only the x86 compiler takes them, with the option /2);
+    read-only exports (-) compile everywhere, but the ARM compiler exports such a name as if it were
+    marked with *: it does not refuse an assignment to it in another module;
 
     SET has 32 elements;
 
