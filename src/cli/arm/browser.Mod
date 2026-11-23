@@ -104,14 +104,15 @@ BEGIN
 END WriteBase;
 
 PROCEDURE WriteFields (VAR obj: OBT.Object; i: INTEGER; recField: BOOLEAN);
-  VAR typ: OBT.Struct; mode: INTEGER;
+  VAR typ: OBT.Struct; mode, rdo: INTEGER;
 BEGIN
-  typ := obj^.typ; mode := obj^.mode;
+  typ := obj^.typ; mode := obj^.mode; rdo := obj.rdo;
   LOOP
     IF recField & (showAdr IN option) THEN Ch("["); Num(obj.a0); Str("] ") END;
-    Str(obj^.name); IF recField THEN Ch("*") END;  (* polpo: the export mark, as on x86 *)
+    Str(obj^.name);
+    IF recField THEN IF rdo # 0 THEN Ch("-") ELSE Ch("*") END END;  (* polpo: the export mark, as on x86 *)
     obj := obj.next;
-    IF (obj = NIL) OR (obj^.mode # mode) OR (obj^.typ # typ) OR (obj^.name = "@r") THEN EXIT END;
+    IF (obj = NIL) OR (obj^.mode # mode) OR (obj^.typ # typ) OR (obj.rdo # rdo) OR (obj^.name = "@r") THEN EXIT END;
     Str(", ");
   END;
   Str(": "); WriteType(typ, i + 1, FALSE)
@@ -244,7 +245,7 @@ BEGIN
     Indent(2);
     IF showAdr IN option THEN Str(" ["); Num(obj.a0); Str("] "); END;
     Str(obj.name);
-    Str("*: "); WriteType(obj^.typ, 3, FALSE); Ch(";");
+    IF obj.rdo # 0 THEN Str("-: ") ELSE Str("*: ") END; WriteType(obj^.typ, 3, FALSE); Ch(";");
     Ln;
   ELSIF mode = OBM.Typ THEN
     IF first THEN Indent(1); Str("TYPE"); Ln; first := FALSE END;

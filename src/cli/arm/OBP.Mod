@@ -65,10 +65,10 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       END
     END ;
     IF obj # NIL THEN
-      OBE.MakeItem(obj,x,mnolev);
+      OBE.MakeItem(obj,x,mnolev); x.rdo := obj.rdo = 2
     ELSE
       x.mode := OC.Var;
-      x.typ := OBT.undftyp; x.a := 0; x.obj := NIL
+      x.typ := OBT.undftyp; x.a := 0; x.obj := NIL; x.rdo := FALSE
     END
   END qualident;
 
@@ -89,12 +89,24 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
 
   PROCEDURE CheckMark(VAR mk: BOOLEAN);
   BEGIN OBS.Get(sym);
-    IF (sym = OC.times) OR (sym = OC.minus) THEN  (* polpo: a read-only mark (Oberon-2) exports too, writable *)
+    IF (sym = OC.times) OR (sym = OC.minus) THEN
       IF OBC.level = 0 THEN mk := TRUE ELSE mk := FALSE; OBS.Mark(47) END ;
+      IF sym = OC.minus THEN OBS.Mark(47) END ;  (* polpo: read-only marks only for variables and fields *)
       OBS.Get(sym)
     ELSE mk := FALSE
     END
   END CheckMark;
+
+  (* polpo: the export mark of a variable or a field: * or - (Oberon-2: read-only outside this module) *)
+  PROCEDURE CheckMarkR(obj: OBT.Object);
+  BEGIN OBS.Get(sym); obj.marked := FALSE; obj.rdo := 0;
+    IF (sym = OC.times) OR (sym = OC.minus) THEN
+      IF OBC.level # 0 THEN OBS.Mark(47)
+      ELSE obj.marked := TRUE; IF sym = OC.minus THEN obj.rdo := 1 END
+      END ;
+      OBS.Get(sym)
+    END
+  END CheckMarkR;
 
   PROCEDURE CheckUndefPointerTypes;
     VAR obj: OBT.Object;
@@ -133,7 +145,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
               OBT.FindField(typ.BaseTyp, fld0);
               IF fld0 # NIL THEN OBS.Mark(1) END
             END ;
-            OBT.Insert(OBS.name, fld); CheckMark(fld.marked); fld.mode := OC.Fld
+            OBT.Insert(OBS.name, fld); CheckMarkR(fld); fld.mode := OC.Fld
           ELSE OBS.Mark(10)
           END ;
           IF sym = OC.comma THEN OBS.Get(sym)
@@ -367,15 +379,17 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     x.mode := OC.TProc; x.obj := mth; x.typ := mth.typ; x.a := 0; x.b := 0
   END MethodItem;
 
+  (* polpo: ro, the designator may not be written (x.rdo at the end): a read-only variable or field of another
+    module, an element or field of one; what a pointer points to may be written *)
   PROCEDURE selector(VAR x: OBT.Item);
-    VAR fld, mth: OBT.Object; y: OBT.Item; ptyp: OBT.Struct;
-  BEGIN
+    VAR fld, mth: OBT.Object; y: OBT.Item; ptyp: OBT.Struct; ro: BOOLEAN;
+  BEGIN ro := x.rdo;
     LOOP
       IF sym = OC.lbrak THEN OBS.Get(sym);
         LOOP
           IF x.mode IN {OC.Const, OC.Typ..OC.Mod} THEN OBS.Mark(112); Expression(y)
           ELSE
-            IF (x.typ # NIL) & (x.typ.form = OC.Pointer) THEN OBE.DeRef(x) END ;
+            IF (x.typ # NIL) & (x.typ.form = OC.Pointer) THEN OBE.DeRef(x); ro := FALSE END ;
             Expression(y);  OBE.Index(x, y);
           END ;
           IF sym = OC.comma THEN OBS.Get(sym) ELSE EXIT END
@@ -385,11 +399,13 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         IF sym = OC.ident THEN
           IF x.typ # NIL THEN
             ptyp := x.typ;
-            IF x.typ.form = OC.Pointer THEN OBE.DeRef(x) END ;
+            IF x.typ.form = OC.Pointer THEN OBE.DeRef(x); ro := FALSE END ;
             IF x.typ.form = OC.Record THEN
               OBT.FindField(x.typ, fld); mth := NIL;
               IF fld = NIL THEN mth := OBT.FindMethod(x.typ, OBS.name) END ;
-              IF mth # NIL THEN MethodItem(x, ptyp, mth) ELSE OBE.Field(x, fld) END
+              IF mth # NIL THEN x.rdo := ro; MethodItem(x, ptyp, mth); ro := FALSE
+              ELSE OBE.Field(x, fld); IF (fld # NIL) & (fld.rdo = 2) THEN ro := TRUE END
+              END
             ELSE OBS.Mark(53)
             END
           ELSE OBS.Mark(52)
@@ -399,7 +415,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         END
       ELSIF sym = OC.arrow THEN
         OBS.Get(sym);
-        IF x.mode = OC.TProc THEN x.b := 1 (* polpo: a super call *) ELSE OBE.DeRef(x) END
+        IF x.mode = OC.TProc THEN x.b := 1 (* polpo: a super call *) ELSE OBE.DeRef(x); ro := FALSE END
       ELSIF (sym = OC.lparen) & (x.mode < OC.Typ) & (x.typ.form # OC.ProcTyp) THEN
         OBS.Get(sym);
         IF sym = OC.ident THEN
@@ -410,13 +426,15 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         CheckSym(OC.rparen)
       ELSE EXIT
       END
-    END
+    END ;
+    x.rdo := ro
   END selector;
 
   (* polpo: the receiver of the call x of a type-bound procedure, the first parameter fpar *)
   PROCEDURE Receiver(VAR x: OBT.Item; VAR fpar: OBT.Object; VAR psize: LONGINT);
     VAR R: SET;
   BEGIN
+    IF (fpar.mode = OC.Par) & x.rcv.rdo THEN OBS.Mark(76) END ;  (* a VAR receiver *)
     R := OBC.UsedRegisters() - OBH.ItemRegs(x.rcv^);
     OBH.Param(x.rcv^, fpar, psize); fpar := fpar.next; OBC.FreeRegs(R)
   END Receiver;
@@ -448,6 +466,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
              its declared type, the outermost entry *)
           typ := fpar.typ; n := narrowed;
           WHILE n # NIL DO IF n.obj = fpar THEN fpar.typ := n.typ END; n := n.next END;
+          IF (fpar.mode = OC.Par) & apar.rdo THEN OBS.Mark(76) END ;  (* polpo *)
           OBH.Param(apar, fpar, psize); fpar.typ := typ; fpar := fpar.next
         ELSE OBS.Mark(64)
         END ;
@@ -489,6 +508,14 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     OBE.NewOpenArr(x,typ,dims,dimcnt);
   END NewOpenArr;
   
+  (* polpo: x, parameter n (from 0) of the standard procedure m, is written by it: not read-only *)
+  PROCEDURE CheckWritable(VAR x: OBT.Item; m, n: LONGINT);
+  BEGIN
+    IF x.rdo & ((n = 0) & ((m = OBT.FnNew) OR (m >= OBT.FnInc) & (m <= OBT.FnExcl) OR (m = OBT.FnSysNew))
+        OR (n = 1) & ((m = OBT.FnSysGet) OR (m = OBT.FnCopy) OR (m = OBT.FnSysGetReg))) THEN OBS.Mark(76)
+    END
+  END CheckWritable;
+
   PROCEDURE StandProcCall(VAR x: OBT.Item);
     VAR oldx, y, z: OBT.Item; m, n: LONGINT;
   BEGIN
@@ -496,10 +523,10 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
     IF sym = OC.lparen THEN OBS.Get(sym);
       IF sym # OC.rparen THEN
         LOOP
-          IF n = 0 THEN Expression(x); oldx:=x; OBE.StPar1(x, m); n := 1
+          IF n = 0 THEN Expression(x); CheckWritable(x, m, 0); oldx:=x; OBE.StPar1(x, m); n := 1
           ELSIF n = 1 THEN 
             IF (m=OBT.FnNew) & (oldx.typ.form=OC.Pointer) & (oldx.typ.BaseTyp.form=OC.DynArr) THEN NewOpenArr(oldx)
-            ELSE Expression(y); OBE.StPar2(x, y, m);  n := 2
+            ELSE Expression(y); CheckWritable(y, m, 1); OBE.StPar2(x, y, m);  n := 2
             END
           ELSIF n = 2 THEN Expression(z); OBE.StPar3(x, z, m); n := 3
           ELSE OBS.Mark(64); Expression(y)
@@ -546,13 +573,13 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
 
   PROCEDURE Factor(VAR x: OBT.Item);
     VAR fpar: OBT.Object; gR, gF: SET; 
-  BEGIN
+  BEGIN x.rdo := FALSE;  (* polpo: only a designator may be read-only *)
     IF sym < OC.lparen THEN OBS.Mark(13);
       REPEAT OBS.Get(sym) UNTIL sym >= OC.lparen
     END ;
     IF sym = OC.ident THEN
       qualident(x); selector(x);
-      IF x.mode = OC.SProc THEN StandProcCall(x)
+      IF x.mode = OC.SProc THEN StandProcCall(x); x.rdo := FALSE
       ELSIF sym = OC.lparen THEN
         OBS.Get(sym); 
         OBH.PrepCall(x, fpar); 
@@ -562,6 +589,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         ActualParameters(x, fpar);
         OBH.Call(x); 
         OBC.RestoreRegisters(gR, gF, x); 
+        x.rdo := FALSE;
         IF x.typ = OBT.hptrtyp THEN OBH.HugeResult(x) END;  (* polpo *)
         CheckSym(OC.rparen)
       END
@@ -892,7 +920,8 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
       END ;
       IF sym = OC.ident THEN
         qualident(x); selector(x);
-        IF sym = OC.becomes THEN 
+        IF sym = OC.becomes THEN
+          IF x.rdo THEN OBS.Mark(76) END ;  (* polpo *)
           OBS.Get(sym); Expression(y); OBH.Assign(x, y, FALSE)
         ELSIF sym = OC.eql THEN
           OBS.Mark(34); OBS.Get(sym); Expression(y); OBH.Assign(x, y, FALSE)
@@ -948,6 +977,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         OBS.Get(sym);
         IF sym = OC.ident THEN
           qualident(x); xv := x;
+          IF x.rdo THEN OBS.Mark(76) END ;  (* polpo *)
           (* polpo: xv, the control variable as qualident made it; Assign set the base register of x
              (the frame of an outer procedure, an imported module) and freed it, the limit could reuse
              it: the comparison and the increment take a new copy of xv, which loads the base again *)
@@ -1088,7 +1118,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
         OBS.Get(sym);
         openArrayAllowed:=FALSE;
         WHILE sym = OC.ident DO
-          OBT.Insert(OBS.name, obj); first := obj; CheckMark(obj.marked);
+          OBT.Insert(OBS.name, obj); first := obj; CheckMarkR(obj);
           obj.mode := OC.Var; obj.typ := OBT.undftyp;
           LOOP
             IF sym = OC.comma THEN OBS.Get(sym)
@@ -1096,7 +1126,7 @@ MODULE OBP;   (*NW 7.6.87 / 21.8.92 / 14.12.93*)  (** shared ARM compiler parser
             ELSE EXIT
             END ;
             IF sym = OC.ident THEN
-              OBT.Insert(OBS.name, obj); CheckMark(obj.marked);
+              OBT.Insert(OBS.name, obj); CheckMarkR(obj);
               obj.mode := OC.Var; obj.typ := OBT.undftyp
             ELSE OBS.Mark(10)
             END

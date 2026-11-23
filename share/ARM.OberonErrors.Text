@@ -80,7 +80,7 @@ Incorrect use of language Oberon
 73  procedure must have level 0
 74  
 75  
-76  
+76  this variable (field) is read only
 77  
 78  
 79  

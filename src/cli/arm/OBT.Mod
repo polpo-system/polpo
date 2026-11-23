@@ -40,6 +40,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
                 a3*: LONGINT;  (* polpo: TProc: the method number *)
                 mode*: SHORTINT;
                 marked*: BOOLEAN;
+                rdo*: SHORTINT;  (* polpo: Var, Fld: 1 exported read-only (-), 2 the same imported: not writable here *)
                 name*: ARRAY 32 OF CHAR;
                 ext* : POINTER TO ConstExt;
               END ;
@@ -59,7 +60,8 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
                 a*, b*, r* : LONGINT; 
                 typ*: Struct;
                 obj*: Object;
-                rcv*: ItemRef  (* polpo: TProc: the receiver of the call *)
+                rcv*: ItemRef;  (* polpo: TProc: the receiver of the call *)
+                rdo*: BOOLEAN  (* polpo: a designator that may not be written, see OBP.selector *)
               END ;
 
   (** Item forms:
@@ -323,7 +325,8 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
               |2,3: obj.mode := OC.Typ; Files.Read(R, ch); m := ORD(ch);
                     IF obj.typ.strobj = NIL THEN obj.typ.strobj := obj END;
                     obj.marked := class = 2
-              |4: obj.mode := OC.Var; Files.Read(R, ch); obj.a0 := ORD(ch) 
+              |4, 7: obj.mode := OC.Var; Files.Read(R, ch); obj.a0 := ORD(ch);
+                    IF class = 7 THEN obj.rdo := 2 END  (* polpo: read-only *)
               |5,6:  obj.mode := OC.LProc; Files.Read(R, ch);
                     obj.a0 := ORD(ch);
                     obj.dsc := reversedList(lastpar[parlev]); DEC(parlev)
@@ -364,8 +367,8 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
               IF fldlev < maxParLev-1 THEN INC(fldlev); lastfld[fldlev] := NIL
               ELSE OBS.Mark(229)
               END
-            | 17: (*field*)
-              NEW(obj); obj.mode := OC.Fld; Files.Read(R, ch);
+            | 17, 27: (*field; polpo: 27 read-only*)
+              NEW(obj); obj.mode := OC.Fld; Files.Read(R, ch); IF class = 27 THEN obj.rdo := 2 END ;
               obj.typ := struct[ORD(ch)]; Files.ReadLInt(R, obj.a0);
               Files.ReadString(R, obj.name); obj.marked := TRUE;
               obj.dsc := NIL; obj.next := lastfld[fldlev]; lastfld[fldlev] := obj
@@ -474,7 +477,9 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
     IF visible THEN Files.Write(W, 16) END ;
     WHILE fld # NIL DO
       IF fld.marked & visible THEN
-        OutStr(W, fld.typ); Files.Write(W, 17); Files.Write(W, fld.typ.ref);
+        OutStr(W, fld.typ);
+        IF fld.rdo # 0 THEN Files.Write(W, 27) ELSE Files.Write(W, 17) END ;  (* polpo: 27 read-only *)
+        Files.Write(W, fld.typ.ref);
         Files.WriteLInt(W, fld.a0); Files.WriteString(W, fld.name)
       ELSIF fld.typ.form = OC.Record THEN OutFlds(W, fld.typ.link, fld.a0 + adr, FALSE)
       ELSIF (fld.typ.form = OC.Pointer) OR (fld.name = "") THEN
@@ -580,7 +585,8 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
             Files.WriteString(W, obj.name)
           END
         ELSIF obj.mode = OC.Var THEN
-          OutStr(W, obj.typ); Files.Write(W, 4);
+          OutStr(W, obj.typ);
+          IF obj.rdo # 0 THEN Files.Write(W, 7) ELSE Files.Write(W, 4) END ;  (* polpo: 7 read-only *)
           Files.Write(W, obj.typ.ref); 
           IF entno=maxEnt THEN OBS.Mark(236); entno:=0 END;
           Files.Write(W, SHORT(entno)); entry[entno] := obj.a0; INC(entno); 
