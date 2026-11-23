@@ -743,7 +743,10 @@ MODULE KOPL;  (* Copyright (c) Michael Franz, 1989-95 / mf 24.7.95 se 16 Aug 97 
   PROCEDURE FixProc*(proc: OPT.Object);  (* proc starts here: aligned, its entry set, its forward calls fixed *)
     VAR i, loc, next, disp: LONGINT;
   BEGIN
-    Align4; proc.adr := pc DIV 2;
+    Align4;
+    IF proc.mode = TProc THEN proc.adr := proc.adr DIV 10000H * 10000H + pc DIV 2  (* the method number stays *)
+    ELSE proc.adr := pc DIV 2
+    END;
     i := FindFwd(proc);
     IF i < nfwd THEN loc := fwdLink[i];
       WHILE loc # 0 DO
@@ -1024,8 +1027,19 @@ MODULE KOPL;  (* Copyright (c) Michael Franz, 1989-95 / mf 24.7.95 se 16 Aug 97 
   END WName;
 
   PROCEDURE WTDesc(typ: OPT.Struct);
-    VAR btyp: OPT.Struct; nofinhmth, nofptr, i: INTEGER;
+    VAR btyp: OPT.Struct; nofinhmth, nofnewmeth, nofptr, i: INTEGER;
       ptrTab: ARRAY OPM.MaxPtr + 1 OF LONGINT;
+      newMth: ARRAY 256 OF OPT.Object;
+
+    PROCEDURE FindNewMths(obj: OPT.Object);
+    BEGIN
+      IF obj # NIL THEN
+        FindNewMths(obj.left);
+        IF obj.mode = TProc THEN newMth[nofnewmeth] := obj; INC(nofnewmeth) END;
+        FindNewMths(obj.right)
+      END
+    END FindNewMths;
+
   BEGIN
     IF typ.ref >= 0 THEN
       btyp := typ.BaseTyp;
@@ -1040,10 +1054,14 @@ MODULE KOPL;  (* Copyright (c) Michael Franz, 1989-95 / mf 24.7.95 se 16 Aug 97 
       END;
       OPM.ObjWNum(typ.n);  (* methods *)
       OPM.ObjWNum(nofinhmth);
-      OPM.ObjWNum(0);  (* new methods: none, type-bound procedures are refused *)
+      nofnewmeth := 0; FindNewMths(typ.link);
+      OPM.ObjWNum(nofnewmeth);
       nofptr := 0; FindPtrs(typ, 0, ptrTab, nofptr);
       IF nofptr > OPM.MaxPtr THEN err(221) END;
       OPM.ObjWNum(nofptr);
+      WHILE nofnewmeth > 0 DO DEC(nofnewmeth);  (* the method number, the entry in longwords *)
+        OPM.ObjWNum(newMth[nofnewmeth].adr DIV 10000H); OPM.ObjWNum(newMth[nofnewmeth].adr MOD 10000H)
+      END;
       i := 0;
       WHILE i < nofptr DO OPM.ObjWNum(ptrTab[i]); INC(i) END
     END

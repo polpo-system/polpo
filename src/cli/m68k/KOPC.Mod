@@ -41,7 +41,7 @@ MODULE KOPC;  (* Copyright (c) Michael Franz, 1989-95 / mf 13.7.94 se 16 Aug 97 
     ccfEQ = -1; ccfNE = -14; ccfGT = -18; ccfGE = -19; ccfLT = -20; ccfLE = -21;
     (* traps, as in the other ROP2 back ends *)
     RangeTrap = 8; ZeroTrap = 10; IndexTrap = 15; TGTrap = 18; ITGTrap = 19;
-    Tag0Offset = -8;
+    Tag0Offset = -8; Mth0Offset = -72;  (* the method table below the descriptor, as Modules0 builds it *)
 
     intSet = {SInt, Int, LInt}; realSet = {Real, LReal};
 
@@ -726,6 +726,25 @@ MODULE KOPC;  (* Copyright (c) Michael Franz, 1989-95 / mf 13.7.94 se 16 Aug 97 
   PROCEDURE CallPV*(VAR x: OPL.Item);  (* a procedure variable *)
   BEGIN OPL.LoadA(x); OPL.Op1(opRx+opRD, 4E90H, x); x.typ := x.typ.BaseTyp  (* JSR (Ax) *)
   END CallPV;
+
+  PROCEDURE CallMethod*(mthno: LONGINT; super: BOOLEAN; rtyp: OPT.Struct; psize: LONGINT);
+    (* the parameters are pushed, the receiver first: a pointer, or the tag and then the address of a VAR
+      record; rtyp is the static type of the receiver. A super call takes the descriptor of its base type. *)
+    VAR t: OPL.Item; typ: OPT.Struct;
+  BEGIN
+    IF super THEN
+      typ := rtyp; IF typ.form = Pointer THEN typ := typ.BaseTyp END;
+      t.mode := GlobDes; t.obj := typ.BaseTyp.strobj; t.typ := OPT.linttyp; OPL.LoadA(t)
+    ELSE
+      t.mode := RegInd; t.adr := 7; t.disp := psize - 4; t.typ := OPT.linttyp; OPL.MultiRef(t);
+      OPL.LoadA(t);  (* MOVEA.L psize-4(A7), At: the pointer or the tag *)
+      IF rtyp.form = Pointer THEN t.mode := RegInd; t.disp := -4; OPL.LoadA(t) END  (* MOVEA.L -4(At), At *)
+    END;
+    t.mode := RegInd; t.disp := Mth0Offset - 4*mthno; OPL.LoadA(t);  (* MOVEA.L mth(At), At *)
+    OPL.Op1(opRx+opRD, 4E90H, t);  (* JSR (At) *)
+    IF OPL.stksize + 8 > OPL.maxstksize THEN OPL.maxstksize := OPL.stksize + 8 END;
+    DEC(OPL.stksize, psize)
+  END CallMethod;
 
   PROCEDURE MoveQ(n: LONGINT);  (* D0 := n *)
   BEGIN

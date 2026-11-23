@@ -208,7 +208,7 @@ MODULE KOPV;  (* Copyright (c) Michael Franz, 1989-95 / mf 17.8.95 / se 10 Apr 9
   BEGIN
     IF obj # NIL THEN
       TProcedures(obj.left);
-      IF obj.mode = TProc THEN OPM.err(700) END;  (* type-bound procedures are not supported by the ROP2 back ends *)
+      IF obj.mode = TProc THEN Procedure(obj) END;
       TProcedures(obj.right)
     END
   END TProcedures;
@@ -276,8 +276,10 @@ MODULE KOPV;  (* Copyright (c) Michael Franz, 1989-95 / mf 17.8.95 / se 10 Apr 9
   BEGIN
     restyp := n.typ; OPL.SaveRegisters(regs);
     IF n.left.class = Nproc THEN proc := n.left.obj;
-      IF proc.mode = TProc THEN OPM.err(700) END;
-      before := OPL.stksize; ActualPar(n.right, n.obj); OPL.Call(OPL.stksize - before, proc)
+      before := OPL.stksize; ActualPar(n.right, n.obj);
+      IF proc.mode = TProc THEN OPC.CallMethod(proc.adr DIV 10000H, n.left.subcl = 1, n.right.typ, OPL.stksize - before)
+      ELSE OPL.Call(OPL.stksize - before, proc)
+      END
     ELSE design(n.left, x);
       before := OPL.stksize; ActualPar(n.right, n.obj);
       OPC.CallPV(x); DEC(OPL.stksize, OPL.stksize - before)
@@ -402,25 +404,22 @@ MODULE KOPV;  (* Copyright (c) Michael Franz, 1989-95 / mf 17.8.95 / se 10 Apr 9
       INC(OPL.level); stat(n.left); DEC(OPL.level)
     ELSE
       INC(OPL.level); stat(n.left); DEC(OPL.level);
-      IF proc.mode = TProc THEN OPM.err(700)
-      ELSE
-        nmarks := 0; OPC.EnterProc(proc, proc.conval.intval2);
-        par := proc.link;
-        WHILE par # NIL DO
-          IF par.mode = Var THEN
-            IF par.typ.comp = DynArr THEN OPC.CopyDynArray(par.adr, par.typ)
-            ELSIF par.typ.comp IN {Record, Array} THEN OPC.CopyPar(par.adr, par.typ.size)
-            END
-          END;
-          par := par.link
+      nmarks := 0; OPC.EnterProc(proc, proc.conval.intval2);
+      par := proc.link;
+      WHILE par # NIL DO
+        IF par.mode = Var THEN
+          IF par.typ.comp = DynArr THEN OPC.CopyDynArray(par.adr, par.typ)
+          ELSIF par.typ.comp IN {Record, Array} THEN OPC.CopyPar(par.adr, par.typ.size)
+          END
         END;
-        stat(n.right);
-        IF proc.typ # OPT.notyp THEN OPC.Trap(FuncTrap)
-        ELSE OPC.ReturnFromProc(proc, proc.conval.intval, FALSE, x)
-        END;
-        Found; OPL.TestRegs; OPL.TestStack;
-        COPY(proc.name, name); OPL.OutRefPoint; OPL.OutRefName(name); OPL.OutRefs(proc.scope.right)
-      END
+        par := par.link
+      END;
+      stat(n.right);
+      IF proc.typ # OPT.notyp THEN OPC.Trap(FuncTrap)
+      ELSE OPC.ReturnFromProc(proc, proc.conval.intval, FALSE, x)
+      END;
+      Found; OPL.TestRegs; OPL.TestStack;
+      COPY(proc.name, name); OPL.OutRefPoint; OPL.OutRefName(name); OPL.OutRefs(proc.scope.right)
     END
   END Enter;
 
