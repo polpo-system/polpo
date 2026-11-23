@@ -1665,6 +1665,7 @@ MODULE OPB;  (** non-portable *)
         END
     | sysnewfn: (*SYSTEM.NEW*)
         IF NotVar(x) THEN err(112)
+        ELSIF x^.readonly THEN err(76)  (* polpo *)
         ELSIF f = Pointer THEN
           IF OPM.NEWusingAdr THEN CheckLeaf(x, TRUE) END
         ELSE err(111)
@@ -1814,7 +1815,7 @@ MODULE OPB;  (** non-portable *)
         IF (x^.class = Ntype) OR (x^.class = Nproc) THEN err(126)
         ELSIF f IN {Undef..Set, NilTyp, Pointer, ProcTyp} THEN
           IF (fctno = getfn) OR (fctno = getrfn) OR (fctno = pinfn) THEN
-            IF NotVar(x) THEN err(112) END ;
+            IF NotVar(x) THEN err(112) ELSIF x^.readonly THEN err(76) (* polpo *) END ;
             t := x; x := p; p := t
           ELSIF x.class = Nconst THEN err(-306)
           END ;
@@ -1855,7 +1856,7 @@ MODULE OPB;  (** non-portable *)
         ELSIF (24<=i) & (i < 32) & ~(f IN {Byte, Bool, Char, SInt}) THEN err(111)    (*AL .. BH*)
         ELSE
           IF fctno = getrfn THEN
-            IF NotVar(x) THEN err(112) END ;
+            IF NotVar(x) THEN err(112) ELSIF x^.readonly THEN err(76) (* polpo *) END ;
             t := x; x := p; p := t
           ELSIF (0<=i) & (i < 8) & (x.class = Nconst) THEN err(-306)
           END ;

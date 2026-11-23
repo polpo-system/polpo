@@ -1429,6 +1429,7 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
         END
     | sysnewfn: (*SYSTEM.NEW*)
         IF NotVar(x) THEN err(112)
+        ELSIF x^.readonly THEN err(76)  (* polpo *)
         ELSIF f = Pointer THEN
           IF OPM.NEWusingAdr THEN CheckLeaf(x, TRUE) END
         ELSE err(111)
@@ -1569,7 +1570,7 @@ MODULE ROPB;  (* RC 6.3.89 / 30.3.94 *)  (* object model 17.1.93 *)
         IF (x^.class = Ntype) OR (x^.class = Nproc) THEN err(126)
         ELSIF f IN {Undef..Set, Pointer, ProcTyp} THEN
           IF (fctno = getfn) OR (fctno = getrfn) THEN
-            IF NotVar(x) THEN err(112) END ;
+            IF NotVar(x) THEN err(112) ELSIF x^.readonly THEN err(76) (* polpo *) END ;
             t := x; x := p; p := t
           END ;
           p := NewOp(Nassign, fctno, p, x)
