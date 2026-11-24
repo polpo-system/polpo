@@ -331,6 +331,69 @@ use only global variables. If p itself traps, it is not called again, and at mos
 can be registered at once. net.Echo works this way: Ctrl+C closes its listening socket and its
 connection at once, so the port is free again.
 
+## Tasks in the desktop
+
+The desktop does one thing at a time. A command clicked in a viewer runs until it returns, and in
+the meantime the desktop handles no mouse and no keys. Work that is to go on while we work, such as
+playing sound, a clock, or a connection that waits for data, is done by a task: a procedure the
+desktop calls again and again whenever it has nothing else to do. Here is a small one that writes a
+line into System.Log every second:
+
+    MODULE Ticker;
+    IMPORT Oberon, Input, Texts;
+
+    VAR task: Oberon.Task; W: Texts.Writer; n: LONGINT;
+
+    PROCEDURE Tick(me: Oberon.Task);
+    BEGIN
+      INC(n); Texts.WriteString(W, "tick "); Texts.WriteInt(W, n, 0); Texts.WriteLn(W);
+      Texts.Append(Oberon.Log, W.buf);
+      me.time := Oberon.Time() + Input.TimeUnit    (* the next call in a second *)
+    END Tick;
+
+    PROCEDURE Start*;
+    BEGIN
+      IF task = NIL THEN
+        NEW(task); task.handle := Tick; task.safe := FALSE; task.time := Oberon.Time();
+        Oberon.Install(task)
+      END
+    END Start;
+
+    PROCEDURE Stop*;
+    BEGIN
+      IF task # NIL THEN Oberon.Remove(task); task := NIL END
+    END Stop;
+
+    BEGIN Texts.OpenWriter(W)
+    END Ticker.
+
+We compile it, start the desktop, and click Ticker.Start in any viewer:
+
+    bin/x86/loksh compiler.Compile /s Ticker.Mod
+    bin/x86/loksh System.Init
+
+System.Log gets tick 1, tick 2 and so on, one a second, while we go on typing and scrolling;
+Ticker.Stop ends it. Start installs the task with Oberon.Install. The desktop's loop calls the
+task's handler when no input is waiting and the time in the field time has come; time counts
+Input.TimeUnit ticks a second, as Oberon.Time does. So Tick, after its work, sets the time of its
+next call. (Note: a handler that leaves the time in the past is called again in every round of
+the loop and keeps the processor busy.) A handler must not wait: it does a little and returns,
+since we notice delays of more than about 100 ms. A task whose handler traps is removed, unless its
+field safe is TRUE. The garbage collector is a task too.
+
+While a command runs, no task runs, because the loop is not running. If we click a compilation
+while the ticker is on, no tick comes until the compilation is done. A task that feeds a device
+stops for that time as well. Player.Play (package sound-desktop) is built this way: it opens the
+sound device, installs a task and returns at once. The task decodes 16 KB of the file at a time
+and gives the device as much as it takes without waiting (the device is opened with O_NONBLOCK);
+the device holds up to 250 ms of sound and plays it by itself. A command that runs longer, such as
+a compilation or portia.Install, leaves the device without data: the sound stops, and goes on from
+the same place when the command returns. A command that runs long can let the tasks run now and
+then by calling Oberon.CallTask, which calls the next task in turn if its time has come.
+
+The console has no such loop: loksh runs one command after the other, and a console command does
+its work before it returns. sound.Play returns when the file has played.
+
 ## Windows of their own
 
 A desktop program can put any frame into an X11 window of its own: Windows.Open(F, title, W, H)
