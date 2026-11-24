@@ -1449,8 +1449,9 @@ BEGIN
   high0:=endBlock+4;
   high1:=high0+size;
   first:=firstBlock-B=endBlock;
-  endBlock:=Linux0.Brk0(high1);  (* risc-v brk returns previous brk*)
-  IF endBlock<0 THEN HALT(80H+14) END; 
+  (* polpo: brk gives the old break when it cannot move it (a mapping in the way): no more memory, the heap
+    as it was *)
+  IF Linux0.Brk0(high1) # high1 THEN HALT(80H+14) END;
   i:=Linux0.MProtect0( high0, size, 7);  (* was 7 *)
   IF traceheap # {} THEN
     WriteString("Heap growing: "); WriteHex(high0, 9);  WriteHex(high1, 9); WriteLn
