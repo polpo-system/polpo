@@ -1273,10 +1273,12 @@ ADD, PC, PC, T1<<2
 *)
 
   PROCEDURE Case*(VAR x: OPL.Item; low, high: LONGINT; VAR tab: OPL.Label);
-    VAR y: OPL.Item; n, dummy: LONGINT;
+    VAR y: OPL.Item; n, imm, dummy: LONGINT;
   BEGIN n := high - low ;
     IF low#0 THEN y.mode := OPT.Con; y.offset := low; OPL.Add(x, y, -1, TRUE) END;
-    dummy := OPL.PutIMM(OPL.CMPI, 0, x, n);
+    IF OPL.DecomposeConst(n, imm) THEN dummy := OPL.PutIMM(OPL.CMPI, 0, x, imm)
+    ELSE y.mode := OPT.Con; y.offset := n; y.typ := OPT.linttyp; dummy := OPL.PutSPC(OPL.CMP, 0, x, y)  (* polpo: n is no immediate *)
+    END;
     OPL.PutR( OPL.ADD-OPL.AL+OPL.LS, OPL.PC, OPL.PC, x.reg+ASH(2, 7)); (* LSL shifted x.reg *)
     OPL.PutB( OPL.B, 1*n);  (* else *)
     tab := OPL.pc; INC(OPL.pc, SHORT(n)+1);
