@@ -64,7 +64,8 @@ ToDo: remove export of ReleaseR, ReleaseF
 
   TYPE
     RegSet* = RECORD
-      r*, f*: SET
+      r*, f*: SET;
+      frozen*: SET  (* polpo: frozenR in SaveRegisters, back in RestoreRegisters *)
     END ;
 
 (* Items:
@@ -1086,7 +1087,7 @@ END PutTrap;
   PROCEDURE SaveRegisters*(calleeUsed: RegSet; argSize: LONGINT; VAR saved, live: RegSet);  (* argSize aligned to 8 *)
     VAR sp, ext: Item; saveSize, patch: LONGINT;
   BEGIN
-    saved.r := (tempLiveR + permLiveR)*calleeUsed.r; live.r := tempLiveR;
+    saved.r := (tempLiveR + permLiveR)*calleeUsed.r; live.r := tempLiveR; live.frozen := frozenR;
     saved.f := (tempLiveF + permLiveF)*calleeUsed.f; live.f := tempLiveF;
     saveSize := 0; patch := 0;
     IF (saved.r # {}) OR (saved.f # {}) THEN (* something to save *)
@@ -1098,7 +1099,8 @@ END PutTrap;
       ELSE RegsSaved := TRUE
       END ;
       SaveRegs(saved.r, saved.f, argSize, saveSize);
-      tempLiveR := tempLiveR - saved.r; tempLiveF := tempLiveF - saved.f
+      tempLiveR := tempLiveR - saved.r; tempLiveF := tempLiveF - saved.f;
+      frozenR := frozenR - saved.r  (* polpo: a call in between may take one and thaw it: frozenR lost it for good *)
     END ;
     INC(saveSize, argSize);
     IF saveSize > callArea THEN callArea := saveSize END ;
@@ -1115,7 +1117,7 @@ END PutTrap;
   PROCEDURE RestoreRegisters*(VAR x: Item; argSize: LONGINT; saved, live: RegSet);
     VAR y, sp, ext: Item; rt, rx, saveSize: LONGINT; f: SHORTINT;
   BEGIN
-    tempLiveR := live.r; tempLiveF := live.f;
+    tempLiveR := live.r; tempLiveF := live.f; frozenR := live.frozen;
     IF x.typ # OPT.notyp THEN
       x.mode := Reg; f := x.typ^.form; rt := -1; 
       IF f IN {Real, LReal} THEN rx := RRF; INCL(tempLiveF, RRF-32);
