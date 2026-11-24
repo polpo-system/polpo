@@ -889,7 +889,7 @@ END PowerOf2;
       arg.mode := OPT.Con; arg.offset := nofelem; OPL.Mul(nofel, arg, -1); 
       IF eltyp^.comp = OPL.Record THEN
         tag.mode := OPT.Var; tag.mnolev := -eltyp^.mno; tag.offset := 64; tag.obj := eltyp^.strobj;
-        OPL.LoadAddr(tag, -1)
+        IF ParReg THEN OPL.LoadAddr(tag, -1) END  (* polpo: on the stack after the number of elements, below *)
       ELSIF eltyp^.form = OPL.Pointer THEN
         tag.mode := OPT.Con; tag.offset := 0  (* special TDesc in Kernel for ARRAY OF POINTER *)
       ELSE  (* eltyp contains no pointer *)
@@ -898,8 +898,12 @@ END PowerOf2;
         SYSnew(nofel); RETURN
       END;
       IF ~ParReg THEN  (* only valid without static link ?? *)
-        OPL.Load(tag, -1); OPL.PutLS(OPL.STR-OPL.LSADD+OPL.LSWB, tag.reg, OPL.SP, 16); OPL.ReleaseR( tag.reg);  (* make space on stack *)
+        (* polpo: the number of elements first: SaveRegisters before New took its register as free, and the tag
+          was loaded into it (NEW(a, n * 2) got a block for 0 elements) *)
+        OPL.PutI(OPL.SUBI, OPL.SP, OPL.SP, 16);  (* make space on stack *)
         OPL.Load(nofel, -1); OPL.PutLS(OPL.STR, nofel.reg, OPL.SP, 4); OPL.ReleaseR( nofel.reg);
+        IF tag.mode = OPT.Var THEN OPL.LoadAddr(tag, -1) ELSE OPL.Load(tag, -1) END;
+        OPL.PutLS(OPL.STR, tag.reg, OPL.SP, 0); OPL.ReleaseR( tag.reg);
         nofel.mode := OPT.Con; nofel.offset := nofdim; nofel.typ := OPT.linttyp; 
         OPL.Load( nofel, -1); OPL.PutLS(OPL.STR, nofel.reg, OPL.SP, 8); OPL.ReleaseR( nofel.reg);
         OPL.PutLink( OPL.MOVW, OPL.T1, OPL.Link(OPL.KNewArr));        (* must be T1!; address not to rt because of FP; interim encoding, rt<> rn *)
