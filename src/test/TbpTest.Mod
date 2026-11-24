@@ -24,6 +24,11 @@ TYPE
 
   Vec = RECORD x, y: REAL END;
 
+  Sink = POINTER TO SinkDesc;
+  SinkDesc = RECORD n, sum: LONGINT END;
+  Store = POINTER TO StoreDesc;
+  StoreDesc = RECORD value: POINTER TO ARRAY OF LONGINT END;
+
 VAR fails, checks: LONGINT;
 
 PROCEDURE Check(what: ARRAY OF CHAR; ok: BOOLEAN);
@@ -95,6 +100,25 @@ PROCEDURE (VAR v: Vec) Zero;
 BEGIN v.x := 0.0; v.y := 0.0
 END Zero;
 
+PROCEDURE (w: Sink) Take(VAR a: ARRAY OF LONGINT; s, e: LONGINT);
+BEGIN WHILE s # e DO INC(w.n); INC(w.sum, a[s]); INC(s) END
+END Take;
+
+PROCEDURE (st: Store) Len(): LONGINT;
+BEGIN RETURN 5
+END Len;
+
+(* an open array, then a method call among the arguments of a method call: the call inside thawed a register
+  still holding the base of the array (ARMv7) *)
+PROCEDURE Nested(): BOOLEAN;
+VAR w: Sink; st: Store; i: LONGINT;
+BEGIN
+  NEW(w); w.n := 0; w.sum := 0; NEW(st); NEW(st.value, 8);
+  i := 0; WHILE i < 8 DO st.value[i] := i + 1; INC(i) END;
+  w.Take(st.value^, 0, st.Len());
+  RETURN (w.n = 5) & (w.sum = 15)
+END Nested;
+
 PROCEDURE AddVia(VAR c: TbpBase.Counter; d: LONGINT);  (* the dynamic type comes with the VAR record *)
 BEGIN c.Add(d)
 END AddVia;
@@ -137,6 +161,7 @@ BEGIN
   s := sq; WITH s: Circle DO i := 1 | s: Cube DO i := 2 ELSE i := 3 END; Check("WITH ELSE", i = 3);
   ci.Grow; Check("a call without parameters", ci.r = 3);
   v.Zero; Check("the same with a VAR receiver", (v.x = 0.0) & (v.y = 0.0));
+  Check("an open array and a method call in the arguments of a method", Nested());
   Out.String("TbpTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 

@@ -69,9 +69,16 @@ MODULE CompilerTest;  (** loksh CompilerTest.Run: code generator bugs fixed in p
    AOPC.Index (PNGImagesTest, 2026-10-28);
    RISC-V: a shift by a negative variable count, LSH(x, n) or ASH(x, n), negated the count in its own
    register: a count held in a register (a parameter) changed sign for the rest of the procedure
-   (HugeInt, 2026-10-31). *)
+   (HugeInt, 2026-10-31);
+   ARM: a FOR limit from a function of another module was kept on the stack but read as a variable of
+   that module: FOR i := 0 TO Strings.Length(s) ran 0 times (ooc-xml, 2026-11-24);
+   ARMv7: a CASE over more than 256 values compared the index with a wrong bound and jumped past its
+   table (XMLParser.SetErrorMessages, 2026-11-24);
+   ARMv7: NEW(a, n * 2) of an open array put the tag into the first argument register over the number of
+   elements computed there: a block for the wrong number of elements, stores past it broke the heap
+   (XMLBuilder.AttributeList.Append, 2026-11-24). *)
 
-IMPORT SYSTEM, Linux0, Out;
+IMPORT SYSTEM, Linux0, Out, Strings := oocStrings;
 
 TYPE
   Small = RECORD a: LONGINT; pad: ARRAY 4 OF CHAR; b: LONGINT END;  (* 12 bytes *)
@@ -845,6 +852,46 @@ BEGIN
   RETURN (z = 0.0) & (lz = 0.0)
 END ZeroAfterNaN;
 
+(* the limit of a FOR from a function of another module *)
+PROCEDURE ForImported(): BOOLEAN;
+VAR i, n: LONGINT; s: ARRAY 8 OF CHAR;
+BEGIN
+  s := "short"; n := 0;
+  FOR i := 0 TO Strings.Length(s) DO INC(n) END;
+  RETURN n = 6
+END ForImported;
+
+(* a CASE whose labels span more than 256 values *)
+PROCEDURE CaseWide(): BOOLEAN;
+VAR i: INTEGER; n, k: LONGINT;
+BEGIN
+  n := 0;
+  FOR i := 0 TO 999 DO
+    CASE i OF
+    | 1: k := 1
+    | 255, 256: k := 2
+    | 300: k := 3
+    | 308: k := 4
+    ELSE k := 0
+    END;
+    IF k # 0 THEN INC(n) END
+  END;
+  RETURN n = 5
+END CaseWide;
+
+(* NEW of an open array of pointers with a computed length: the same block as with a constant length *)
+PROCEDURE NewComputed(): BOOLEAN;
+TYPE R = POINTER TO RECORD n: LONGINT END; A = POINTER TO ARRAY OF R;
+VAR a, c: A; n, i, ta, tc: LONGINT; ok: BOOLEAN;
+BEGIN
+  n := 4; NEW(a, n * 2); NEW(c, 8);
+  SYSTEM.GET(SYSTEM.VAL(LONGINT, a) - 4, ta); SYSTEM.GET(SYSTEM.VAL(LONGINT, c) - 4, tc);
+  i := 0; WHILE i < 8 DO NEW(a[i]); a[i].n := i; INC(i) END;
+  ok := (ta = tc) & (LEN(a^) = 8); i := 0;
+  WHILE i < 8 DO ok := ok & (a[i] # NIL) & (a[i].n = i); INC(i) END;
+  RETURN ok
+END NewComputed;
+
 (* COPY writes at most LEN - 1 characters and a 0X: from an array without 0X, into an array of one
   character, from a longer and a shorter string, also through open arrays *)
 PROCEDURE Copies(): BOOLEAN;
@@ -934,6 +981,9 @@ BEGIN
   Check("a string literal of 200 characters", LongString());
   Check("COPY: at most LEN - 1 characters and 0X", Copies());
   Check("0.0 after a NaN in the same register", ZeroAfterNaN());
+  Check("a FOR limit from a function of another module", ForImported());
+  Check("a CASE over more than 256 values", CaseWide());
+  Check("NEW of an open array with a computed length", NewComputed());
   Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
