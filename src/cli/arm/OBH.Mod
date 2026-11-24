@@ -413,8 +413,9 @@ MODULE OBH;    (*NW 7.6.87 / 11.7.93 / as 26.11.98 *)
     IF x.typ.size>4 THEN HALT(204) END;
     
     y.mode:=OC.Var2; y.a:=-4;  y.r:=OBC.SP; y.typ:=OBT.linttyp; (* to keep stack aligned! won't cause problems if y is not LInt *)
+    y.lev:=OBC.level;  (* polpo: a variable of this procedure; x may be the result of an imported function, x.lev < 0 *)
     OBE.store(y,x);
-    x.mode:=OC.Var;  x.r:=OBC.SP; x.a:=0; x.typ:=y.typ;
+    x.mode:=OC.Var;  x.r:=OBC.SP; x.a:=0; x.typ:=y.typ; x.lev:=OBC.level;
   END TempVar;
   
   PROCEDURE RemoveTempVars*(n : INTEGER);
