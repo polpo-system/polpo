@@ -78,6 +78,7 @@ TYPE
     sums: Item;  (* of a remote package: repository path, sum in r *)
     tcopy, tcmds, tok, tbad: Item;  (* [TESTS]: files to copy, commands, lines expected, texts refused *)
     tdisplay: BOOLEAN;  (* the tests need the desktop (X11) *)
+    before, after: Item;  (* [MESSAGES], then [MESSAGES.<arch>]: lines for the user before the installation and after it *)
     here: BOOLEAN;  (* something for this architecture: modules listed for it or for all in [MODULES], or no [MODULES] *)
     next: Package
   END;
@@ -383,6 +384,8 @@ BEGIN
   Commands(doc, "TESTS", "cmds", p.tcmds);
   COPY("TESTS.", mod); Append(mod, arch); Commands(doc, mod, "cmds", p.tcmds);  (* [TESTS.x86] cmds after *)
   Commands(doc, "TESTS", "ok", p.tok); Commands(doc, "TESTS", "bad", p.tbad);
+  Commands(doc, "MESSAGES", "before", p.before); Commands(doc, "MESSAGES", "after", p.after);
+  COPY("MESSAGES.", mod); Append(mod, arch); Commands(doc, mod, "before", p.before); Commands(doc, mod, "after", p.after);
   p.tdisplay := Field(doc, "TESTS", "display", v) & (v = "true");
   it := p.sources;
   WHILE it # NIL DO
@@ -671,12 +674,19 @@ BEGIN
   END
 END List;
 
+(* the lines it of a message of p, each after "portia: name: " *)
+PROCEDURE Messages(p: Package; it: Item);
+BEGIN
+  WHILE it # NIL DO Pre; Out.String(p.name); Out.String(": "); Out.String(it.s); Out.Ln; it := it.next END
+END Messages;
+
 PROCEDURE InfoOf(p: Package);
 VAR n: LONGINT; it: Item;
 BEGIN
   Out.String(p.category); Out.Char("/"); Out.String(p.name); Out.Char(" "); Out.String(p.version); Out.String(": "); Out.String(p.desc); Out.Ln;
   ListItems("depends on:", p.deps); ListItems("provides:", p.provides); ListItems("conflicts with:", p.conflicts);
   ListItems("modules:", p.modules);
+  ListItems("before the installation:", p.before); ListItems("after the installation:", p.after);
   IF p.remote # "" THEN
     Out.String("remote: "); Out.String(p.remote); Out.String(", sources ");
     IF HasSources(p) THEN Out.String("downloaded") ELSE Out.String("not downloaded") END; Out.Ln
@@ -1604,7 +1614,8 @@ BEGIN
         IF Conflict(p, q) & IsInstalled(q) THEN Out.String(", replaces "); Out.String(q.name) END;
         q := q.next
       END;
-      Out.Ln; INC(n)
+      Out.Ln; INC(n);
+      Messages(p, p.before)
     END;
     it := it.next
   END;
@@ -1651,7 +1662,8 @@ BEGIN
       c := p.build; WHILE ok & (c # NIL) DO COPY(c.s, line); ok := Run(line); c := c.next END;
       IF ok THEN
         SetInstalled(p.name, p.version); SaveDb;
-        IF doTest & (arch = hostArch) THEN ok := TestPackage(p); IF ~ok THEN Undo(p, had) END END
+        IF doTest & (arch = hostArch) THEN ok := TestPackage(p); IF ~ok THEN Undo(p, had) END END;
+        IF ok THEN Messages(p, p.after) END
       ELSIF ~was THEN Undo(p, had)  (* a new package that did not build leaves nothing *)
       END
     END;
