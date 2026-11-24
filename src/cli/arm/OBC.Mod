@@ -27,7 +27,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
     RConstLength = 256;  (* lentgh of real constants, up to 4096 *)
     MaxConstDist = ConstLength-15; (* in Words including a safety range *)
     MaxUnknownProcs = 128;
-    MaxPtrs = 512; MaxRecs = 128; MaxComs = 40; MaxExts = 15;
+    MaxPtrs = 8192; MaxRecs = 128; MaxComs = 40; MaxExts = 15;
     MaxMthFix = 1024; Mth0Offset = -72;  (* polpo: the method table below the type descriptor, as Modules0 builds it *)
     
     (* Constants for Bit x set *)
