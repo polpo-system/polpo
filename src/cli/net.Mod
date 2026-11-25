@@ -156,6 +156,7 @@ BEGIN
   END;
   IF ~Texts.Arg(A, arg) OR ~Number(arg, count) THEN count := 1 END;
   l := Sockets.Listen(Sockets.Inet6, port, 8);
+  IF l = NIL THEN l := Sockets.Listen(Sockets.Inet4, port, 8) END;  (* a kernel without IPv6 *)
   IF l = NIL THEN Error("listen", Sockets.res); RETURN END;
   listener := l;
   Out.String("net: echoing on port "); Out.Int(port, 0); Out.String(", "); Out.Int(count, 0);
