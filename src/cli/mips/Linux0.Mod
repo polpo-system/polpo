@@ -545,7 +545,7 @@ BEGIN
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
 END GetDents0;
 
-PROCEDURE Socket0*( n1, n2, n3: LONGINT): LONGINT;
+PROCEDURE socket( n1, n2, n3: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( 2, 4183);        (* Syscall nr to R2 *)
   SYSTEM.CODE( 12);              (* SYSCALL *)
@@ -553,6 +553,23 @@ BEGIN
   SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
   SYSTEM.CODE( 10000002H);        (* B +8 *)
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END socket;
+
+PROCEDURE ^SockFlags( fd, flags: LONGINT);
+
+(* polpo: kernels before 2.6.27 refuse SOCK_NONBLOCK and SOCK_CLOEXEC in the type (EINVAL): then without them,
+  and SockFlags sets them *)
+PROCEDURE Socket0*( n1, n2, n3: LONGINT): LONGINT;
+CONST SockNonblock = 80H; SockCloexec = 80000H; EINVAL = 22;
+VAR fd, flags: LONGINT;
+BEGIN
+  fd := socket( n1, n2, n3);
+  flags := SYSTEM.VAL( LONGINT, SYSTEM.VAL( SET, n2) * SYSTEM.VAL( SET, SockNonblock + SockCloexec));
+  IF (fd = -EINVAL) & (flags # 0) THEN
+    fd := socket( n1, n2 - flags, n3);
+    IF fd >= 0 THEN SockFlags( fd, flags) END
+  END;
+  RETURN fd
 END Socket0;
 
 PROCEDURE Connect0*( sockfd, servaddr, addrlen: LONGINT): LONGINT;
@@ -606,6 +623,16 @@ BEGIN
   SYSTEM.CODE( 10000002H);        (* B +8 *)
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
 END IOCtl0;
+
+(* polpo: what SOCK_NONBLOCK and SOCK_CLOEXEC do, for kernels without them in socket and accept4 *)
+PROCEDURE SockFlags( fd, flags: LONGINT);
+CONST SockNonblock = 80H; SockCloexec = 80000H; FIONBIO = 667EH; FIOCLEX = 6601H;
+VAR on, r: LONGINT;
+BEGIN
+  on := 1;
+  IF ODD( flags DIV SockNonblock) THEN r := IOCtl0( fd, FIONBIO, SYSTEM.ADR( on)) END;
+  IF ODD( flags DIV SockCloexec) THEN r := IOCtl0( fd, FIOCLEX, 0) END
+END SockFlags;
 
 (* polpo: for loksh as the first process (boot.Init): mount, load kernel modules, take a console, power off *)
 PROCEDURE Mount0*( src, target, type, flags, data: LONGINT): LONGINT;
@@ -811,7 +838,7 @@ BEGIN
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
 END Listen0;
 
-PROCEDURE Accept40*( fd, addr, lenadr, flags: LONGINT): LONGINT;
+PROCEDURE accept4( fd, addr, lenadr, flags: LONGINT): LONGINT;
 BEGIN
   SYSTEM.PUTREG( 2, 4334);
   SYSTEM.CODE( 12);              (* SYSCALL *)
@@ -819,6 +846,29 @@ BEGIN
   SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
   SYSTEM.CODE( 10000002H);        (* B +8 *)
   SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END accept4;
+
+PROCEDURE accept( fd, addr, lenadr: LONGINT): LONGINT;
+BEGIN
+  SYSTEM.PUTREG( 2, 4168);
+  SYSTEM.CODE( 12);              (* SYSCALL *)
+  SYSTEM.CODE( 10070004H);      (* BEQ R7, R0, +16*)
+  SYSTEM.CODE( 0);              (* NOP , branch delay slot*)
+  SYSTEM.CODE( 10000002H);        (* B +8 *)
+  SYSTEM.CODE( 00021022H);        (* SUB R2, 0, R2, branch delay slot  *)
+END accept;
+
+(* polpo: accept4 came with 2.6.31 on MIPS (ENOSYS before): then accept, and SockFlags sets the flags *)
+PROCEDURE Accept40*( fd, addr, lenadr, flags: LONGINT): LONGINT;
+CONST ENOSYS = 89;
+VAR r: LONGINT;
+BEGIN
+  r := accept4( fd, addr, lenadr, flags);
+  IF r = -ENOSYS THEN
+    r := accept( fd, addr, lenadr);
+    IF r >= 0 THEN SockFlags( r, flags) END
+  END;
+  RETURN r
 END Accept40;
 
 PROCEDURE GetSockName0*( fd, addr, lenadr: LONGINT): LONGINT;
