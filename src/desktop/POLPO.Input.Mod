@@ -632,6 +632,10 @@ BEGIN
             INCL(keyss, tapKey)
           ELSE INCL( keyss, 3- detail)
           END;
+          IF trace THEN  (* polpo: the button and the modifiers with it (1 Shift, 4 Control, 8 Alt) *)
+            Kernel.WriteString("button: "); Kernel.WriteInt(detail, 1); Kernel.WriteString(" state: "); Kernel.WriteHex(modState, 8);
+            Kernel.WriteString(" key: "); Kernel.WriteInt(tapKey, 1); Kernel.WriteLn
+          END;
           IF detail=2 THEN mmbe:= FALSE END;
         END;
       ELSIF code= 5 THEN
