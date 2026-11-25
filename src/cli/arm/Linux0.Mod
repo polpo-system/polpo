@@ -293,20 +293,28 @@ CODE
   MOV  PC, LR
 END SigAction0;
 
+(* polpo: the return from a signal handler (sigreturn), given to the kernel as the restorer: the return code of
+  old kernels in the vector page (FFFF0500H) ended in an illegal instruction on a 2.6.21 kernel of an ARMv6 *)
+PROCEDURE SigReturn0;
+CODE
+  MOV  R7, 119  (* SIGRETURN *)
+  SWI  0
+END SigReturn0;
+
 PROCEDURE SetSignal*( nr: LONGINT; handler: SigHandler): LONGINT;
-CONST SARESTART= 10000000H;
+CONST SARESTART= 10000000H; SARESTORER= 4000000H;
 TYPE
   SigAction = RECORD
     handler: SigHandler;
     mask: SET;
     flags, restorer: LONGINT;
   END;
-VAR h, d: SigAction;
+VAR h, d: SigAction; ret: SigHandler;
 BEGIN
   h.handler:= handler;
   h.mask:= {};
-  h.flags:= SARESTART;
-  h.restorer:= 0;
+  h.flags:= SARESTART + SARESTORER;
+  ret:= SigReturn0; h.restorer:= SYSTEM.VAL( LONGINT, ret);
   RETURN SigAction0( nr, SYSTEM.ADR(h), SYSTEM.ADR(d));
 END SetSignal;
 
