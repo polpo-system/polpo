@@ -118,7 +118,7 @@ VAR
   dummy: ARRAY 64 OF CHAR;
   i: INTEGER;
 BEGIN
-  Files.Read(R, tag); IF tag # "0" THEN RETURN -1 END;
+  Files.Read(R, tag); IF (tag # "0") & (tag # "1") THEN RETURN -1 END;  (* the version: "1" with method tables *)
   Files.ReadLInt(R, n); Files.ReadLInt(R, n);  (* refpos, body entry *)
   Files.ReadInt(R, nofImps); Files.ReadInt(R, nofEntries);
   Files.ReadInt(R, nofPtrs); Files.ReadInt(R, nofCmds);
