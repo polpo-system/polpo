@@ -820,22 +820,29 @@ BEGIN
   END
 END Fixup;
 
+(* polpo: the return from a signal handler (sigreturn), given to the kernel as the restorer, so that the return
+  code of the kernel in the vector page of old kernels is not needed (it failed on a 2.6.21 kernel of an ARMv6) *)
+PROCEDURE SigReturn0;
+BEGIN
+  SYSTEM.PUTREG(7, 119);  (* sigreturn *)
+  SYSTEM.CODE(SVC)
+END SigReturn0;
+
 (* ARM *)
 PROCEDURE SetSignal*( nr: LONGINT; handler: Proc): LONGINT;
-CONST SARESTART= 10000000H;
+CONST SARESTART= 10000000H; SARESTORER= 4000000H;
 TYPE
-  SigAction = RECORD
+  SigAction = RECORD  (* polpo: struct old_sigaction of the system call sigaction (67) *)
     handler: Proc;
-    sigaction: LONGINT;
     mask: SET;
     flags, restorer: LONGINT;
   END;
-VAR h: SigAction;
+VAR h: SigAction; ret: Proc;
 BEGIN
   h.handler:= handler;
   h.mask:= {};
-  h.flags:= SARESTART;
-  h.restorer:= 0;
+  h.flags:= SARESTART + SARESTORER;
+  ret:= SigReturn0; h.restorer:= SYSTEM.VAL( LONGINT, ret);
   RETURN SIGAction0( nr, SYSTEM.ADR(h), 0);
 END SetSignal;
 
