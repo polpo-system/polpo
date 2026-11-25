@@ -39,7 +39,7 @@ see www.kernel.org/doc/Documentation/input/imput.txt and /usr/include/linux/inpu
 Module Input is responsible for event timing, mouse and keyboard input.
 *)
 
-IMPORT  Linux0, Kernel, FileDir, Display, Utf8, SYSTEM;
+IMPORT  Linux0, Kernel, FileDir, Display, Utf8, Oberon0, Texts0, SYSTEM;
 
 CONST
   FdWords = 32;  (* polpo: the words of the fd_set of select, 1024 descriptors *)
@@ -128,6 +128,8 @@ VAR
   inWin: BOOLEAN; winX, winY: INTEGER;  (* polpo: the mouse is in a window of its own, at winX, winY *)
   keyss, keyState: SET;
   modState: LONGINT;  (* polpo: X modifier mask of the last key or mouse event: 1 Shift, 4 Control, 8 Alt *)
+  touch: BOOLEAN;  (* polpo: System.Touch = Yes in Oberon.Text: a tap with Ctrl is a middle click, with Shift a right click *)
+  tapKey: INTEGER;  (* polpo: the key the left button stands for while it is down: 2 left, 1 middle, 0 right; -1 up *)
   err: LONGINT;
   cb1, cb2: LONGINT;
   buf: ARRAY 32 OF CHAR; (* input char buffer *)
@@ -624,12 +626,17 @@ BEGIN
         END;
       ELSIF code= 4 THEN  (* ButtonPress *)
         IF detail<4 THEN
-          INCL( keyss, 3- detail);
+          IF detail = 1 THEN
+            tapKey := 2;
+            IF touch & ODD(modState DIV 4) THEN tapKey := 1 ELSIF touch & ODD(modState) THEN tapKey := 0 END;
+            INCL(keyss, tapKey)
+          ELSE INCL( keyss, 3- detail)
+          END;
           IF detail=2 THEN mmbe:= FALSE END;
         END;
       ELSIF code= 5 THEN
         IF detail<4 THEN  (* ButtonRelease *)
-          EXCL( keyss, 3- detail);
+          IF (detail = 1) & (tapKey >= 0) THEN EXCL(keyss, tapKey); tapKey := -1 ELSE EXCL( keyss, 3- detail) END;
         END;
       ELSIF code= 6 THEN  (* MotionNotify, absolute values *)
         mouseX:= event.ex DIV SHORT(Display.Zoom);
@@ -777,8 +784,8 @@ END SetMouseLimits;
 PROCEDURE KeyState*(VAR keys: SET);
 BEGIN
   keys:= {};
-  IF ODD(modState) THEN INCL(keys, SHIFT) END;
-  IF ODD(modState DIV 4) THEN INCL(keys, CTRL) END;
+  IF ODD(modState) & (tapKey # 0) THEN INCL(keys, SHIFT) END;  (* polpo: not the modifier of a tap *)
+  IF ODD(modState DIV 4) & (tapKey # 1) THEN INCL(keys, CTRL) END;
   IF ODD(modState DIV 8) THEN INCL(keys, ALT) END
 END KeyState;
 
@@ -936,9 +943,10 @@ BEGIN
 END CloseFB;
 
 PROCEDURE Init;
-VAR v: ARRAY 32 OF CHAR;
+VAR v: ARRAY 32 OF CHAR; S: Texts0.Scanner;
 BEGIN
   keywarn:= FALSE; err:= 0; mmbe:= FALSE; switching:= FALSE;
+  Oberon0.OpenScanner(S, "System.Touch"); touch := (S.class = Texts0.Name) & (S.s = "Yes"); tapKey := -1;
   Kernel.GetConfig("TERM", v);
   x11:=v#"linux";
   Kernel.Idle:=Idle;

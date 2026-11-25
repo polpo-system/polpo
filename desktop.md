@@ -75,6 +75,13 @@ The arrow points up and to the left. With LeftHanded = Yes in the System section
 points up and to the right, for the left hand; its tip stays where the mouse is. The setting is read
 when the desktop starts.
 
+A touch screen has one button, the left one. With Touch = Yes in the System section of Oberon.Text,
+a tap with Ctrl held is a middle click and a tap with Shift held a right click: they run commands
+and select text. The modifier itself is not passed on with the click, so Shift with a right click
+(extending a selection) cannot be done this way, and neither can interclicks, which need two
+buttons at once. The setting is read when the desktop starts, and it works in the X11 desktop; in a
+terminal (sixel) the terminal keeps Shift and Ctrl clicks for itself.
+
 ## Commands and their parameters
 
 A command runs where it stands. Clicking System.Directory fonts/*.Scn.Fnt lists the fonts, clicking
