@@ -59,13 +59,15 @@ END Error;
 
 (* print everything s receives until the other side closes *)
 PROCEDURE Print(s: Sockets.Socket);
-VAR buf: ARRAY 4096 OF CHAR; n, i: LONGINT;
+VAR buf: ARRAY 4096 OF CHAR; n, i: LONGINT; last: CHAR;
 BEGIN
+  last := 0AX;
   n := Sockets.Receive(s, buf, LEN(buf));
   WHILE n > 0 DO
-    i := 0; WHILE i < n DO IF buf[i] # 0DX THEN Out.Char(buf[i]) END; INC(i) END;  (* CR LF: Out.Char(0DX) is a line end *)
+    i := 0; WHILE i < n DO IF buf[i] # 0DX THEN Out.Char(buf[i]); last := buf[i] END; INC(i) END;  (* CR LF: Out.Char(0DX) is a line end *)
     n := Sockets.Receive(s, buf, LEN(buf))
   END;
+  IF last # 0AX THEN Out.Ln END;  (* the prompt on a line of its own *)
   IF n < 0 THEN Error("receive", n) END
 END Print;
 
