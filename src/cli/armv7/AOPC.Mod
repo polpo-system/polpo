@@ -1124,6 +1124,12 @@ END PowerOf2;
     END
   END InitPtrs;
 
+  (* polpo: rcompiler compiles a module again with fewer when the registers ran out (err 215) *)
+  PROCEDURE VarRegs(): INTEGER;
+  BEGIN
+    IF OPM.regVars >= 0 THEN RETURN OPM.regVars ELSE RETURN MaxVarR END
+  END VarRegs;
+
   PROCEDURE Enter*(proc: OPT.Object);
     VAR var: OPT.Object; from, to: OPL.Item;
       f: SHORTINT; nofVarR, nofVarF, c, r, padr, vadr: LONGINT;
@@ -1176,7 +1182,7 @@ END PowerOf2;
   BEGIN
     IF proc = NIL THEN (* enter module *)
     ELSE (* enter proc *)
-      nofVarR := MaxVarR; nofVarF := MaxVarF;
+      nofVarR := VarRegs(); nofVarF := MaxVarF;
       var := proc^.link;  (* parameters *)
       WHILE var # NIL DO
         typ := var^.typ; f := typ^.form; c := typ^.comp; padr := var^.adr; vadr := var^.linkadr;
@@ -1198,7 +1204,7 @@ END PowerOf2;
         var^.linkadr := vadr; var := var^.link
       END ;
       var := proc^.scope^.scope;  (* local vars *)
-      IF proc^.leaf THEN nofVarR := MaxVarR; nofVarF := MaxVarF END ;
+      IF proc^.leaf THEN nofVarR := VarRegs(); nofVarF := MaxVarF END ;
       WHILE var # NIL DO
         IF var^.typ^.form IN OPL.realSet THEN
           IF var^.leaf & (nofVarF > 0) THEN

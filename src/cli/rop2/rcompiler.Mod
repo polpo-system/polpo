@@ -89,7 +89,7 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
   END Head;
 
   PROCEDURE CompileFile(name, opt: ARRAY OF CHAR; VAR error: BOOLEAN);
-    VAR t: Texts.Text; r: Texts.Reader; pos: LONGINT;
+    VAR t: Texts.Text; r: Texts.Reader; pos: LONGINT; n: INTEGER;
   BEGIN
     NEW(t); Texts.Open(t, name);
     Head(name);
@@ -97,8 +97,16 @@ MODULE rcompiler;  (** command-line frontend of the ROP2 compilers: MIPS, RISC-V
       Head("  compiling  "); Head(dir);
       pos := Oberon.Log.len;
       Texts.OpenReader(r, t, 0);
-      OPM.breakpos := -1;
+      OPM.breakpos := -1; OPM.regVars := -1;
       Module(r, opt, error);
+      n := 2;  (* polpo: out of registers: again with fewer register variables, without the messages of the try before *)
+      WHILE error & OPM.outOfRegs & (n >= 0) DO
+        Texts.Delete(Oberon.Log, pos, Oberon.Log.len);
+        OPM.regVars := n; DEC(n, 2);
+        Texts.OpenReader(r, t, 0); OPM.breakpos := -1;
+        Module(r, opt, error)
+      END;
+      OPM.regVars := -1;
       logs.Show(pos);
       IF (findpc IN OPM.opt) & (OPM.breakpos >= 0) THEN logs.ShowPC(name, t, OPM.breakpos, OPM.breakpc) END
     ELSE

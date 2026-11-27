@@ -120,6 +120,8 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
     curpos*, errpos*: LONGINT;  (* character and error position in source file *)
     breakpc*: LONGINT;  (* set by Compiler.Module *)
     breakpos*: LONGINT;  (* polpo: the position of the statement of breakpc, set by Mark(255) *)
+    regVars*: INTEGER;  (* polpo: how many variables the back end may keep in registers, -1: its own number *)
+    outOfRegs*: BOOLEAN;  (* polpo: the back end ran out of registers (err 215) *)
     objname*: ARRAY 64 OF CHAR;
     OFtag*: CHAR;  (* set in compiler module *)
     Dir*: FileName;
@@ -142,7 +144,7 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
     
   PROCEDURE Init*(source: Texts.Reader; log: Texts.Text);
   BEGIN inR := source; Log := log;
-    noerr := TRUE; curpos := Texts.Pos(inR); errpos := curpos; lastpos := curpos-10
+    noerr := TRUE; curpos := Texts.Pos(inR); errpos := curpos; lastpos := curpos-10; outOfRegs := FALSE
   END Init;
   
   PROCEDURE Get*(VAR ch: CHAR);  (* read next character from source text, Eot if no more *)
@@ -221,7 +223,9 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
   END Mark;
   
   PROCEDURE err*(n: INTEGER);
-  BEGIN Mark(n, errpos)
+  BEGIN
+    IF n = 215 THEN outOfRegs := TRUE END;
+    Mark(n, errpos)
   END err;
 
   PROCEDURE FPrint*(VAR fp: LONGINT; val: LONGINT);
@@ -407,5 +411,5 @@ MODULE ROPM;  (* RC 6.3.89 / 9.2.94 *)  (* object model 9.2.94 *)  (** shared MI
     SYSTEM.PUT(SYSTEM.ADR(MaxLReal) + H, patH)
   END InitHost;
 
-BEGIN InitHost; Texts.OpenWriter(W); Log := Oberon.Log
+BEGIN InitHost; Texts.OpenWriter(W); Log := Oberon.Log; regVars := -1
 END ROPM.

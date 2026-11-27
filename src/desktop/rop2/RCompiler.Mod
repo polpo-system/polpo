@@ -100,8 +100,8 @@ END SetOpt;
     VAR beg, end, time: LONGINT; error: BOOLEAN; ch: CHAR; 
 
     PROCEDURE Do(filename: ARRAY OF CHAR; beg: LONGINT);
-      VAR S1: Texts.Scanner; line, i: INTEGER; options: ARRAY 32 OF CHAR;
-        fbeg, fend, ftime: LONGINT; ftext: Texts.Text; f: BOOLEAN;
+      VAR S1: Texts.Scanner; line, i, n: INTEGER; options: ARRAY 32 OF CHAR;
+        fbeg, fend, ftime, pos: LONGINT; ftext: Texts.Text; f: BOOLEAN;
     BEGIN
       Texts.WriteString(W, filename); Texts.WriteString(W, "  compiling  "); Texts.WriteString(W, OPM.Dir);
       Texts.OpenScanner(S1, source, beg); Texts.Scan(S1);
@@ -134,7 +134,16 @@ END SetOpt;
         END
       END ;
       Texts.OpenReader(sourceR, source, beg);
-      Module(sourceR, options, Oberon.Log, error)
+      OPM.regVars := -1; pos := Oberon.Log.len;
+      Module(sourceR, options, Oberon.Log, error);
+      n := 2;  (* polpo: out of registers: again with fewer register variables, as rcompiler *)
+      WHILE error & OPM.outOfRegs & (n >= 0) DO
+        Texts.Delete(Oberon.Log, pos, Oberon.Log.len);
+        OPM.regVars := n; DEC(n, 2);
+        Texts.OpenReader(sourceR, source, beg);
+        Module(sourceR, options, Oberon.Log, error)
+      END;
+      OPM.regVars := -1
     END Do;
   
   BEGIN
