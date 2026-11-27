@@ -436,6 +436,11 @@ following compiles with all of them:
 
     declarations (CONST, TYPE, VAR) come before the procedures, in modules and in procedures;
 
+    a procedure is declared before its first call, or declared in advance with PROCEDURE ^P(...);
+    only the x86 compiler takes a call of a procedure declared further down;
+
+    a function returns a basic type or a pointer, never a record or an array;
+
     the read-only mark (-) only on variables and record fields: the ARM compiler refuses it on
     constants, types and procedures;
 
@@ -444,7 +449,8 @@ following compiles with all of them:
     EXIT only inside LOOP, and HALT(100) (the ports accept different ranges of trap numbers);
 
     identifiers (module names too) shorter than 32 characters, string constants shorter than 256
-    characters, and less than 16 KB of them in a module;
+    characters, and less than 16 KB of them in a module; at most 2047 exported variables,
+    procedures and records in a module;
 
     an array is assigned to an array of the same type, or of the same element type and length (as in
     Oberon-07), never from an open array; COPY is for strings only, it stops at the first 0X;
