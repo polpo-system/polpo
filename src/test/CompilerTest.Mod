@@ -910,6 +910,33 @@ BEGIN
   RETURN ok
 END Copies;
 
+(* a LOOP with 40 EXITs (the ARM compiler took 32) *)
+PROCEDURE ManyExits(n: LONGINT): LONGINT;
+  VAR k: LONGINT;
+BEGIN
+  k := 0;
+  LOOP
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    INC(k); IF k = n THEN EXIT END; INC(k); IF k = n THEN EXIT END;
+    EXIT
+  END;
+  RETURN k
+END ManyExits;
+
 PROCEDURE Run*;
 VAR i, j, k, bit, x: LONGINT; arr: ARRAY 20 OF LONGINT; a, r: N; mm: M; c: CHAR;
 BEGIN
@@ -984,6 +1011,7 @@ BEGIN
   Check("a FOR limit from a function of another module", ForImported());
   Check("a CASE over more than 256 values", CaseWide());
   Check("NEW of an open array with a computed length", NewComputed());
+  Check("a LOOP with 40 EXITs", (ManyExits(1) = 1) & (ManyExits(40) = 40) & (ManyExits(99) = 40));
   Out.String("CompilerTest: "); Out.Int(checks, 0); Out.String(" checks, "); Out.Int(fails, 0); Out.String(" failed"); Out.Ln
 END Run;
 
