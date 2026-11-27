@@ -475,8 +475,8 @@ MODULE ADecoder;   (*ms 30.06.97 / as 24.11.98 *)
         i:=0;
         WHILE extcallfixlist#0 DO 
           cw:=code[extcallfixlist];
-          mno:=cw DIV 100H MOD 100H(*32*);
-          pno:=cw MOD 100H;
+          mno:=cw DIV 100H MOD 40H;  (* polpo: as OBC.ExtRef *)
+          pno:=cw DIV 4000H MOD 8 * 100H + cw MOD 100H;
           tab; FixHex(extcallfixlist*4); Str("  ");
           IF mno=0 THEN
             CASE pno OF
@@ -491,7 +491,7 @@ MODULE ADecoder;   (*ms 30.06.97 / as 24.11.98 *)
             Str("Mod "); Int(mno); Str("  Entry "); Int(pno)
           END;
           Ln;
-          code[extcallfixlist]:=0EB000000H + mno*100H + pno;  (*always BL*)
+          code[extcallfixlist]:=0EB000000H + cw MOD 20000H;  (*always BL*)
           (*code[extcallfixlist]:=cw DIV 10000000H * 10000000H + 11*1000000H + mno*100H + pno;*)
           extcallfixlist:=SYSTEM.LSH(cw,-17(*-13*)) MOD 8000H;
          END; 
@@ -502,8 +502,8 @@ MODULE ADecoder;   (*ms 30.06.97 / as 24.11.98 *)
         i:=0;
         WHILE extaddrfixlist#0 DO
           cw:=code[extaddrfixlist];
-          mno:=cw DIV 100H MOD 100H(*32*);
-          pno:=cw MOD 100H;
+          mno:=cw DIV 100H MOD 40H;  (* polpo: as OBC.ExtRef *)
+          pno:=cw DIV 4000H MOD 8 * 100H + cw MOD 100H;
           tab; FixHex(extaddrfixlist*4); Str("  Mod "); Int(mno); Str("  Entry "); Int(pno); Ln;
           extaddrfixlist:=SYSTEM.LSH(cw,-17) MOD 8000H
         END;

@@ -174,7 +174,15 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
   END IncPC;
   
   (* -------------------------------------------------------------------- *)
-  
+
+  (* polpo: entry eno of module mno, for the 17 low bits of a fixup word: bits 0..7 and 14..16 the entry
+    (up to 2047), bits 8..13 the module; below 256 entries it is mno * 100H + eno, as before *)
+  PROCEDURE ExtRef(mno, eno : LONGINT) : LONGINT;
+  BEGIN
+    ASSERT((mno >= 0) & (mno < OC.MaxImps) & (eno >= 0) & (eno < 2048));
+    RETURN (eno DIV 100H * 40H + mno) * 100H + eno MOD 100H
+  END ExtRef;
+
   PROCEDURE AddAddrFixup(loc : LONGINT; VAR fixlist : LONGINT); (** Adds loc to the absolute fixup list fixlist *)
   BEGIN
     code[loc]:=code[loc] MOD 20000H + fixlist*20000H; fixlist:=loc; 
@@ -267,7 +275,7 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
   (* Enters a address and returns the offset within the constant block *)
   VAR i : INTEGER; exta : LONGINT;
   BEGIN  
-    exta := mno * 100H + eno;
+    exta := ExtRef(mno, eno);
     
     (* Check if const is already entered *)
     i:=0;
@@ -764,9 +772,9 @@ Todo use ARMv6T2 MOVT/MOVW for constants  (move top/move word)
   PROCEDURE PutBext*(mno, pno : LONGINT); (** Branch to imported procedure *)
   BEGIN
     ASSERT((mno >= 0) & (mno < OC.MaxImps));
-    ASSERT((pno >= 0) & (pno < 256));
+    ASSERT((pno >= 0) & (pno < 2048));
     CheckConstReachability;
-    code[pc]:=extcallfixlist*20000H+mno*100H+pno (*- 20000000H*); extcallfixlist:=pc; IncPC;
+    code[pc]:=extcallfixlist*20000H+ExtRef(mno, pno) (*- 20000000H*); extcallfixlist:=pc; IncPC;
     (*code[pc]:=extcallfixlist*2000H+mno*100H+pno - 20000000H; extcallfixlist:=pc; INC(pc);*)
     IF constDist>=0 THEN INC(constDist) END
   END PutBext;
@@ -1115,7 +1123,7 @@ END PopF;
       IF typ.BaseTyp # NIL THEN
         OutBaseTypes(typ.BaseTyp);
         IF typ.BaseTyp.adr<0 THEN Files.WriteLInt(out,typ.BaseTyp.adr)
-        ELSE Files.WriteLInt(out,typ.BaseTyp.mno*100H+typ.BaseTyp.adr)
+        ELSE Files.WriteLInt(out,ExtRef(typ.BaseTyp.mno, typ.BaseTyp.adr))
         END
       END
     END OutBaseTypes;

@@ -156,6 +156,12 @@ BEGIN
   END
 END ErrMsg;
 
+(* polpo: the module and the entry of the 17 low bits of a fixup word (OBC.ExtRef): entries up to 2047 *)
+PROCEDURE ExtRef(w: LONGINT; VAR mno, eno: LONGINT);
+BEGIN
+  mno := w DIV 100H MOD 40H; eno := w DIV 4000H MOD 8 * 100H + w MOD 100H
+END ExtRef;
+
 PROCEDURE ^Load (name: ARRAY OF CHAR; VAR m: Module);
   
 PROCEDURE LoadModule (VAR f : File; VAR m: Module);
@@ -218,7 +224,7 @@ PROCEDURE LoadModule (VAR f : File; VAR m: Module);
         IF t<0 THEN (* non exported tag *)
           SYSTEM.GET(m.sb+t,k); td.word[13+nm4+MaxExts-j]:=k;
           ELSE (* exported or imported *)
-          mno:=t DIV 100H; eno:=t MOD 100H;
+          ExtRef(t, mno, eno);
           IF mno=0 THEN td.word[13+nm4+MaxExts-j]:=m.entries[eno]
           ELSE SYSTEM.GET(m.imports[mno].entries[eno],k); td.word[13+nm4+MaxExts-j]:=k;
           END
@@ -284,7 +290,7 @@ PROCEDURE LoadModule (VAR f : File; VAR m: Module);
   BEGIN
     WHILE fixlist#0 DO
       pos:=fixlist+m.sb; SYSTEM.GET( pos, cw);
-      mno:=cw DIV 100H MOD 100H; eno:=cw MOD 100H;
+      ExtRef(cw, mno, eno);
       cc:= 0EH;  (* cc= AL *)
       IF mno=0 THEN
         addr:=Kernel.runtime[eno];
@@ -302,7 +308,7 @@ PROCEDURE LoadModule (VAR f : File; VAR m: Module);
   BEGIN 
     WHILE fixlist#0 DO
       pos:=fixlist+m.sb; SYSTEM.GET(pos,cw);
-      mno:=cw DIV 100H MOD 100H; eno:=cw MOD 100H;
+      ExtRef(cw, mno, eno);
       SYSTEM.PUT(pos,m.imports[mno].entries[eno]);
       fixlist:=SYSTEM.LSH(cw,-17) MOD 8000H*4;  (* 0 .. 128 KB *)
     END;

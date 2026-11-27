@@ -177,7 +177,13 @@ VAR
     init.word[0]:=LoadBase4+SYSTEM.ADR(init.word[0])-SYSTEM.ADR(code[0])+8;
     init.word[1]:=elems;
   END NewSysArr;
-  
+
+  (* polpo: the module and the entry of the 17 low bits of a fixup word (OBC.ExtRef): entries up to 2047 *)
+  PROCEDURE ExtRef(w: LONGINT; VAR mno, eno: LONGINT);
+  BEGIN
+    mno := w DIV 100H MOD 40H; eno := w DIV 4000H MOD 8 * 100H + w MOD 100H
+  END ExtRef;
+
   PROCEDURE NewDynArr(VAR a : SYSTEM.PTR; elems, esize, tag : LONGINT);
   VAR init : Init;
   BEGIN
@@ -291,7 +297,7 @@ VAR
         IF t<0 THEN (* non exported tag *)
           code[pc+MaxExts-j]:=code[(o.base+t-LoadBase4) DIV 4]; 
         ELSE (* exported or imported *)
-          mno:=t DIV 100H; eno:=t MOD 100H;
+          ExtRef(t, mno, eno);
           IF mno=0 THEN code[pc+MaxExts-j]:=code[(o.entries[eno]-LoadBase4) DIV 4];
           ELSE code[pc+MaxExts-j]:=code[(o.imports[mno].entries[eno]-LoadBase4) DIV 4];
           END
@@ -368,7 +374,7 @@ VAR
     WHILE fixlist#0 DO
       pos:=(fixlist+o.base-LoadBase4) DIV 4; 
       cw:=code[pos]; 
-      mno:=cw DIV 100H MOD 100H(*32*); eno:=cw MOD 100H;
+      ExtRef(cw, mno, eno);
       cc:=0EH;  (* cc= AL *)
       IF mno=0 THEN
         addr:= fixup[ eno];
@@ -413,7 +419,7 @@ VAR
     WHILE fixlist#0 DO
       pos:=(fixlist+o.base-LoadBase4) DIV 4;
       cw:=code[pos];
-      mno:=cw DIV 100H MOD 100H(*32*); eno:=cw MOD 100H;
+      ExtRef(cw, mno, eno);
       code[pos]:=o.imports[mno].entries[eno];
       fixlist:=SYSTEM.LSH(cw,-17) MOD 8000H*4;  (* 0 .. 128 KB *)
       (*fixlist:=SYSTEM.LSH(cw,-17)*4;*)

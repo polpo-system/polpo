@@ -8,7 +8,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
         symbol files. A function returning a HUGEINT has an hidden last parameter VAR @r: HUGEINT and returns
         the address of @r, typed hptrtyp (reference HPtrRef), dereferenced by the caller (see OBH). *)
       HugeRef = 14; HPtrRef = 15;
-      maxEnt = 256; maxStr = 256; maxUDP = 128; maxMod = 24; maxParLev = 6;
+      maxEnt = 2048; maxStr = 256; maxUDP = 128; maxMod = 24; maxParLev = 6;
       PtrSize = 4; ProcSize = 4; NotYetExp = 0;
       
     (* Standard Function Numbers *)
@@ -306,7 +306,7 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
             IF R.eof THEN EXIT END ;
             CASE class OF
               0: OBS.Mark(151); EXIT;
-            | 1..7: (*object*) NEW(obj); m := 0;
+            | 1..7, 28..30: (*object; polpo: 28..30 with an entry number above 255*) NEW(obj); m := 0;
               Files.Read(R, ch); s := ORD(ch); obj.typ := struct[s];
               CASE class OF
                 1: obj.mode := OC.Const;
@@ -329,6 +329,10 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
                     IF class = 7 THEN obj.rdo := 2 END  (* polpo: read-only *)
               |5,6:  obj.mode := OC.LProc; Files.Read(R, ch);
                     obj.a0 := ORD(ch);
+                    obj.dsc := reversedList(lastpar[parlev]); DEC(parlev)
+              |28, 29: obj.mode := OC.Var; Files.ReadInt(R, i); obj.a0 := i;  (* polpo: as 4 and 7 *)
+                    IF class = 29 THEN obj.rdo := 2 END
+              |30: obj.mode := OC.LProc; Files.ReadInt(R, i); obj.a0 := i;  (* polpo: as 6 *)
                     obj.dsc := reversedList(lastpar[parlev]); DEC(parlev)
               END ;
               Files.ReadString(R, obj.name); ob0 := LocMod[m];
@@ -586,17 +590,23 @@ MODULE OBT;  (*NW 28.5.87 / 10.7.93*)
           END
         ELSIF obj.mode = OC.Var THEN
           OutStr(W, obj.typ);
-          IF obj.rdo # 0 THEN Files.Write(W, 7) ELSE Files.Write(W, 4) END ;  (* polpo: 7 read-only *)
-          Files.Write(W, obj.typ.ref); 
           IF entno=maxEnt THEN OBS.Mark(236); entno:=0 END;
-          Files.Write(W, SHORT(entno)); entry[entno] := obj.a0; INC(entno); 
+          IF entno < 256 THEN  (* polpo: 7 read-only; 28 and 29 with an entry number above 255 *)
+            IF obj.rdo # 0 THEN Files.Write(W, 7) ELSE Files.Write(W, 4) END ;
+            Files.Write(W, obj.typ.ref); Files.Write(W, SHORT(entno))
+          ELSE
+            IF obj.rdo # 0 THEN Files.Write(W, 29) ELSE Files.Write(W, 28) END ;
+            Files.Write(W, obj.typ.ref); Files.WriteInt(W, entno)
+          END ;
+          entry[entno] := obj.a0; INC(entno);
           Files.WriteString(W, obj.name);
           (* OLD: IF obj.a0 < MIN(LONGINT) THEN OBS.Mark(236) END *)
         ELSIF obj.mode = OC.LProc THEN
-          OutStr(W, obj.typ); OutPars(W, obj.dsc); Files.Write(W, 6);
-          Files.Write(W, obj.typ.ref); 
-          IF entno=maxEnt THEN OBS.Mark(226); entno:=0 END;          
-          Files.Write(W, SHORT(entno));
+          OutStr(W, obj.typ); OutPars(W, obj.dsc);
+          IF entno=maxEnt THEN OBS.Mark(226); entno:=0 END;
+          IF entno < 256 THEN Files.Write(W, 6); Files.Write(W, obj.typ.ref); Files.Write(W, SHORT(entno))
+          ELSE Files.Write(W, 30); Files.Write(W, obj.typ.ref); Files.WriteInt(W, entno)  (* polpo *)
+          END;
           entry[entno] := obj.a0*4; (* we work with word addrs, but we want byte addrs in the obj file! *)
           INC(entno); Files.WriteString(W, obj.name)
         END
